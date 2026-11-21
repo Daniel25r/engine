@@ -1,12 +1,14 @@
 // Importación de modelos glTF 2.0 (.glb, o .gltf con los datos incrustados) con cgltf.
 // Se leen todas las mallas de triángulos con su transformación de nodo ya aplicada, sus normales, UV,
 // materiales PBR (color, metálico, rugosidad, emisión, doble cara) y las texturas de color incrustadas.
-// Pendiente: animaciones y esqueletos (los modelos con piel se muestran en su pose de reposo).
+// También se leen los nodos, el primer esqueleto (skin) y los clips de animación para el skinning en la GPU.
 #include <GLES3/gl3.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <functional>
 
 #define CGLTF_IMPLEMENTATION
 #include "cgltf/cgltf.h"
@@ -52,6 +54,68 @@ bool Renderer::buildModel(Model& m) {
         return false;
     }
 
+    // ---- Nodos (pose de reposo), esqueletos y clips de animación.
+    m.nodes.assign(data->nodes_count, {});
+    m.skins.clear();
+    m.clips.clear();
+    for (size_t i = 0; i < data->nodes_count; ++i) {
+        const cgltf_node& n = data->nodes[i];
+        AnimNode& an = m.nodes[i];
+        an.parent = n.parent ? static_cast<int>(n.parent - data->nodes) : -1;
+        if (n.has_matrix) {
+            Mat4 mm;
+            std::memcpy(mm.m, n.matrix, sizeof(mm.m));
+            mm.decompose(an.t, an.r, an.s);
+        } else {
+            if (n.has_translation) an.t = {n.translation[0], n.translation[1], n.translation[2]};
+            if (n.has_rotation) an.r = Quat{n.rotation[0], n.rotation[1], n.rotation[2], n.rotation[3]};
+            if (n.has_scale) an.s = {n.scale[0], n.scale[1], n.scale[2]};
+        }
+    }
+    for (size_t si = 0; si < data->skins_count; ++si) {
+        const cgltf_skin& sk = data->skins[si];
+        Skin skin;
+        for (size_t j = 0; j < sk.joints_count; ++j) {
+            skin.joints.push_back(static_cast<int>(sk.joints[j] - data->nodes));
+            Mat4 ib;
+            if (sk.inverse_bind_matrices) cgltf_accessor_read_float(sk.inverse_bind_matrices, j, ib.m, 16);
+            skin.inverseBind.push_back(ib);
+        }
+        m.skins.push_back(std::move(skin));
+    }
+    for (size_t ai = 0; ai < data->animations_count; ++ai) {
+        const cgltf_animation& a = data->animations[ai];
+        AnimClip clip;
+        clip.name = a.name ? a.name : "Clip " + std::to_string(ai + 1);
+        for (size_t ci = 0; ci < a.channels_count; ++ci) {
+            const cgltf_animation_channel& ch = a.channels[ci];
+            if (!ch.target_node || !ch.sampler) continue;
+            AnimChannel c;
+            c.node = static_cast<int>(ch.target_node - data->nodes);
+            if (ch.target_path == cgltf_animation_path_type_translation) c.path = 0;
+            else if (ch.target_path == cgltf_animation_path_type_rotation) c.path = 1;
+            else if (ch.target_path == cgltf_animation_path_type_scale) c.path = 2;
+            else continue; // pesos de morph targets: pendiente
+            const int comps = c.path == 1 ? 4 : 3;
+            const cgltf_accessor* in = ch.sampler->input;
+            const cgltf_accessor* out = ch.sampler->output;
+            const bool cubic = ch.sampler->interpolation == cgltf_interpolation_type_cubic_spline;
+            c.step = ch.sampler->interpolation == cgltf_interpolation_type_step;
+            c.times.resize(in->count);
+            for (size_t k = 0; k < in->count; ++k) cgltf_accessor_read_float(in, k, &c.times[k], 1);
+            c.values.resize(in->count * comps);
+            for (size_t k = 0; k < in->count; ++k) // en "cubic spline" cada clave trae tangentes: se usa el valor central
+                cgltf_accessor_read_float(out, cubic ? k * 3 + 1 : k, &c.values[k * comps], comps);
+            if (!c.times.empty()) clip.duration = std::max(clip.duration, c.times.back());
+            clip.channels.push_back(std::move(c));
+        }
+        m.clips.push_back(std::move(clip));
+    }
+    const cgltf_skin* mainSkin = data->skins_count ? &data->skins[0] : nullptr;
+    if (mainSkin && mainSkin->joints_count > static_cast<size_t>(kMaxJoints))
+        TITAN_WARN("render", "%s: el esqueleto tiene %zu huesos (máximo %d); se mostrará sin animar", m.path.c_str(),
+                   mainSkin->joints_count, kMaxJoints);
+
     // Texturas incrustadas (una por imagen, compartidas entre materiales).
     std::vector<int> imageTex(data->images_count, -1);
     auto textureOf = [&](const cgltf_texture* t) -> TextureHandle {
@@ -96,12 +160,14 @@ bool Renderer::buildModel(Model& m) {
         for (size_t pi = 0; pi < node->mesh->primitives_count; ++pi) {
             const cgltf_primitive& prim = node->mesh->primitives[pi];
             if (prim.type != cgltf_primitive_type_triangles) continue;
-            const cgltf_accessor *pos = nullptr, *nrm = nullptr, *uv = nullptr;
+            const cgltf_accessor *pos = nullptr, *nrm = nullptr, *uv = nullptr, *jnt = nullptr, *wgt = nullptr;
             for (size_t a = 0; a < prim.attributes_count; ++a) {
                 const cgltf_attribute& at = prim.attributes[a];
                 if (at.type == cgltf_attribute_type_position) pos = at.data;
                 else if (at.type == cgltf_attribute_type_normal) nrm = at.data;
                 else if (at.type == cgltf_attribute_type_texcoord && at.index == 0) uv = at.data;
+                else if (at.type == cgltf_attribute_type_joints && at.index == 0) jnt = at.data;
+                else if (at.type == cgltf_attribute_type_weights && at.index == 0) wgt = at.data;
             }
             if (!pos || pos->count == 0) continue;
             std::vector<MeshVertex> verts(pos->count);
@@ -145,6 +211,8 @@ bool Renderer::buildModel(Model& m) {
             }
 
             ModelPart part;
+            part.skinned = node->skin && node->skin == mainSkin && jnt && wgt &&
+                           mainSkin->joints_count <= static_cast<size_t>(kMaxJoints);
             glGenVertexArrays(1, &part.mesh.vao);
             glBindVertexArray(part.mesh.vao);
             glGenBuffers(1, &part.mesh.vbo);
@@ -159,6 +227,28 @@ bool Renderer::buildModel(Model& m) {
             glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, normal));
             glEnableVertexAttribArray(2);
             glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, uv));
+            if (part.skinned) {
+                // 8 floats por vértice: índices de 4 huesos y sus 4 pesos.
+                std::vector<float> sw(pos->count * 8, 0.0f);
+                for (size_t k = 0; k < pos->count; ++k) {
+                    cgltf_uint j[4] = {0, 0, 0, 0};
+                    cgltf_accessor_read_uint(jnt, k, j, 4);
+                    float w[4] = {1, 0, 0, 0};
+                    cgltf_accessor_read_float(wgt, k, w, 4);
+                    const float sum = w[0] + w[1] + w[2] + w[3];
+                    for (int q = 0; q < 4; ++q) {
+                        sw[k * 8 + q] = static_cast<float>(j[q]);
+                        sw[k * 8 + 4 + q] = sum > 0 ? w[q] / sum : (q == 0 ? 1.0f : 0.0f);
+                    }
+                }
+                glGenBuffers(1, &part.skinVbo);
+                glBindBuffer(GL_ARRAY_BUFFER, part.skinVbo);
+                glBufferData(GL_ARRAY_BUFFER, sw.size() * sizeof(float), sw.data(), GL_STATIC_DRAW);
+                glEnableVertexAttribArray(3);
+                glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+                glEnableVertexAttribArray(4);
+                glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(4 * sizeof(float)));
+            }
             glBindVertexArray(0);
             part.mesh.indexCount = static_cast<int>(idx.size());
 
@@ -200,25 +290,120 @@ int Renderer::modelTriangles(int model) const {
     return model < 0 || model >= static_cast<int>(models_.size()) ? 0 : models_[model].triangles;
 }
 
-void Renderer::drawModel(int model, const Mat4& world, const MeshRenderer& mat, TextureHandle overrideTex) {
+void Renderer::drawModel(int model, const Mat4& world, const MeshRenderer& mat, TextureHandle overrideTex,
+                         const std::vector<Mat4>* joints) {
     if (model < 0 || model >= static_cast<int>(models_.size())) return;
     for (const ModelPart& p : models_[model].parts) {
+        currentJoints_ = p.skinned ? joints : nullptr;
         const Color c{p.color.r * mat.color.r, p.color.g * mat.color.g, p.color.b * mat.color.b, p.color.a * mat.color.a};
         const Color e{std::max(p.emission.r, mat.emission.r), std::max(p.emission.g, mat.emission.g),
                       std::max(p.emission.b, mat.emission.b), 1};
         drawSurface(p.mesh.vao, p.mesh.indexCount, true, world, c, p.metallic, p.roughness, e, mat.prototypeGrid, mat.unlit,
                     overrideTex != kWhiteTexture ? overrideTex : p.texture, p.doubleSided);
     }
+    currentJoints_ = nullptr;
 }
 
-void Renderer::drawModelShadow(int model, const Mat4& world) {
+void Renderer::drawModelShadow(int model, const Mat4& world, const std::vector<Mat4>* joints) {
     if (model < 0 || model >= static_cast<int>(models_.size())) return;
     glUniformMatrix4fv(uShadowModel_, 1, GL_FALSE, world.m);
     for (const ModelPart& p : models_[model].parts) {
+        const bool skin = p.skinned && joints && !joints->empty();
+        glUniform1i(uShadowSkinned_, skin ? 1 : 0);
+        if (skin)
+            glUniformMatrix4fv(uShadowJoints_, static_cast<GLsizei>(std::min<size_t>(joints->size(), kMaxJoints)), GL_FALSE,
+                               joints->front().m);
         glBindVertexArray(p.mesh.vao);
         glDrawElements(GL_TRIANGLES, p.mesh.indexCount, GL_UNSIGNED_INT, nullptr);
         stats_.drawCalls++;
     }
+}
+
+// ---------------------------------------------------------------- Animación
+
+int Renderer::modelAnimationCount(int model) const {
+    return model < 0 || model >= static_cast<int>(models_.size()) ? 0 : static_cast<int>(models_[model].clips.size());
+}
+
+std::string Renderer::modelAnimationName(int model, int anim) const {
+    if (anim < 0 || anim >= modelAnimationCount(model)) return {};
+    return models_[model].clips[anim].name;
+}
+
+float Renderer::modelAnimationDuration(int model, int anim) const {
+    if (anim < 0 || anim >= modelAnimationCount(model)) return 0;
+    return models_[model].clips[anim].duration;
+}
+
+int Renderer::modelAnimationIndex(int model, const std::string& name) const {
+    const int n = modelAnimationCount(model);
+    if (n == 0) return -1;
+    if (name.empty()) return 0;
+    for (int i = 0; i < n; ++i)
+        if (models_[model].clips[i].name == name) return i;
+    return -1;
+}
+
+bool Renderer::modelHasSkin(int model) const {
+    if (model < 0 || model >= static_cast<int>(models_.size())) return false;
+    for (const ModelPart& p : models_[model].parts)
+        if (p.skinned) return true;
+    return false;
+}
+
+namespace {
+// Valor del canal en el instante t (interpolación lineal; esférica normalizada para rotaciones).
+void sample(const std::vector<float>& times, const std::vector<float>& values, int comps, bool step, float t, float* out) {
+    const size_t n = times.size();
+    if (n == 0) return;
+    if (t <= times.front() || n == 1) { std::copy_n(values.begin(), comps, out); return; }
+    if (t >= times.back()) { std::copy_n(values.begin() + (n - 1) * comps, comps, out); return; }
+    const size_t k = static_cast<size_t>(std::upper_bound(times.begin(), times.end(), t) - times.begin()) - 1;
+    const float* a = &values[k * comps];
+    const float* b = &values[(k + 1) * comps];
+    if (step) { std::copy_n(a, comps, out); return; }
+    const float f = (t - times[k]) / std::max(times[k + 1] - times[k], 1e-6f);
+    float sign = 1;
+    if (comps == 4 && a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] < 0) sign = -1; // camino corto
+    for (int c = 0; c < comps; ++c) out[c] = a[c] + (b[c] * sign - a[c]) * f;
+}
+} // namespace
+
+bool Renderer::computePose(int model, int anim, float time, bool loop, std::vector<Mat4>& joints) const {
+    joints.clear();
+    if (model < 0 || model >= static_cast<int>(models_.size())) return false;
+    const Model& m = models_[model];
+    if (m.skins.empty() || !modelHasSkin(model)) return false;
+    std::vector<AnimNode> local = m.nodes;
+    if (anim >= 0 && anim < static_cast<int>(m.clips.size())) {
+        const AnimClip& clip = m.clips[anim];
+        float t = time;
+        if (clip.duration > 0) t = loop ? std::fmod(std::max(time, 0.0f), clip.duration) : std::min(time, clip.duration);
+        for (const AnimChannel& c : clip.channels) {
+            if (c.node < 0 || c.node >= static_cast<int>(local.size())) continue;
+            float v[4] = {0, 0, 0, 1};
+            sample(c.times, c.values, c.path == 1 ? 4 : 3, c.step, t, v);
+            AnimNode& n = local[c.node];
+            if (c.path == 0) n.t = {v[0], v[1], v[2]};
+            else if (c.path == 1) n.r = Quat{v[0], v[1], v[2], v[3]}.normalized();
+            else n.s = {v[0], v[1], v[2]};
+        }
+    }
+    // Matrices globales recorriendo la jerarquía de nodos (con memoria: cada nodo una vez).
+    std::vector<Mat4> global(local.size());
+    std::vector<char> done(local.size(), 0);
+    std::function<const Mat4&(int)> world = [&](int i) -> const Mat4& {
+        if (!done[i]) {
+            const Mat4 l = Mat4::trs(local[i].t, local[i].r, local[i].s);
+            global[i] = local[i].parent >= 0 ? world(local[i].parent) * l : l;
+            done[i] = 1;
+        }
+        return global[i];
+    };
+    const Skin& skin = m.skins[0];
+    joints.resize(skin.joints.size());
+    for (size_t j = 0; j < skin.joints.size(); ++j) joints[j] = world(skin.joints[j]) * skin.inverseBind[j];
+    return true;
 }
 
 } // namespace titan

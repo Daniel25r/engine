@@ -1,5 +1,17 @@
 # Registro de cambios
 
+## 0.8.0 — 2026-11-21 · Animación de personajes
+
+Añadido
+- Animación esquelética de modelos glTF/GLB: se leen nodos, esqueleto (hasta 48 huesos), pesos por vértice y clips
+  (traslación, rotación y escala; interpolación lineal, escalonada y la parte central de la cúbica).
+  Skinning en la GPU, también en el mapa de sombras.
+- Componente `Animator` (clip, reproducir, repetir, velocidad). Vista previa animada en el editor, selector de clips
+  con su duración y barra de tiempo para recorrer la animación. Al añadir un modelo con clips se le pone un Animator.
+- Lua: `playAnimation(nombre [, repetir])`, `stopAnimation()`, `getAnimation()`, `setAnimationSpeed(v)`.
+
+Probado con Fox (Survey/Walk/Run) y CesiumMan de Khronos. Las animaciones se crean en Blender o Mixamo y se importan en GLB.
+
 ## 0.7.0 — 2026-11-21 · Variables de script y prefabs
 
 Añadido

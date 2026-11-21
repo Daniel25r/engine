@@ -59,6 +59,7 @@ Si un método lanza un error, el error se registra y esa instancia deja de ejecu
 | `hasComponent(n)`, `addComponent(n)`, `removeComponent(n)` | Por nombre: `Camera`, `SpriteRenderer`, `MeshRenderer`, `Light`, `Script` |
 | `getScript()` | La instancia del script de esa entidad, para que los scripts se comuniquen |
 | `addForce`, `addImpulse`, `addTorque`, `setVelocity`, `getVelocity`, `teleport` (x,y,z) | Física (necesita Collider + Rigidbody) |
+| `playAnimation(clip [, repetir])`, `stopAnimation()`, `getAnimation()` → clip, tiempo, reproduciendo, `setAnimationSpeed(v)` | Animación del modelo (glTF con esqueleto) |
 
 Las funciones que devuelven vectores devuelven varios valores: `local x, y, z = e:getPosition()`.
 

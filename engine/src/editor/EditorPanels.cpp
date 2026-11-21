@@ -1057,6 +1057,39 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         dragF("Exposición", v.exposure, 0.01f, 0.05f, 8, "%.2f");
         check("Sombras", v.shadows);
         dragF("Dist. sombras", v.shadowDistance, 0.5f, 5, 500, "%.0f");
+    } else if (name == "Animator") {
+        Animator& a = *w.get<Animator>(e);
+        const MeshRenderer* mr = w.get<MeshRenderer>(e);
+        const int model = mr ? editorModel(mr->model) : -1;
+        const int count = renderer.modelAnimationCount(model);
+        propLabel("Clip");
+        if (count == 0) {
+            ImGui::TextDisabled(model < 0 ? "Necesita un modelo con animaciones" : "El modelo no tiene animaciones");
+        } else {
+            const std::string preview = a.clip.empty() ? renderer.modelAnimationName(model, 0) + " (primero)" : a.clip;
+            if (ImGui::BeginCombo("##clip", preview.c_str())) {
+                for (int i = 0; i < count; ++i) {
+                    const std::string n = renderer.modelAnimationName(model, i);
+                    char label[160];
+                    std::snprintf(label, sizeof(label), "%s  (%.1f s)", n.c_str(), renderer.modelAnimationDuration(model, i));
+                    if (ImGui::Selectable(label, n == a.clip)) {
+                        pushUndo();
+                        a.clip = n;
+                        a.time = 0;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
+        check("Reproducir", a.playing);
+        check("Repetir", a.loop);
+        dragF("Velocidad", a.speed, 0.01f, -4, 4, "%.2fx");
+        propLabel("Tiempo");
+        const int idx = renderer.modelAnimationIndex(model, a.clip);
+        const float dur = renderer.modelAnimationDuration(model, idx);
+        float t = dur > 0 ? std::fmod(a.time, dur) : a.time;
+        if (ImGui::SliderFloat("##tiempo", &t, 0, std::max(dur, 0.01f), "%.2f s")) a.time = t; // fregar la animación
+        if (ImGui::IsItemActive()) noScrollWidgetActive = true;
     } else if (name == "Rigidbody") {
         Rigidbody& b = *w.get<Rigidbody>(e);
         int type = static_cast<int>(b.type);

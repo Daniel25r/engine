@@ -132,6 +132,15 @@ struct Light {
     float range = 10.0f;           // solo puntual
 };
 
+// Reproduce los clips de animación de un modelo glTF con esqueleto (MeshRenderer.model).
+struct Animator {
+    std::string clip;      // nombre del clip ("Walk", "Run"...); vacío = el primero
+    bool playing = true;
+    bool loop = true;
+    float speed = 1.0f;
+    float time = 0.0f;     // segundos dentro del clip
+};
+
 // ---- Física (mismos conceptos que Rigidbody/Collider de Unity) ----
 // Una entidad con Collider y sin Rigidbody es un sólido estático (suelo, paredes).
 struct Rigidbody {

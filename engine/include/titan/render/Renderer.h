@@ -91,8 +91,20 @@ public:
     bool modelBounds(int model, Vec3& min, Vec3& max) const;
     int modelTriangles(int model) const;
     // El color del MeshRenderer tiñe el del modelo; su textura, si la tiene, sustituye a la del modelo.
-    void drawModel(int model, const Mat4& world, const MeshRenderer& material, TextureHandle overrideTex);
-    void drawModelShadow(int model, const Mat4& world);
+    // joints: matrices de los huesos (computePose); nulo = pose de reposo.
+    void drawModel(int model, const Mat4& world, const MeshRenderer& material, TextureHandle overrideTex,
+                   const std::vector<Mat4>* joints = nullptr);
+    void drawModelShadow(int model, const Mat4& world, const std::vector<Mat4>* joints = nullptr);
+
+    // ---- Animación esquelética ----
+    static constexpr int kMaxJoints = 48;
+    int modelAnimationCount(int model) const;
+    std::string modelAnimationName(int model, int anim) const;
+    float modelAnimationDuration(int model, int anim) const;
+    int modelAnimationIndex(int model, const std::string& name) const; // -1 si no existe; "" = la primera
+    bool modelHasSkin(int model) const;
+    // Calcula las matrices de los huesos del primer esqueleto del modelo en el instante "time".
+    bool computePose(int model, int anim, float time, bool loop, std::vector<Mat4>& joints) const;
     // Sprite con su matriz de mundo completa: respeta posición, rotación, escala y jerarquía.
     void drawSprite(TextureHandle tex, const Mat4& world, Vec2 size, Vec2 pivot, Rect uv, Color color);
     void drawLine(const Vec3& a, const Vec3& b, Color color);
@@ -127,15 +139,41 @@ private:
     };
     struct ModelPart {
         GpuMesh mesh;
+        bool skinned = false;
+        uint32_t skinVbo = 0; // huesos y pesos por vértice
         Color color;
         float metallic = 0, roughness = 1;
         Color emission{0, 0, 0, 1};
         TextureHandle texture = 0;
         bool doubleSided = false;
     };
+    struct AnimNode {
+        int parent = -1;
+        Vec3 t;
+        Quat r;
+        Vec3 s{1, 1, 1};
+    };
+    struct AnimChannel {
+        int node = -1;
+        int path = 0; // 0 traslación, 1 rotación, 2 escala
+        bool step = false;
+        std::vector<float> times, values;
+    };
+    struct AnimClip {
+        std::string name;
+        float duration = 0;
+        std::vector<AnimChannel> channels;
+    };
+    struct Skin {
+        std::vector<int> joints;
+        std::vector<Mat4> inverseBind;
+    };
     struct Model {
         std::string path;
         std::vector<ModelPart> parts;
+        std::vector<AnimNode> nodes;
+        std::vector<Skin> skins;
+        std::vector<AnimClip> clips;
         Vec3 min, max;
         int triangles = 0;
         bool ok = false;
@@ -164,10 +202,11 @@ private:
         uPointCount_ = -1, uPointPosRange_ = -1, uPointColor_ = -1, uCameraPos_ = -1, uUnlit_ = -1, uMetallic_ = -1,
         uRoughness_ = -1, uEmission_ = -1, uGrid_ = -1, uSkyZenith_ = -1, uSkyHorizon_ = -1, uGround_ = -1,
         uAmbientI_ = -1, uFogColor_ = -1, uFogDensity_ = -1, uExposure_ = -1, uLightVP_ = -1, uShadowMap_ = -1,
-        uShadowsOn_ = -1;
+        uShadowsOn_ = -1, uSkinned_ = -1, uJoints_ = -1;
     // Sombras y cielo
     uint32_t shadowProgram_ = 0, shadowFbo_ = 0, shadowTex_ = 0;
-    int uShadowLVP_ = -1, uShadowModel_ = -1;
+    int uShadowLVP_ = -1, uShadowModel_ = -1, uShadowSkinned_ = -1, uShadowJoints_ = -1;
+    const std::vector<Mat4>* currentJoints_ = nullptr;
     int prevFbo_ = 0;
     uint32_t skyProgram_ = 0, skyVao_ = 0;
     int uSkyInvVP_ = -1, uSkyCam_ = -1, uSkyZ_ = -1, uSkyH_ = -1, uSkyG_ = -1, uSkySun_ = -1, uSkySunColor_ = -1;

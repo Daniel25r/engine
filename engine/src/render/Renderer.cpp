@@ -47,18 +47,31 @@ const char* kMeshVS = R"(#version 300 es
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aUV;
+layout(location = 3) in vec4 aJoints;
+layout(location = 4) in vec4 aWeights;
 uniform mat4 uViewProj;
 uniform mat4 uModel;
 uniform mat3 uNormalMat;
 uniform mat4 uLightVP;
+uniform int uSkinned;
+uniform mat4 uJoints[48];
 out vec3 vWorld;
 out vec3 vNormal;
 out vec2 vUV;
 out vec4 vShadow;
 void main() {
-    vec4 w = uModel * vec4(aPos, 1.0);
+    vec4 local = vec4(aPos, 1.0);
+    vec3 normal = aNormal;
+    if (uSkinned == 1) {
+        // Skinning: cada vértice sigue a hasta 4 huesos según sus pesos.
+        mat4 skin = aWeights.x * uJoints[int(aJoints.x)] + aWeights.y * uJoints[int(aJoints.y)] +
+                    aWeights.z * uJoints[int(aJoints.z)] + aWeights.w * uJoints[int(aJoints.w)];
+        local = skin * local;
+        normal = mat3(skin) * normal;
+    }
+    vec4 w = uModel * local;
     vWorld = w.xyz;
-    vNormal = normalize(uNormalMat * aNormal);
+    vNormal = normalize(uNormalMat * normal);
     vUV = aUV;
     // Desplazar el punto un poco por la normal evita el "acné" de sombras.
     vShadow = uLightVP * vec4(w.xyz + vNormal * 0.04, 1.0);
@@ -179,9 +192,19 @@ void main() {
 
 const char* kShadowVS = R"(#version 300 es
 layout(location = 0) in vec3 aPos;
+layout(location = 3) in vec4 aJoints;
+layout(location = 4) in vec4 aWeights;
 uniform mat4 uLightVP;
 uniform mat4 uModel;
-void main() { gl_Position = uLightVP * uModel * vec4(aPos, 1.0); }
+uniform int uSkinned;
+uniform mat4 uJoints[48];
+void main() {
+    vec4 local = vec4(aPos, 1.0);
+    if (uSkinned == 1)
+        local = (aWeights.x * uJoints[int(aJoints.x)] + aWeights.y * uJoints[int(aJoints.y)] +
+                 aWeights.z * uJoints[int(aJoints.z)] + aWeights.w * uJoints[int(aJoints.w)]) * local;
+    gl_Position = uLightVP * uModel * local;
+}
 )";
 
 const char* kShadowFS = R"(#version 300 es
@@ -294,6 +317,9 @@ bool Renderer::createGpuObjects() {
     uGrid_ = u("uGrid"); uSkyZenith_ = u("uSkyZenith"); uSkyHorizon_ = u("uSkyHorizon"); uGround_ = u("uGround");
     uAmbientI_ = u("uAmbientI"); uFogColor_ = u("uFogColor"); uFogDensity_ = u("uFogDensity");
     uExposure_ = u("uExposure"); uLightVP_ = u("uLightVP"); uShadowMap_ = u("uShadowMap"); uShadowsOn_ = u("uShadowsOn");
+    uSkinned_ = u("uSkinned"); uJoints_ = u("uJoints");
+    uShadowSkinned_ = glGetUniformLocation(shadowProgram_, "uSkinned");
+    uShadowJoints_ = glGetUniformLocation(shadowProgram_, "uJoints");
     uShadowLVP_ = glGetUniformLocation(shadowProgram_, "uLightVP");
     uShadowModel_ = glGetUniformLocation(shadowProgram_, "uModel");
     uSkyInvVP_ = glGetUniformLocation(skyProgram_, "uInvViewProj");
@@ -481,6 +507,7 @@ void Renderer::shutdown() {
     for (auto& model : models_)
         for (auto& part : model.parts) {
             glDeleteBuffers(1, &part.mesh.vbo);
+            if (part.skinVbo) glDeleteBuffers(1, &part.skinVbo);
             glDeleteBuffers(1, &part.mesh.ibo);
             glDeleteVertexArrays(1, &part.mesh.vao);
         }
@@ -555,6 +582,7 @@ void Renderer::drawShadowCaster(MeshPrimitive type, const Mat4& world) {
     const GpuMesh& mesh = meshes_[static_cast<int>(type)];
     if (!mesh.vao) return;
     glUniformMatrix4fv(uShadowModel_, 1, GL_FALSE, world.m);
+    glUniform1i(uShadowSkinned_, 0);
     glBindVertexArray(mesh.vao);
     glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_SHORT, nullptr);
     stats_.drawCalls++;
@@ -650,6 +678,11 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
     glUniform3f(uEmission_, emission.r, emission.g, emission.b);
     glUniform1i(uGrid_, grid ? 1 : 0);
     glUniform1i(uUnlit_, (unlit || unlitOverride_) ? 1 : 0);
+    const bool skinned = currentJoints_ && !currentJoints_->empty();
+    glUniform1i(uSkinned_, skinned ? 1 : 0);
+    if (skinned)
+        glUniformMatrix4fv(uJoints_, static_cast<GLsizei>(std::min<size_t>(currentJoints_->size(), kMaxJoints)), GL_FALSE,
+                           currentJoints_->front().m);
     glBindTexture(GL_TEXTURE_2D, textures_[tex].gl);
     // Una escala con determinante negativo invierte el sentido de los triángulos.
     const float det = world.m[0] * (world.m[5] * world.m[10] - world.m[9] * world.m[6]) -

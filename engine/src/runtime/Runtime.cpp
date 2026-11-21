@@ -186,6 +186,12 @@ void Runtime::frame(const Viewport& viewport) {
     scene_->flushDestroyed();
     profile_.scriptMs = msSince(t);
 
+    // Animación: avanza el tiempo de cada Animator que esté reproduciendo.
+    if (!paused)
+        scene_->world().each<Animator>([&](Entity, Animator& a) {
+            if (a.playing) a.time += dt * a.speed;
+        });
+
     // 4. Transformaciones.
     t = Clock::now();
     profile_.transformsUpdated = TransformSystem::update(*scene_);

@@ -78,11 +78,21 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     const Vec3 camPos = camWorld.translation();
     opaque_.clear();
     transparent_.clear();
+    poseCount_ = 0;
     scene.world().each<MeshRenderer, Transform>([&](Entity e, MeshRenderer& m, Transform& t) {
         if (!m.visible || !scene.isActiveInHierarchy(e)) return;
         const Vec3 d = t.worldPosition() - camPos;
         const int model = (!m.model.isNull() && models) ? models(m.model) : -1;
-        MeshItem item{&m, &t.worldMatrix(), textures(m.texture), dot(d, d), model};
+        int pose = -1;
+        if (model >= 0 && renderer.modelHasSkin(model)) {
+            // Pose del esqueleto: la del Animator si lo hay; si no, la de reposo.
+            const Animator* an = scene.world().get<Animator>(e);
+            if (poseCount_ >= poses_.size()) poses_.emplace_back();
+            const int clip = an ? renderer.modelAnimationIndex(model, an->clip) : -1;
+            if (renderer.computePose(model, clip, an ? an->time : 0.0f, an ? an->loop : true, poses_[poseCount_]))
+                pose = static_cast<int>(poseCount_++);
+        }
+        MeshItem item{&m, &t.worldMatrix(), textures(m.texture), dot(d, d), model, pose};
         (m.color.a < 0.999f ? transparent_ : opaque_).push_back(item);
     });
 
@@ -103,7 +113,7 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
         renderer.beginShadowPass(L.lightViewProjection);
         for (const MeshItem& m : opaque_)
             if (m.mesh->castShadows && !m.mesh->unlit) {
-                if (m.model >= 0) renderer.drawModelShadow(m.model, *m.world);
+                if (m.model >= 0) renderer.drawModelShadow(m.model, *m.world, m.pose >= 0 ? &poses_[m.pose] : nullptr);
                 else renderer.drawShadowCaster(m.mesh->mesh, *m.world);
             }
         renderer.endShadowPass();
@@ -118,7 +128,7 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     std::sort(opaque_.begin(), opaque_.end(), [](const MeshItem& a, const MeshItem& b) { return a.depth < b.depth; });
     std::sort(transparent_.begin(), transparent_.end(), [](const MeshItem& a, const MeshItem& b) { return a.depth > b.depth; });
     auto draw = [&](const MeshItem& m) {
-        if (m.model >= 0) renderer.drawModel(m.model, *m.world, *m.mesh, m.texture);
+        if (m.model >= 0) renderer.drawModel(m.model, *m.world, *m.mesh, m.texture, m.pose >= 0 ? &poses_[m.pose] : nullptr);
         else renderer.drawMesh(m.mesh->mesh, *m.world, *m.mesh, m.texture);
     };
     for (const MeshItem& m : opaque_) draw(m);

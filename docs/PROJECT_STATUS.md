@@ -1,4 +1,4 @@
-# Estado del proyecto — Titán 0.7.0
+# Estado del proyecto — Titán 0.8.0
 
 Fecha: 2026-11-21 · Generaciones 1 (Fundación) y 2 (Editor) en curso; primeros pasos de la 5 (3D)
 
@@ -49,7 +49,8 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 | PBR metálico/rugosidad, emisión, sombras del sol (PCF), cielo, niebla, tonemapping ACES | [COMPLETADO Y PROBADO] (visual, en escritorio con render por software) |
 | Gizmo mover/rotar/escalar | [COMPLETADO Y PROBADO] (arrastres simulados: mover en X y rotar 71,8° en Y, guardados) |
 | Importar modelos glTF/GLB (mallas, materiales PBR, texturas incrustadas) | [COMPLETADO Y PROBADO] (Duck, BoxTextured, Fox de Khronos) |
-| Animación de esqueletos, mapas normales, OBJ | [PENDIENTE] |
+| Animación de esqueletos (skinning GPU, clips glTF, Animator, API Lua) | [COMPLETADO Y PROBADO] (Fox y CesiumMan, en editor y en juego) |
+| Transiciones entre clips, máquinas de estados, mapas normales, OBJ/FBX | [PENDIENTE] |
 | Física 3D (Jolt): Rigidbody, Collider caja/esfera/cápsula, triggers, raycast, fuerzas, eventos en scripts | [COMPLETADO Y PROBADO] (4 pruebas + nivel de prueba en el editor) |
 | Colliders de malla, joints, controlador de personaje, física 2D | [PENDIENTE] |
 | Terreno, vegetación, iluminación global, posprocesado (bloom, SSAO) | [PENDIENTE] |

@@ -226,6 +226,33 @@ int e_setVelocity(lua_State* L) { const Entity e = body(L); physics(L).setVeloci
 int e_getVelocity(lua_State* L) { const Entity e = body(L); return push3(L, physics(L).velocity(e)); }
 int e_teleport(lua_State* L) { const Entity e = body(L); physics(L).teleport(e, check3(L, 2, {})); return 0; }
 
+Animator& animator(lua_State* L, Entity e) {
+    World& w = scene(L).world();
+    if (!w.has<Animator>(e)) w.add<Animator>(e);
+    return *w.get<Animator>(e);
+}
+int e_playAnimation(lua_State* L) {
+    const Entity e = live(L, 1);
+    Animator& a = animator(L, e);
+    const std::string clip = luaL_optstring(L, 2, "");
+    const bool restart = clip != a.clip || !a.playing;
+    a.clip = clip;
+    if (!lua_isnoneornil(L, 3)) a.loop = lua_toboolean(L, 3);
+    if (restart) a.time = 0; // volver a pedir la misma animación no la reinicia
+    a.playing = true;
+    return 0;
+}
+int e_stopAnimation(lua_State* L) { animator(L, live(L, 1)).playing = false; return 0; }
+int e_getAnimation(lua_State* L) {
+    const Animator* a = scene(L).world().get<Animator>(live(L, 1));
+    if (!a) return 0;
+    lua_pushstring(L, a->clip.c_str());
+    lua_pushnumber(L, a->time);
+    lua_pushboolean(L, a->playing);
+    return 3;
+}
+int e_setAnimationSpeed(lua_State* L) { animator(L, live(L, 1)).speed = static_cast<float>(luaL_checknumber(L, 2)); return 0; }
+
 int e_eq(lua_State* L) {
     const Entity a = toEntity(L, 1), b = toEntity(L, 2);
     lua_pushboolean(L, a == b);
@@ -250,7 +277,9 @@ const luaL_Reg kEntityMethods[] = {
     {"getColor", e_getColor}, {"setColor", e_setColor}, {"setSize", e_setSize},
     {"hasComponent", e_hasComponent}, {"addComponent", e_addComponent}, {"removeComponent", e_removeComponent},
     {"getScript", e_getScript}, {"addForce", e_addForce}, {"addImpulse", e_addImpulse}, {"addTorque", e_addTorque},
-    {"setVelocity", e_setVelocity}, {"getVelocity", e_getVelocity}, {"teleport", e_teleport}, {nullptr, nullptr}};
+    {"setVelocity", e_setVelocity}, {"getVelocity", e_getVelocity}, {"teleport", e_teleport},
+    {"playAnimation", e_playAnimation}, {"stopAnimation", e_stopAnimation}, {"getAnimation", e_getAnimation},
+    {"setAnimationSpeed", e_setAnimationSpeed}, {nullptr, nullptr}};
 
 // ---------------------------------------------------------------- Tablas globales
 

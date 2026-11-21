@@ -36,7 +36,10 @@ private:
         TextureHandle texture;
         float depth;
         int model;
+        int pose; // índice en poses_ o -1
     };
+    std::vector<std::vector<Mat4>> poses_;
+    size_t poseCount_ = 0;
     struct SpriteItem {
         int order;
         TextureHandle texture;

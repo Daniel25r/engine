@@ -2,7 +2,7 @@
 
 Este documento recorre los sistemas de Unity 6 (el editor, el runtime y los paquetes oficiales más usados),
 explica brevemente cómo funcionan y dice dónde está Titán. Es la hoja de ruta para llegar a su nivel.
-Estado de Titán a fecha de la versión 0.7.0.
+Estado de Titán a fecha de la versión 0.8.0.
 
 Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 
@@ -60,8 +60,8 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 
 | Unity | Titán |
 |---|---|
-| Animator (máquinas de estados, blend trees), Timeline | ❌ Siguiente tras la física: esqueletos glTF y clips |
-| Importación de modelos FBX/glTF/OBJ con animaciones | 🟡 glTF/GLB estático (mallas, materiales, texturas) |
+| Animator (máquinas de estados, blend trees), Timeline | 🟡 Esqueletos glTF, clips, Animator con velocidad y bucle, control desde scripts; ❌ transiciones suaves, máquinas de estados, Timeline |
+| Importación de modelos FBX/glTF/OBJ con animaciones | 🟡 glTF/GLB con mallas, materiales, texturas, esqueletos y animaciones; ❌ FBX |
 | Audio: AudioSource 2D/3D, mezclador | ❌ (miniaudio previsto) |
 | UI (uGUI / UI Toolkit): Canvas, botones, texto, layouts, anclajes | 🟡 Solo `Screen.text` |
 | Input System: acciones, mandos, táctil | 🟡 Táctil multipunto; ❌ acciones, mandos, joystick virtual |
@@ -85,7 +85,7 @@ En este orden, porque cada paso hace posibles juegos que antes no lo eran:
 1. **Física** ✅ (v0.6)
 2. **Variables de script editables en el Inspector** ✅ (v0.7)
 3. **Prefabs** ✅ básicos (v0.7); faltan variantes y propagación
-4. **Animación esquelética** (glTF) con Animator sencillo: personajes que caminan.
+4. **Animación esquelética** ✅ (v0.8); faltan transiciones suaves entre clips y máquinas de estados
 5. **Audio** (miniaudio): música y efectos 2D/3D.
 6. **UI de juego**: botones, imágenes, texto con fuentes TTF, joystick virtual.
 7. **Terreno** con pintura de capas y vegetación instanciada.

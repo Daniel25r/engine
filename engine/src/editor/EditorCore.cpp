@@ -479,6 +479,7 @@ void Editor::Impl::addModelToScene(const AssetRecord& r) {
     if (threeD()) p.y = -mn.y * k;
     scene.transform(e).setPosition(p);
     scene.transform(e).setScale({k, k, k});
+    if (renderer.modelAnimationCount(m) > 0) scene.world().add<Animator>(e); // con esqueleto y clips: lista para animar
     select(e);
     dirty = true;
     setStatus("Modelo añadido: " + name);

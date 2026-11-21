@@ -251,6 +251,18 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("range", l.range);
         });
 
+    r.addSimple<Animator>(
+        "Animator",
+        [](const Animator& a) {
+            return Json{{"clip", a.clip}, {"playing", a.playing}, {"loop", a.loop}, {"speed", toJson(a.speed)}};
+        },
+        [](Animator& a, FieldReader& rd) {
+            rd.read("clip", a.clip);
+            rd.read("playing", a.playing);
+            rd.read("loop", a.loop);
+            rd.read("speed", a.speed);
+        });
+
     r.addSimple<Rigidbody>(
         "Rigidbody",
         [](const Rigidbody& b) {
