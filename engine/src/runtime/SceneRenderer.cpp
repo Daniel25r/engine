@@ -89,7 +89,9 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
             const Animator* an = scene.world().get<Animator>(e);
             if (poseCount_ >= poses_.size()) poses_.emplace_back();
             const int clip = an ? renderer.modelAnimationIndex(model, an->clip) : -1;
-            if (renderer.computePose(model, clip, an ? an->time : 0.0f, an ? an->loop : true, poses_[poseCount_]))
+            const int from = an && an->fromWeight > 0 ? renderer.modelAnimationIndex(model, an->fromClip) : -1;
+            if (renderer.computeBlendedPose(model, clip, an ? an->time : 0.0f, from, an ? an->fromTime : 0.0f,
+                                            an ? an->fromWeight : 0.0f, an ? an->loop : true, poses_[poseCount_]))
                 pose = static_cast<int>(poseCount_++);
         }
         MeshItem item{&m, &t.worldMatrix(), textures(m.texture), dot(d, d), model, pose};

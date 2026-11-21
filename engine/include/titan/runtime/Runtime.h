@@ -20,6 +20,7 @@
 #include "titan/core/Project.h"
 #include "titan/core/Scene.h"
 #include "titan/core/Serialization.h"
+#include "titan/audio/AudioEngine.h"
 #include "titan/physics/PhysicsWorld.h"
 #include "titan/render/Renderer.h"
 #include "titan/runtime/SceneRenderer.h"
@@ -77,6 +78,11 @@ public:
     void scriptDrawText(float x, float y, float size, const std::string& text, Color color) override;
     PhysicsApi* scriptPhysics() override { return &physics_; }
     Entity scriptInstantiate(const std::string& prefab, const Vec3& position) override;
+    bool scriptPlaySound(const std::string& path, Entity owner, bool spatial, const Vec3& at, float volume) override;
+    void scriptPlayEntitySound(Entity e) override;
+    void scriptStopSound(Entity e) override { audio_.stopOwner(e); }
+    void scriptSetVolume(float v) override { audio_.setMasterVolume(v); }
+    AudioEngine& audio() { return audio_; }
     PhysicsWorld& physics() { return physics_; }
 
 private:
@@ -97,6 +103,7 @@ private:
     Renderer renderer_;
     Input input_;
     PhysicsWorld physics_;
+    AudioEngine audio_;
     Subscription physicsDestroySub_;
     std::unique_ptr<Scene> scene_;
     std::unique_ptr<ScriptSystem> scripts_;

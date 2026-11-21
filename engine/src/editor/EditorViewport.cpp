@@ -90,9 +90,7 @@ void Editor::Impl::renderViewport() {
     TransformSystem::update(scene);
     // Vista previa de animaciones en el editor (como el Animator de Unity con "Preview").
     const float dt = ImGui::GetIO().DeltaTime;
-    scene.world().each<Animator>([&](Entity, Animator& a) {
-        if (a.playing) a.time += dt * a.speed;
-    });
+    scene.world().each<Animator>([&](Entity, Animator& a) { advanceAnimator(a, dt); });
     updateEditorCamera(float(vp.width) / float(vp.height));
     SceneView view;
     view.view = editorView;

@@ -59,7 +59,8 @@ Si un método lanza un error, el error se registra y esa instancia deja de ejecu
 | `hasComponent(n)`, `addComponent(n)`, `removeComponent(n)` | Por nombre: `Camera`, `SpriteRenderer`, `MeshRenderer`, `Light`, `Script` |
 | `getScript()` | La instancia del script de esa entidad, para que los scripts se comuniquen |
 | `addForce`, `addImpulse`, `addTorque`, `setVelocity`, `getVelocity`, `teleport` (x,y,z) | Física (necesita Collider + Rigidbody) |
-| `playAnimation(clip [, repetir])`, `stopAnimation()`, `getAnimation()` → clip, tiempo, reproduciendo, `setAnimationSpeed(v)` | Animación del modelo (glTF con esqueleto) |
+| `playAnimation(clip [, repetir])`, `stopAnimation()`, `getAnimation()` → clip, tiempo, reproduciendo, `setAnimationSpeed(v)` | Animación del modelo (glTF con esqueleto); al cambiar de clip hay transición suave |
+| `playSound([sonido, volumen])`, `stopSound()` | Su AudioSource, u otro sonido que sigue a la entidad en 3D |
 
 Las funciones que devuelven vectores devuelven varios valores: `local x, y, z = e:getPosition()`.
 
@@ -72,6 +73,7 @@ Las funciones que devuelven vectores devuelven varios valores: `local x, y, z = 
 | `Scene.instantiate(prefab, x, y, z)` → entidad | Crear una copia de un prefab con sus scripts y su física |
 | `Physics.raycast(ox,oy,oz, dx,dy,dz [, distancia, ignorar])` → entidad, x, y, z, distancia | Rayo contra los colliders |
 | `Physics.setGravity(x,y,z)`, `Physics.getGravity()` | Gravedad del mundo |
+| `Audio.play(sonido [, volumen])`, `Audio.playAt(sonido, x, y, z [, volumen])`, `Audio.setVolume(v)` | Sonidos sueltos (por ruta o por nombre) |
 | `Time.delta()`, `Time.fixedDelta()`, `Time.time()`, `Time.frame()` | Tiempo |
 | `Input.touchCount()`, `Input.touch(i)` → `{id, x, y, phase}`, `Input.touchWorld(i)` → x,y,z (plano z = 0 en 2D; suelo y = 0 con cámara en perspectiva), `Input.tapped()` | Táctil; `i` empieza en 1; `phase` es "began" o "held" |
 | `Screen.width()`, `Screen.height()` | Píxeles |

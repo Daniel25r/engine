@@ -254,13 +254,33 @@ ComponentRegistry ComponentRegistry::createDefault() {
     r.addSimple<Animator>(
         "Animator",
         [](const Animator& a) {
-            return Json{{"clip", a.clip}, {"playing", a.playing}, {"loop", a.loop}, {"speed", toJson(a.speed)}};
+            return Json{{"clip", a.clip}, {"playing", a.playing}, {"loop", a.loop}, {"speed", toJson(a.speed)},
+                        {"fadeDuration", toJson(a.fadeDuration)}};
         },
         [](Animator& a, FieldReader& rd) {
             rd.read("clip", a.clip);
             rd.read("playing", a.playing);
             rd.read("loop", a.loop);
             rd.read("speed", a.speed);
+            rd.read("fadeDuration", a.fadeDuration);
+        });
+
+    r.addSimple<AudioSource>(
+        "AudioSource",
+        [](const AudioSource& a) {
+            return Json{{"clip", assetToJson(a.clip)}, {"volume", toJson(a.volume)}, {"pitch", toJson(a.pitch)},
+                        {"loop", a.loop}, {"playOnStart", a.playOnStart}, {"spatial", a.spatial},
+                        {"minDistance", toJson(a.minDistance)}, {"maxDistance", toJson(a.maxDistance)}};
+        },
+        [](AudioSource& a, FieldReader& rd) {
+            rd.readAsset("clip", a.clip);
+            rd.read("volume", a.volume);
+            rd.read("pitch", a.pitch);
+            rd.read("loop", a.loop);
+            rd.read("playOnStart", a.playOnStart);
+            rd.read("spatial", a.spatial);
+            rd.read("minDistance", a.minDistance);
+            rd.read("maxDistance", a.maxDistance);
         });
 
     r.addSimple<Rigidbody>(

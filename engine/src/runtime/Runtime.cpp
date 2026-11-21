@@ -21,6 +21,7 @@ Runtime::~Runtime() { shutdown(); }
 bool Runtime::initSystems(FileSource& files) {
     files_ = &files;
     if (!renderer_.init(files)) return false;
+    audio_.init(files, true); // sin tarjeta de sonido el juego sigue funcionando en silencio
     scripts_ = std::make_unique<ScriptSystem>(*this, registry_, [this](AssetRef id, std::string& name, std::string& src) {
         const AssetRecord* r = assets_.find(id);
         if (!r || r->type != AssetType::Script) return false;
@@ -96,7 +97,13 @@ bool Runtime::activateScene(const std::string& text, const std::string& name) {
     TransformSystem::update(*scene_);
     physics_.build(*scene_);
     physicsDestroySub_ = events_.subscribe<EntityDestroyedEvent>([this](const EntityDestroyedEvent& ev) {
-        if (ev.scene == scene_.get()) physics_.removeEntity(ev.entity);
+        if (ev.scene != scene_.get()) return;
+        physics_.removeEntity(ev.entity);
+        audio_.stopOwner(ev.entity);
+    });
+    audio_.stopAll();
+    scene_->world().each<AudioSource>([&](Entity e, AudioSource& a) {
+        if (a.playOnStart && scene_->isActiveInHierarchy(e)) scriptPlayEntitySound(e);
     });
     events_.emit(SceneLoadedEvent{scene_.get()});
     TITAN_INFO("runtime", "Escena '%s' cargada (%zu entidades)", scene_->name().c_str(), scene_->entityCount());
@@ -118,6 +125,40 @@ bool Runtime::scriptLoadScene(const std::string& nameOrPath) {
     }
     TITAN_ERROR("runtime", "Scene.load: no existe la escena '%s'", nameOrPath.c_str());
     return false;
+}
+
+bool Runtime::scriptPlaySound(const std::string& path, Entity owner, bool spatial, const Vec3& at, float volume) {
+    std::string file = path;
+    if (!assets_.findByPath(path)) {
+        // Se admite también el nombre sin carpeta ni extensión: "disparo".
+        for (const AssetRecord* r : assets_.all()) {
+            if (r->type != AssetType::Audio) continue;
+            std::string base = r->path.substr(r->path.find_last_of('/') + 1);
+            if (base == path || base.substr(0, base.rfind('.')) == path) { file = r->path; break; }
+        }
+    }
+    PlayParams p;
+    p.volume = volume;
+    p.owner = owner;
+    p.spatial = spatial;
+    p.position = owner.isNull() ? at : scene_->computeWorldMatrix(owner).translation();
+    return audio_.play("assets/" + file, p) != 0;
+}
+
+void Runtime::scriptPlayEntitySound(Entity e) {
+    const AudioSource* a = scene_ ? scene_->world().get<AudioSource>(e) : nullptr;
+    const AssetRecord* r = a ? assets_.find(a->clip) : nullptr;
+    if (!r) return;
+    PlayParams p;
+    p.volume = a->volume;
+    p.pitch = a->pitch;
+    p.loop = a->loop;
+    p.spatial = a->spatial;
+    p.minDistance = a->minDistance;
+    p.maxDistance = a->maxDistance;
+    p.owner = e;
+    p.position = scene_->computeWorldMatrix(e).translation();
+    audio_.play("assets/" + r->path, p);
 }
 
 Entity Runtime::scriptInstantiate(const std::string& name, const Vec3& position) {
@@ -188,9 +229,22 @@ void Runtime::frame(const Viewport& viewport) {
 
     // Animación: avanza el tiempo de cada Animator que esté reproduciendo.
     if (!paused)
-        scene_->world().each<Animator>([&](Entity, Animator& a) {
-            if (a.playing) a.time += dt * a.speed;
+        scene_->world().each<Animator>([&](Entity, Animator& a) { advanceAnimator(a, dt); });
+
+    // Audio: el oyente es la cámara activa; las voces 3D siguen a su entidad.
+    {
+        Entity cam;
+        SceneView v;
+        if (SceneRenderer::cameraView(*scene_, 1, v, &cam)) {
+            const Mat4 w = scene_->computeWorldMatrix(cam);
+            audio_.setListener(w.translation(), w.transformDirection({0, 0, -1}).normalized(), {0, 1, 0});
+        }
+        audio_.update([this](Entity e, Vec3& out) {
+            if (!scene_->isValid(e)) return false;
+            out = scene_->computeWorldMatrix(e).translation();
+            return true;
         });
+    }
 
     // 4. Transformaciones.
     t = Clock::now();
@@ -310,12 +364,14 @@ bool Runtime::scriptScreenToWorld(Vec2 px, Vec3& world) const {
 
 void Runtime::pause() {
     input_.cancelAll();
+    audio_.setPaused(true);
     events_.emit(AppPausedEvent{});
 }
 
 void Runtime::resume() {
     last_ = Clock::now();
     accumulator_ = 0;
+    audio_.setPaused(false);
     events_.emit(AppResumedEvent{});
 }
 
@@ -325,6 +381,7 @@ void Runtime::shutdown() {
     if (scripts_) scripts_->detach();
     physicsDestroySub_.reset();
     physics_.clear();
+    audio_.shutdown();
     if (scene_) {
         events_.emit(SceneUnloadedEvent{scene_.get()});
         scene_.reset();

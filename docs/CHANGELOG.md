@@ -1,5 +1,19 @@
 # Registro de cambios
 
+## 0.9.0 — 2026-11-21 · Sonido y animación mejorada
+
+Añadido
+- Audio con miniaudio 0.11.21 (módulo `titan_audio`): WAV, MP3 y FLAC decodificados a memoria, hasta 64 voces,
+  volumen, tono, bucle, sonido 3D con atenuación por distancia (el oyente es la cámara activa), pausa con el juego.
+- Componente `AudioSource` (sonido, volumen, tono, repetir, al empezar, 3D, distancias) en Detalles.
+- Lua: `e:playSound([ruta, volumen])`, `e:stopSound()`, `Audio.play(nombre [, volumen])`, `Audio.playAt(nombre, x, y, z)`,
+  `Audio.setVolume(v)`. Los sonidos se pueden pedir por ruta o solo por nombre ("disparo").
+- Animación: hasta 256 huesos (matrices de huesos en una textura RGBA32F; personajes de Mixamo) y transiciones suaves
+  entre clips (`Animator.fadeDuration`, 0,25 s por defecto).
+- 2 pruebas de audio (mezcla real sin tarjeta de sonido).
+
+Pendiente de comprobar: escuchar el sonido en un dispositivo real (el entorno de pruebas no tiene salida de audio).
+
 ## 0.8.0 — 2026-11-21 · Animación de personajes
 
 Añadido

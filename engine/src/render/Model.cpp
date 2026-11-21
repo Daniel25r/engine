@@ -310,9 +310,8 @@ void Renderer::drawModelShadow(int model, const Mat4& world, const std::vector<M
     for (const ModelPart& p : models_[model].parts) {
         const bool skin = p.skinned && joints && !joints->empty();
         glUniform1i(uShadowSkinned_, skin ? 1 : 0);
-        if (skin)
-            glUniformMatrix4fv(uShadowJoints_, static_cast<GLsizei>(std::min<size_t>(joints->size(), kMaxJoints)), GL_FALSE,
-                               joints->front().m);
+        glUniform1i(uShadowJoints_, 2);
+        if (skin) uploadJoints(*joints);
         glBindVertexArray(p.mesh.vao);
         glDrawElements(GL_TRIANGLES, p.mesh.indexCount, GL_UNSIGNED_INT, nullptr);
         stats_.drawCalls++;
@@ -370,11 +369,11 @@ void sample(const std::vector<float>& times, const std::vector<float>& values, i
 } // namespace
 
 bool Renderer::computePose(int model, int anim, float time, bool loop, std::vector<Mat4>& joints) const {
-    joints.clear();
-    if (model < 0 || model >= static_cast<int>(models_.size())) return false;
-    const Model& m = models_[model];
-    if (m.skins.empty() || !modelHasSkin(model)) return false;
-    std::vector<AnimNode> local = m.nodes;
+    return computeBlendedPose(model, anim, time, -1, 0, 0, loop, joints);
+}
+
+void Renderer::sampleClip(const Model& m, int anim, float time, bool loop, std::vector<AnimNode>& local) const {
+    local = m.nodes;
     if (anim >= 0 && anim < static_cast<int>(m.clips.size())) {
         const AnimClip& clip = m.clips[anim];
         float t = time;
@@ -387,6 +386,31 @@ bool Renderer::computePose(int model, int anim, float time, bool loop, std::vect
             if (c.path == 0) n.t = {v[0], v[1], v[2]};
             else if (c.path == 1) n.r = Quat{v[0], v[1], v[2], v[3]}.normalized();
             else n.s = {v[0], v[1], v[2]};
+        }
+    }
+}
+
+bool Renderer::computeBlendedPose(int model, int anim, float time, int fromAnim, float fromTime, float fromWeight,
+                                  bool loop, std::vector<Mat4>& joints) const {
+    joints.clear();
+    if (model < 0 || model >= static_cast<int>(models_.size())) return false;
+    const Model& m = models_[model];
+    if (m.skins.empty() || !modelHasSkin(model)) return false;
+    std::vector<AnimNode> local;
+    sampleClip(m, anim, time, loop, local);
+    if (fromWeight > 0.001f && fromAnim >= 0) {
+        // Transición: mezcla con la pose del clip anterior (lineal en T/S, esférica normalizada en R).
+        std::vector<AnimNode> from;
+        sampleClip(m, fromAnim, fromTime, loop, from);
+        const float w = std::min(fromWeight, 1.0f);
+        for (size_t i = 0; i < local.size(); ++i) {
+            AnimNode& a = local[i];
+            const AnimNode& b = from[i];
+            a.t = a.t + (b.t - a.t) * w;
+            a.s = a.s + (b.s - a.s) * w;
+            const float sign = (a.r.x * b.r.x + a.r.y * b.r.y + a.r.z * b.r.z + a.r.w * b.r.w) < 0 ? -1.0f : 1.0f;
+            a.r = Quat{a.r.x + (b.r.x * sign - a.r.x) * w, a.r.y + (b.r.y * sign - a.r.y) * w,
+                       a.r.z + (b.r.z * sign - a.r.z) * w, a.r.w + (b.r.w * sign - a.r.w) * w}.normalized();
         }
     }
     // Matrices globales recorriendo la jerarquía de nodos (con memoria: cada nodo una vez).

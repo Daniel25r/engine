@@ -54,7 +54,12 @@ uniform mat4 uModel;
 uniform mat3 uNormalMat;
 uniform mat4 uLightVP;
 uniform int uSkinned;
-uniform mat4 uJoints[48];
+uniform highp sampler2D uJointTex; // 4 texels RGBA32F por hueso (columnas de su matriz)
+mat4 jointMatrix(float i) {
+    int r = int(i);
+    return mat4(texelFetch(uJointTex, ivec2(0, r), 0), texelFetch(uJointTex, ivec2(1, r), 0),
+                texelFetch(uJointTex, ivec2(2, r), 0), texelFetch(uJointTex, ivec2(3, r), 0));
+}
 out vec3 vWorld;
 out vec3 vNormal;
 out vec2 vUV;
@@ -64,8 +69,8 @@ void main() {
     vec3 normal = aNormal;
     if (uSkinned == 1) {
         // Skinning: cada vértice sigue a hasta 4 huesos según sus pesos.
-        mat4 skin = aWeights.x * uJoints[int(aJoints.x)] + aWeights.y * uJoints[int(aJoints.y)] +
-                    aWeights.z * uJoints[int(aJoints.z)] + aWeights.w * uJoints[int(aJoints.w)];
+        mat4 skin = aWeights.x * jointMatrix(aJoints.x) + aWeights.y * jointMatrix(aJoints.y) +
+                    aWeights.z * jointMatrix(aJoints.z) + aWeights.w * jointMatrix(aJoints.w);
         local = skin * local;
         normal = mat3(skin) * normal;
     }
@@ -197,12 +202,17 @@ layout(location = 4) in vec4 aWeights;
 uniform mat4 uLightVP;
 uniform mat4 uModel;
 uniform int uSkinned;
-uniform mat4 uJoints[48];
+uniform highp sampler2D uJointTex; // 4 texels RGBA32F por hueso (columnas de su matriz)
+mat4 jointMatrix(float i) {
+    int r = int(i);
+    return mat4(texelFetch(uJointTex, ivec2(0, r), 0), texelFetch(uJointTex, ivec2(1, r), 0),
+                texelFetch(uJointTex, ivec2(2, r), 0), texelFetch(uJointTex, ivec2(3, r), 0));
+}
 void main() {
     vec4 local = vec4(aPos, 1.0);
     if (uSkinned == 1)
-        local = (aWeights.x * uJoints[int(aJoints.x)] + aWeights.y * uJoints[int(aJoints.y)] +
-                 aWeights.z * uJoints[int(aJoints.z)] + aWeights.w * uJoints[int(aJoints.w)]) * local;
+        local = (aWeights.x * jointMatrix(aJoints.x) + aWeights.y * jointMatrix(aJoints.y) +
+                 aWeights.z * jointMatrix(aJoints.z) + aWeights.w * jointMatrix(aJoints.w)) * local;
     gl_Position = uLightVP * uModel * local;
 }
 )";
@@ -317,9 +327,15 @@ bool Renderer::createGpuObjects() {
     uGrid_ = u("uGrid"); uSkyZenith_ = u("uSkyZenith"); uSkyHorizon_ = u("uSkyHorizon"); uGround_ = u("uGround");
     uAmbientI_ = u("uAmbientI"); uFogColor_ = u("uFogColor"); uFogDensity_ = u("uFogDensity");
     uExposure_ = u("uExposure"); uLightVP_ = u("uLightVP"); uShadowMap_ = u("uShadowMap"); uShadowsOn_ = u("uShadowsOn");
-    uSkinned_ = u("uSkinned"); uJoints_ = u("uJoints");
+    uSkinned_ = u("uSkinned"); uJoints_ = u("uJointTex");
     uShadowSkinned_ = glGetUniformLocation(shadowProgram_, "uSkinned");
-    uShadowJoints_ = glGetUniformLocation(shadowProgram_, "uJoints");
+    uShadowJoints_ = glGetUniformLocation(shadowProgram_, "uJointTex");
+    // Textura de huesos: 4 x kMaxJoints texels RGBA32F, leída con texelFetch (sin filtrado).
+    glGenTextures(1, &jointTex_);
+    glBindTexture(GL_TEXTURE_2D, jointTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, kMaxJoints, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     uShadowLVP_ = glGetUniformLocation(shadowProgram_, "uLightVP");
     uShadowModel_ = glGetUniformLocation(shadowProgram_, "uModel");
     uSkyInvVP_ = glGetUniformLocation(skyProgram_, "uInvViewProj");
@@ -483,7 +499,7 @@ Vec2 Renderer::textureSize(TextureHandle id) const {
 
 void Renderer::onContextLost() {
     spriteProgram_ = meshProgram_ = spriteVao_ = spriteVbo_ = spriteIbo_ = lineVao_ = lineVbo_ = 0;
-    shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = 0;
+    shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = jointTex_ = 0;
     for (auto& m : meshes_) m = {};
     for (auto& t : textures_) t.gl = 0;
     for (auto& m : models_) m.parts.clear();
@@ -529,6 +545,7 @@ void Renderer::shutdown() {
     if (shadowFbo_) glDeleteFramebuffers(1, &shadowFbo_);
     if (shadowTex_) glDeleteTextures(1, &shadowTex_);
     if (skyVao_) glDeleteVertexArrays(1, &skyVao_);
+    if (jointTex_) glDeleteTextures(1, &jointTex_);
     spriteProgram_ = meshProgram_ = spriteVao_ = spriteVbo_ = spriteIbo_ = lineVao_ = lineVbo_ = 0;
     shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = 0;
 }
@@ -629,6 +646,14 @@ void Renderer::setLighting(const SceneLighting& l) {
     glActiveTexture(GL_TEXTURE0);
 }
 
+void Renderer::uploadJoints(const std::vector<Mat4>& joints) {
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, jointTex_);
+    const int n = static_cast<int>(std::min<size_t>(joints.size(), kMaxJoints));
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, n, GL_RGBA, GL_FLOAT, joints.front().m);
+    glActiveTexture(GL_TEXTURE0);
+}
+
 void Renderer::drawSky() {
     if (!lighting_.drawSky) return;
     const Environment& e = lighting_.env;
@@ -680,9 +705,8 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
     glUniform1i(uUnlit_, (unlit || unlitOverride_) ? 1 : 0);
     const bool skinned = currentJoints_ && !currentJoints_->empty();
     glUniform1i(uSkinned_, skinned ? 1 : 0);
-    if (skinned)
-        glUniformMatrix4fv(uJoints_, static_cast<GLsizei>(std::min<size_t>(currentJoints_->size(), kMaxJoints)), GL_FALSE,
-                           currentJoints_->front().m);
+    glUniform1i(uJoints_, 2);
+    if (skinned) uploadJoints(*currentJoints_);
     glBindTexture(GL_TEXTURE_2D, textures_[tex].gl);
     // Una escala con determinante negativo invierte el sentido de los triángulos.
     const float det = world.m[0] * (world.m[5] * world.m[10] - world.m[9] * world.m[6]) -

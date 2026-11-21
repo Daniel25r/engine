@@ -76,6 +76,17 @@ en `third_party/` con su versión fijada, así la compilación no depende de la 
 | Alternativas | Bullet (más antiguo y lento), PhysX (más pesado, licencia BSD-3), Box2D (solo 2D) |
 | Motivo | Usado en juegos AAA (Horizon Forbidden West), multihilo, estable, licencia MIT |
 
+### miniaudio 0.11.21
+| | |
+|---|---|
+| Función | Salida de audio, decodificación (WAV, MP3, FLAC), mezcla y sonido 3D |
+| Licencia | Dominio público o MIT-0, a elegir |
+| Origen | `github.com/mackron/miniaudio`, etiqueta `0.11.21`, un solo archivo |
+| Android | Sí: AAudio (Android 8+) u OpenSL ES, cargados en tiempo de ejecución |
+| Limitaciones | OGG no está activado (se añadiría stb_vorbis); sin efectos (reverberación, filtros) en Titán todavía |
+| Alternativas | Oboe (solo Android, solo salida), OpenAL Soft (LGPL), FMOD/Wwise (comerciales) |
+| Motivo | Un archivo, sin dependencias, multiplataforma, licencia libre |
+
 ### Bibliotecas del sistema
 - Android: `libandroid`, `libEGL`, `libGLESv3`, `liblog` (NDK r26.3, API mínima 24) y `native_app_glue` del NDK (Apache 2.0).
 - Escritorio: GLFW 3.3 (zlib) y Mesa `libGLESv2` (MIT). Solo para desarrollo y pruebas; no van en el APK.

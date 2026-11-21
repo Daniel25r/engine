@@ -138,7 +138,46 @@ struct Animator {
     bool playing = true;
     bool loop = true;
     float speed = 1.0f;
+    float fadeDuration = 0.25f; // segundos de transición al cambiar de clip
     float time = 0.0f;     // segundos dentro del clip
+    // Estado de la transición (no se guarda): clip anterior, su tiempo y su peso restante (1 → 0).
+    std::string fromClip;
+    float fromTime = 0.0f;
+    float fromWeight = 0.0f;
+};
+
+// Avanza el tiempo del Animator y de su transición (lo usan el juego y la vista previa del editor).
+inline void advanceAnimator(Animator& a, float dt) {
+    if (a.playing) a.time += dt * a.speed;
+    if (a.fromWeight > 0) {
+        a.fromTime += dt * a.speed;
+        a.fromWeight -= a.fadeDuration > 0 ? dt / a.fadeDuration : 1.0f;
+        if (a.fromWeight < 0) a.fromWeight = 0;
+    }
+}
+
+// Cambia de clip con transición suave desde el actual.
+inline void switchAnimation(Animator& a, const std::string& clip) {
+    if (clip == a.clip) return;
+    if (a.fadeDuration > 0) {
+        a.fromClip = a.clip;
+        a.fromTime = a.time;
+        a.fromWeight = 1.0f;
+    }
+    a.clip = clip;
+    a.time = 0;
+}
+
+// Fuente de sonido (como AudioSource de Unity). El oyente es la cámara activa.
+struct AudioSource {
+    AssetRef clip;           // .wav, .mp3 o .flac del proyecto
+    float volume = 1.0f;
+    float pitch = 1.0f;
+    bool loop = false;
+    bool playOnStart = true;
+    bool spatial = false;    // 3D: suena desde la posición de la entidad y se atenúa con la distancia
+    float minDistance = 1.0f;
+    float maxDistance = 30.0f;
 };
 
 // ---- Física (mismos conceptos que Rigidbody/Collider de Unity) ----

@@ -375,12 +375,14 @@ void Editor::Impl::drawToolbar(const ImVec2& pos, const ImVec2& size) {
         } else if (iconButton("##reanudar", Icon::Play, !playPaused, "Reanudar", ImGui::GetColorU32(kPlayGreen))) {
             playPaused = false;
             runtime->paused = false;
+            runtime->audio().setPaused(false);
         }
         ImGui::SameLine();
         ImGui::BeginDisabled(!runtime);
         if (iconButton("##pausa", Icon::Pause, playPaused, "Pausa")) {
             playPaused = !playPaused;
             runtime->paused = playPaused;
+            runtime->audio().setPaused(playPaused);
         }
         ImGui::SameLine();
         if (iconButton("##detener", Icon::Stop, false, "Detener", ImGui::GetColorU32(runtime ? kStopRed : kDim))) stop();
@@ -1074,8 +1076,7 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
                     std::snprintf(label, sizeof(label), "%s  (%.1f s)", n.c_str(), renderer.modelAnimationDuration(model, i));
                     if (ImGui::Selectable(label, n == a.clip)) {
                         pushUndo();
-                        a.clip = n;
-                        a.time = 0;
+                        switchAnimation(a, n); // se ve la transición en la vista previa
                     }
                 }
                 ImGui::EndCombo();
@@ -1084,12 +1085,26 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         check("Reproducir", a.playing);
         check("Repetir", a.loop);
         dragF("Velocidad", a.speed, 0.01f, -4, 4, "%.2fx");
+        dragF("Transición", a.fadeDuration, 0.01f, 0, 2, "%.2f s");
         propLabel("Tiempo");
         const int idx = renderer.modelAnimationIndex(model, a.clip);
         const float dur = renderer.modelAnimationDuration(model, idx);
         float t = dur > 0 ? std::fmod(a.time, dur) : a.time;
         if (ImGui::SliderFloat("##tiempo", &t, 0, std::max(dur, 0.01f), "%.2f s")) a.time = t; // fregar la animación
         if (ImGui::IsItemActive()) noScrollWidgetActive = true;
+    } else if (name == "AudioSource") {
+        AudioSource& a = *w.get<AudioSource>(e);
+        propLabel("Sonido");
+        assetCombo("##clipaudio", AssetType::Audio, a.clip);
+        dragF("Volumen", a.volume, 0.01f, 0, 4, "%.2f");
+        dragF("Tono", a.pitch, 0.01f, 0.1f, 4, "%.2f");
+        check("Repetir", a.loop);
+        check("Al empezar", a.playOnStart);
+        check("Sonido 3D", a.spatial);
+        if (a.spatial) {
+            dragF("Distancia mín.", a.minDistance, 0.05f, 0.01f, 1000, "%.1f m");
+            dragF("Distancia máx.", a.maxDistance, 0.1f, 0.1f, 10000, "%.1f m");
+        }
     } else if (name == "Rigidbody") {
         Rigidbody& b = *w.get<Rigidbody>(e);
         int type = static_cast<int>(b.type);

@@ -2,7 +2,7 @@
 
 Este documento recorre los sistemas de Unity 6 (el editor, el runtime y los paquetes oficiales más usados),
 explica brevemente cómo funcionan y dice dónde está Titán. Es la hoja de ruta para llegar a su nivel.
-Estado de Titán a fecha de la versión 0.8.0.
+Estado de Titán a fecha de la versión 0.9.0.
 
 Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 
@@ -60,9 +60,9 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 
 | Unity | Titán |
 |---|---|
-| Animator (máquinas de estados, blend trees), Timeline | 🟡 Esqueletos glTF, clips, Animator con velocidad y bucle, control desde scripts; ❌ transiciones suaves, máquinas de estados, Timeline |
+| Animator (máquinas de estados, blend trees), Timeline | 🟡 Esqueletos glTF, clips, Animator con velocidad y bucle, control desde scripts, transiciones suaves, hasta 256 huesos; ❌ máquinas de estados, Timeline |
 | Importación de modelos FBX/glTF/OBJ con animaciones | 🟡 glTF/GLB con mallas, materiales, texturas, esqueletos y animaciones; ❌ FBX |
-| Audio: AudioSource 2D/3D, mezclador | ❌ (miniaudio previsto) |
+| Audio: AudioSource 2D/3D, mezclador | 🟡 AudioSource 2D/3D, bucles, volumen, tono, oyente en la cámara; ❌ mezclador con grupos y efectos |
 | UI (uGUI / UI Toolkit): Canvas, botones, texto, layouts, anclajes | 🟡 Solo `Screen.text` |
 | Input System: acciones, mandos, táctil | 🟡 Táctil multipunto; ❌ acciones, mandos, joystick virtual |
 | Navegación (NavMesh) | ❌ |
@@ -85,8 +85,8 @@ En este orden, porque cada paso hace posibles juegos que antes no lo eran:
 1. **Física** ✅ (v0.6)
 2. **Variables de script editables en el Inspector** ✅ (v0.7)
 3. **Prefabs** ✅ básicos (v0.7); faltan variantes y propagación
-4. **Animación esquelética** ✅ (v0.8); faltan transiciones suaves entre clips y máquinas de estados
-5. **Audio** (miniaudio): música y efectos 2D/3D.
+4. **Animación esquelética** ✅ (v0.8, transiciones y 256 huesos en v0.9); faltan máquinas de estados
+5. **Audio** ✅ (v0.9)
 6. **UI de juego**: botones, imágenes, texto con fuentes TTF, joystick virtual.
 7. **Terreno** con pintura de capas y vegetación instanciada.
 8. **Post-procesado** con HDR: bloom, SSAO, color grading.

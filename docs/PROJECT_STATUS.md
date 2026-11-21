@@ -1,4 +1,4 @@
-# Estado del proyecto — Titán 0.8.0
+# Estado del proyecto — Titán 0.9.0
 
 Fecha: 2026-11-21 · Generaciones 1 (Fundación) y 2 (Editor) en curso; primeros pasos de la 5 (3D)
 
@@ -50,7 +50,9 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 | Gizmo mover/rotar/escalar | [COMPLETADO Y PROBADO] (arrastres simulados: mover en X y rotar 71,8° en Y, guardados) |
 | Importar modelos glTF/GLB (mallas, materiales PBR, texturas incrustadas) | [COMPLETADO Y PROBADO] (Duck, BoxTextured, Fox de Khronos) |
 | Animación de esqueletos (skinning GPU, clips glTF, Animator, API Lua) | [COMPLETADO Y PROBADO] (Fox y CesiumMan, en editor y en juego) |
-| Transiciones entre clips, máquinas de estados, mapas normales, OBJ/FBX | [PENDIENTE] |
+| Transiciones suaves y hasta 256 huesos | [IMPLEMENTADO Y COMPILADO] (verificado visualmente) |
+| Audio (AudioSource 2D/3D, API Lua) | [COMPLETADO Y PROBADO] en mezcla sin dispositivo; [IMPLEMENTADO, PENDIENTE DE PRUEBA REAL] en altavoces |
+| Máquinas de estados de animación, mapas normales, OBJ/FBX | [PENDIENTE] |
 | Física 3D (Jolt): Rigidbody, Collider caja/esfera/cápsula, triggers, raycast, fuerzas, eventos en scripts | [COMPLETADO Y PROBADO] (4 pruebas + nivel de prueba en el editor) |
 | Colliders de malla, joints, controlador de personaje, física 2D | [PENDIENTE] |
 | Terreno, vegetación, iluminación global, posprocesado (bloom, SSAO) | [PENDIENTE] |
@@ -126,5 +128,5 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 
 ## Sistemas no iniciados
 
-Física 2D y 3D, audio, animación, partículas, UI de juego, tilemaps, importación de modelos, terrenos, navegación,
+Física 2D, partículas, UI de juego, tilemaps, importación de modelos, terrenos, navegación,
 guardado de partidas, red, plugins: [PENDIENTE]. El orden está en ROADMAP.md.

@@ -235,10 +235,9 @@ int e_playAnimation(lua_State* L) {
     const Entity e = live(L, 1);
     Animator& a = animator(L, e);
     const std::string clip = luaL_optstring(L, 2, "");
-    const bool restart = clip != a.clip || !a.playing;
-    a.clip = clip;
     if (!lua_isnoneornil(L, 3)) a.loop = lua_toboolean(L, 3);
-    if (restart) a.time = 0; // volver a pedir la misma animación no la reinicia
+    if (!a.playing && clip == a.clip) a.time = 0;
+    switchAnimation(a, clip); // volver a pedir la misma animación no la reinicia; otra distinta entra con transición
     a.playing = true;
     return 0;
 }
@@ -252,6 +251,14 @@ int e_getAnimation(lua_State* L) {
     return 3;
 }
 int e_setAnimationSpeed(lua_State* L) { animator(L, live(L, 1)).speed = static_cast<float>(luaL_checknumber(L, 2)); return 0; }
+
+int e_playSound(lua_State* L) {
+    const Entity e = live(L, 1);
+    if (lua_isnoneornil(L, 2)) sys(L).host().scriptPlayEntitySound(e); // su AudioSource
+    else sys(L).host().scriptPlaySound(luaL_checkstring(L, 2), e, true, {}, float(luaL_optnumber(L, 3, 1)));
+    return 0;
+}
+int e_stopSound(lua_State* L) { sys(L).host().scriptStopSound(live(L, 1)); return 0; }
 
 int e_eq(lua_State* L) {
     const Entity a = toEntity(L, 1), b = toEntity(L, 2);
@@ -279,7 +286,7 @@ const luaL_Reg kEntityMethods[] = {
     {"getScript", e_getScript}, {"addForce", e_addForce}, {"addImpulse", e_addImpulse}, {"addTorque", e_addTorque},
     {"setVelocity", e_setVelocity}, {"getVelocity", e_getVelocity}, {"teleport", e_teleport},
     {"playAnimation", e_playAnimation}, {"stopAnimation", e_stopAnimation}, {"getAnimation", e_getAnimation},
-    {"setAnimationSpeed", e_setAnimationSpeed}, {nullptr, nullptr}};
+    {"setAnimationSpeed", e_setAnimationSpeed}, {"playSound", e_playSound}, {"stopSound", e_stopSound}, {nullptr, nullptr}};
 
 // ---------------------------------------------------------------- Tablas globales
 
@@ -393,6 +400,18 @@ int p_setGravity(lua_State* L) { physics(L).setGravity(check3(L, 1, {})); return
 int p_getGravity(lua_State* L) { return push3(L, physics(L).gravity()); }
 const luaL_Reg kPhysicsGlobals[] = {{"raycast", p_raycast}, {"setGravity", p_setGravity}, {"getGravity", p_getGravity}, {nullptr, nullptr}};
 
+int a_play(lua_State* L) {
+    lua_pushboolean(L, sys(L).host().scriptPlaySound(luaL_checkstring(L, 1), {}, false, {}, float(luaL_optnumber(L, 2, 1))));
+    return 1;
+}
+int a_playAt(lua_State* L) {
+    const Vec3 p = check3(L, 2, {});
+    lua_pushboolean(L, sys(L).host().scriptPlaySound(luaL_checkstring(L, 1), {}, true, p, float(luaL_optnumber(L, 5, 1))));
+    return 1;
+}
+int a_setVolume(lua_State* L) { sys(L).host().scriptSetVolume(float(luaL_checknumber(L, 1))); return 0; }
+const luaL_Reg kAudioGlobals[] = {{"play", a_play}, {"playAt", a_playAt}, {"setVolume", a_setVolume}, {nullptr, nullptr}};
+
 void setGlobalTable(lua_State* L, const char* name, const luaL_Reg* fns) {
     lua_newtable(L);
     luaL_setfuncs(L, fns, 0);
@@ -449,6 +468,7 @@ void ScriptSystem::registerApi() {
     setGlobalTable(L_, "Screen", kScreenGlobals);
     setGlobalTable(L_, "Debug", kDebugGlobals);
     setGlobalTable(L_, "Physics", kPhysicsGlobals);
+    setGlobalTable(L_, "Audio", kAudioGlobals);
     lua_pushcfunction(L_, d_log);
     lua_setglobal(L_, "print");
 }

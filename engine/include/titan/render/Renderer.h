@@ -97,7 +97,7 @@ public:
     void drawModelShadow(int model, const Mat4& world, const std::vector<Mat4>* joints = nullptr);
 
     // ---- Animación esquelética ----
-    static constexpr int kMaxJoints = 48;
+    static constexpr int kMaxJoints = 256;
     int modelAnimationCount(int model) const;
     std::string modelAnimationName(int model, int anim) const;
     float modelAnimationDuration(int model, int anim) const;
@@ -105,6 +105,9 @@ public:
     bool modelHasSkin(int model) const;
     // Calcula las matrices de los huesos del primer esqueleto del modelo en el instante "time".
     bool computePose(int model, int anim, float time, bool loop, std::vector<Mat4>& joints) const;
+    // Igual, mezclando con otro clip (transición suave): fromWeight 1 = solo el anterior, 0 = solo el nuevo.
+    bool computeBlendedPose(int model, int anim, float time, int fromAnim, float fromTime, float fromWeight, bool loop,
+                            std::vector<Mat4>& joints) const;
     // Sprite con su matriz de mundo completa: respeta posición, rotación, escala y jerarquía.
     void drawSprite(TextureHandle tex, const Mat4& world, Vec2 size, Vec2 pivot, Rect uv, Color color);
     void drawLine(const Vec3& a, const Vec3& b, Color color);
@@ -179,6 +182,8 @@ private:
         bool ok = false;
     };
     bool buildModel(Model& m);
+    void sampleClip(const Model& m, int anim, float time, bool loop, std::vector<AnimNode>& local) const;
+    void uploadJoints(const std::vector<Mat4>& joints);
     void drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4& world, Color color, float metallic,
                      float roughness, Color emission, bool grid, bool unlit, TextureHandle tex, bool doubleSided);
 
@@ -207,6 +212,7 @@ private:
     uint32_t shadowProgram_ = 0, shadowFbo_ = 0, shadowTex_ = 0;
     int uShadowLVP_ = -1, uShadowModel_ = -1, uShadowSkinned_ = -1, uShadowJoints_ = -1;
     const std::vector<Mat4>* currentJoints_ = nullptr;
+    uint32_t jointTex_ = 0;
     int prevFbo_ = 0;
     uint32_t skyProgram_ = 0, skyVao_ = 0;
     int uSkyInvVP_ = -1, uSkyCam_ = -1, uSkyZ_ = -1, uSkyH_ = -1, uSkyG_ = -1, uSkySun_ = -1, uSkySunColor_ = -1;

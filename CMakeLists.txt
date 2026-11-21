@@ -66,6 +66,15 @@ add_library(titan_physics STATIC engine/src/physics/PhysicsWorld.cpp)
 target_link_libraries(titan_physics PUBLIC titan_core PRIVATE titan_jolt)
 target_compile_options(titan_physics PRIVATE ${TITAN_WARNINGS})
 
+# ------------------------------------------------------------------ titan_audio (miniaudio 0.11.21, dominio público / MIT-0)
+
+add_library(titan_audio STATIC engine/src/audio/AudioEngine.cpp)
+target_link_libraries(titan_audio PUBLIC titan_core)
+target_compile_options(titan_audio PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>)
+if(NOT WIN32)
+    target_link_libraries(titan_audio PUBLIC ${CMAKE_DL_LIBS} Threads::Threads)
+endif()
+
 # ------------------------------------------------------------------ titan_render (OpenGL ES 3.0)
 
 add_library(titan_render STATIC
@@ -85,7 +94,7 @@ endif()
 # ------------------------------------------------------------------ titan_runtime (bucle + sistemas)
 
 add_library(titan_runtime STATIC engine/src/runtime/Runtime.cpp engine/src/runtime/SceneRenderer.cpp)
-target_link_libraries(titan_runtime PUBLIC titan_core titan_render titan_scripting titan_physics)
+target_link_libraries(titan_runtime PUBLIC titan_core titan_render titan_scripting titan_physics titan_audio)
 target_compile_options(titan_runtime PRIVATE ${TITAN_WARNINGS})
 
 # ------------------------------------------------------------------ Dear ImGui 1.91.5 (MIT): interfaz del editor
@@ -161,8 +170,9 @@ else()
             tests/test_scripting.cpp
             tests/test_geometry.cpp
             tests/test_physics.cpp
+            tests/test_audio.cpp
         )
-        target_link_libraries(titan_tests PRIVATE titan_core titan_scripting titan_physics)
+        target_link_libraries(titan_tests PRIVATE titan_core titan_scripting titan_physics titan_audio)
         add_test(NAME titan_tests COMMAND titan_tests)
     endif()
 endif()
