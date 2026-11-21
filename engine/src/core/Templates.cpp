@@ -69,8 +69,13 @@ std::unique_ptr<Project> createProjectFromTemplate(const std::string& dir, const
         Entity floor = addMesh(s, "Suelo", MeshPrimitive::Plane, {0, 0, 0}, {60, 1, 60}, Color::hex(0x9A9A9A));
         s.world().get<MeshRenderer>(floor)->prototypeGrid = true;
         s.world().get<MeshRenderer>(floor)->roughness = 0.85f;
-        Entity cube = addMesh(s, "Cubo", MeshPrimitive::Cube, {0, 0.5f, 0}, {1, 1, 1}, Color::hex(0xD9D9D9));
+        Collider floorCol;
+        floorCol.size = {1, 0.02f, 1};
+        s.world().add<Collider>(floor, floorCol); // suelo sólido
+        Entity cube = addMesh(s, "Cubo", MeshPrimitive::Cube, {0, 2.5f, 0}, {1, 1, 1}, Color::hex(0xD9D9D9));
         s.world().get<MeshRenderer>(cube)->prototypeGrid = true;
+        s.world().add<Collider>(cube);
+        s.world().add<Rigidbody>(cube); // al pulsar Jugar cae al suelo
     }
 
     const UUID scene = p->saveScene(s, reg, "scenes/principal.scene", error);

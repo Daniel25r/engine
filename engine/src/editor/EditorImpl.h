@@ -168,6 +168,7 @@ struct Editor::Impl {
     // Caja local del objeto (cubo unidad para primitivas, límites del modelo si lo tiene).
     bool localBounds(Entity e, Vec3& min, Vec3& max);
     void addModelToScene(const AssetRecord& r);
+    void fitCollider(Entity e); // ajusta forma y tamaño del Collider a la malla o el modelo
     void handleShortcuts();
     void touchScroll();
     void track(); // llamar tras cada control de edición continua (arrastres y texto)

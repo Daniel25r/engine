@@ -53,6 +53,19 @@ add_library(titan_scripting STATIC engine/src/scripting/ScriptSystem.cpp)
 target_link_libraries(titan_scripting PUBLIC titan_core titan_lua)
 target_compile_options(titan_scripting PRIVATE ${TITAN_WARNINGS} $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fexceptions>)
 
+# ------------------------------------------------------------------ Jolt Physics 5.2.0 (MIT) y titan_physics
+
+file(GLOB_RECURSE JOLT_SOURCES ${CMAKE_SOURCE_DIR}/third_party/jolt/Jolt/*.cpp)
+add_library(titan_jolt STATIC ${JOLT_SOURCES})
+target_include_directories(titan_jolt PUBLIC third_party/jolt)
+target_compile_options(titan_jolt PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>)
+find_package(Threads REQUIRED)
+target_link_libraries(titan_jolt PUBLIC Threads::Threads)
+
+add_library(titan_physics STATIC engine/src/physics/PhysicsWorld.cpp)
+target_link_libraries(titan_physics PUBLIC titan_core PRIVATE titan_jolt)
+target_compile_options(titan_physics PRIVATE ${TITAN_WARNINGS})
+
 # ------------------------------------------------------------------ titan_render (OpenGL ES 3.0)
 
 add_library(titan_render STATIC
@@ -72,7 +85,7 @@ endif()
 # ------------------------------------------------------------------ titan_runtime (bucle + sistemas)
 
 add_library(titan_runtime STATIC engine/src/runtime/Runtime.cpp engine/src/runtime/SceneRenderer.cpp)
-target_link_libraries(titan_runtime PUBLIC titan_core titan_render titan_scripting)
+target_link_libraries(titan_runtime PUBLIC titan_core titan_render titan_scripting titan_physics)
 target_compile_options(titan_runtime PRIVATE ${TITAN_WARNINGS})
 
 # ------------------------------------------------------------------ Dear ImGui 1.91.5 (MIT): interfaz del editor
@@ -147,8 +160,9 @@ else()
             tests/test_project.cpp
             tests/test_scripting.cpp
             tests/test_geometry.cpp
+            tests/test_physics.cpp
         )
-        target_link_libraries(titan_tests PRIVATE titan_core titan_scripting)
+        target_link_libraries(titan_tests PRIVATE titan_core titan_scripting titan_physics)
         add_test(NAME titan_tests COMMAND titan_tests)
     endif()
 endif()

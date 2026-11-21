@@ -244,6 +244,44 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("range", l.range);
         });
 
+    r.addSimple<Rigidbody>(
+        "Rigidbody",
+        [](const Rigidbody& b) {
+            static const char* types[] = {"static", "dynamic", "kinematic"};
+            return Json{{"type", types[static_cast<int>(b.type)]}, {"mass", toJson(b.mass)}, {"friction", toJson(b.friction)},
+                        {"restitution", toJson(b.restitution)}, {"linearDamping", toJson(b.linearDamping)},
+                        {"angularDamping", toJson(b.angularDamping)}, {"gravityScale", toJson(b.gravityScale)},
+                        {"lockRotation", b.lockRotation}};
+        },
+        [](Rigidbody& b, FieldReader& rd) {
+            rd.readEnum("type", b.type, {{"static", Rigidbody::Type::Static}, {"dynamic", Rigidbody::Type::Dynamic},
+                                         {"kinematic", Rigidbody::Type::Kinematic}});
+            rd.read("mass", b.mass);
+            rd.read("friction", b.friction);
+            rd.read("restitution", b.restitution);
+            rd.read("linearDamping", b.linearDamping);
+            rd.read("angularDamping", b.angularDamping);
+            rd.read("gravityScale", b.gravityScale);
+            rd.read("lockRotation", b.lockRotation);
+        });
+
+    r.addSimple<Collider>(
+        "Collider",
+        [](const Collider& c) {
+            static const char* shapes[] = {"box", "sphere", "capsule"};
+            return Json{{"shape", shapes[static_cast<int>(c.shape)]}, {"size", toJson(c.size)}, {"radius", toJson(c.radius)},
+                        {"height", toJson(c.height)}, {"center", toJson(c.center)}, {"isTrigger", c.isTrigger}};
+        },
+        [](Collider& c, FieldReader& rd) {
+            rd.readEnum("shape", c.shape, {{"box", Collider::Shape::Box}, {"sphere", Collider::Shape::Sphere},
+                                           {"capsule", Collider::Shape::Capsule}});
+            rd.read("size", c.size);
+            rd.read("radius", c.radius);
+            rd.read("height", c.height);
+            rd.read("center", c.center);
+            rd.read("isTrigger", c.isTrigger);
+        });
+
     r.addSimple<Script>(
         "Script", [](const Script& sc) { return Json{{"script", assetToJson(sc.script)}, {"enabled", sc.enabled}}; },
         [](Script& sc, FieldReader& rd) {

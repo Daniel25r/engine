@@ -362,6 +362,30 @@ bool Editor::Impl::localBounds(Entity e, Vec3& min, Vec3& max) {
     return true;
 }
 
+void Editor::Impl::fitCollider(Entity e) {
+    Collider* c = scene.world().get<Collider>(e);
+    const MeshRenderer* mr = scene.world().get<MeshRenderer>(e);
+    if (!c || !mr) return;
+    if (mr->model.isNull() && mr->mesh == MeshPrimitive::Sphere) {
+        *c = Collider{};
+        c->shape = Collider::Shape::Sphere;
+        c->radius = 0.5f;
+        return;
+    }
+    if (mr->model.isNull() && mr->mesh == MeshPrimitive::Capsule) {
+        *c = Collider{};
+        c->shape = Collider::Shape::Capsule;
+        c->radius = 0.25f;
+        c->height = 1.0f;
+        return;
+    }
+    Vec3 mn, mx;
+    if (!localBounds(e, mn, mx)) return;
+    c->shape = Collider::Shape::Box;
+    c->size = {std::max(mx.x - mn.x, 0.02f), std::max(mx.y - mn.y, 0.02f), std::max(mx.z - mn.z, 0.02f)};
+    c->center = (mn + mx) * 0.5f;
+}
+
 void Editor::Impl::addModelToScene(const AssetRecord& r) {
     const int m = editorModel(r.id);
     Vec3 mn, mx;
@@ -483,6 +507,18 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
         scene.transform(e).setPosition({0, 5, 0});
         scene.transform(e).setEulerDegrees({-50, 30, 0});
         scene.world().add<Light>(e);
+    } else if (kind == "Cubo con física" || kind == "Esfera con física") {
+        mesh(kind[0] == 'C' ? MeshPrimitive::Cube : MeshPrimitive::Sphere);
+        scene.transform(e).setPosition(spawnPoint() + Vec3{0, 3, 0});
+        scene.world().add<Collider>(e);
+        fitCollider(e);
+        scene.world().add<Rigidbody>(e);
+    } else if (kind == "Zona trigger") {
+        Collider c;
+        c.size = {3, 2, 3};
+        c.isTrigger = true;
+        scene.transform(e).setPosition(spawnPoint() + Vec3{0, 0.5f, 0});
+        scene.world().add<Collider>(e, c);
     } else if (kind == "Cielo y niebla") {
         scene.world().add<Environment>(e);
     } else if (kind == "Luz puntual") {
@@ -588,6 +624,7 @@ void Editor::Impl::play() {
         setStatus("No se pudo ejecutar la escena (ver Consola)");
         return;
     }
+    runtime->showStats = false; // se activa desde el menú de la vista
     playTouches.clear();
     codeTabActive = false;
     playPaused = false;

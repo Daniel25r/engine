@@ -20,6 +20,7 @@
 #include "titan/core/Project.h"
 #include "titan/core/Scene.h"
 #include "titan/core/Serialization.h"
+#include "titan/physics/PhysicsWorld.h"
 #include "titan/render/Renderer.h"
 #include "titan/runtime/SceneRenderer.h"
 #include "titan/scripting/ScriptSystem.h"
@@ -74,6 +75,8 @@ public:
     bool scriptScreenToWorld(Vec2 pixels, Vec3& world) const override;
     bool scriptLoadScene(const std::string& nameOrPath) override;
     void scriptDrawText(float x, float y, float size, const std::string& text, Color color) override;
+    PhysicsApi* scriptPhysics() override { return &physics_; }
+    PhysicsWorld& physics() { return physics_; }
 
 private:
     bool initSystems(FileSource& files);
@@ -92,6 +95,8 @@ private:
     AssetDatabase assets_;
     Renderer renderer_;
     Input input_;
+    PhysicsWorld physics_;
+    Subscription physicsDestroySub_;
     std::unique_ptr<Scene> scene_;
     std::unique_ptr<ScriptSystem> scripts_;
     std::unordered_map<uint64_t, TextureHandle> textures_;

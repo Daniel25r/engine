@@ -175,7 +175,6 @@ std::string identifierFrom(const std::string& name) {
 
 void Editor::Impl::drawUI() {
     vpVisible = false;
-    vpBarMin = vpBarMax = ImVec2(0, 0);
     if (!project || showBrowser) {
         drawBrowser();
         return;
@@ -308,6 +307,12 @@ void Editor::Impl::drawCreateMenu() {
     if (ImGui::BeginMenu("Luces")) {
         for (const char* k : lights)
             if (ImGui::MenuItem(k)) createEntityOfKind(k);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Física")) {
+        if (ImGui::MenuItem("Cubo con física")) createEntityOfKind("Cubo con física");
+        if (ImGui::MenuItem("Esfera con física")) createEntityOfKind("Esfera con física");
+        if (ImGui::MenuItem("Zona trigger")) createEntityOfKind("Zona trigger");
         ImGui::EndMenu();
     }
     if (ImGui::MenuItem("Cielo y niebla")) createEntityOfKind("Cielo y niebla");
@@ -463,7 +468,10 @@ void Editor::Impl::drawDocumentTabs() {
 }
 
 void Editor::Impl::drawViewportBar() {
-    ImGui::SetNextWindowPos(ImVec2(vpMin.x + 6 * scale, vpMin.y + 6 * scale));
+    // Jugando, la barra va a la derecha para no tapar la interfaz del juego (arriba a la izquierda).
+    const float barW = vpBarMax.x > vpBarMin.x ? vpBarMax.x - vpBarMin.x : 0.0f;
+    const float barX = runtime && barW > 0 ? vpMax.x - barW - 6 * scale : vpMin.x + 6 * scale;
+    ImGui::SetNextWindowPos(ImVec2(barX, vpMin.y + 6 * scale));
     ImGui::SetNextWindowBgAlpha(0.0f);
     ImGui::Begin("##barravista", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
                                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove |
@@ -899,6 +907,7 @@ void Editor::Impl::drawDetails() {
                 const Json empty = Json::object();
                 FieldReader reader(empty, type.name, ignored);
                 type.load(scene, e, reader);
+                if (type.name == "Collider") fitCollider(e);
             }
         }
         ImGui::EndPopup();
@@ -1044,6 +1053,41 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         dragF("Exposición", v.exposure, 0.01f, 0.05f, 8, "%.2f");
         check("Sombras", v.shadows);
         dragF("Dist. sombras", v.shadowDistance, 0.5f, 5, 500, "%.0f");
+    } else if (name == "Rigidbody") {
+        Rigidbody& b = *w.get<Rigidbody>(e);
+        int type = static_cast<int>(b.type);
+        combo("Tipo", type, "Estático\0Dinámico\0Cinemático\0");
+        b.type = static_cast<Rigidbody::Type>(type);
+        dragF("Masa", b.mass, 0.05f, 0.001f, 100000, "%.2f kg");
+        dragF("Fricción", b.friction, 0.01f, 0, 2, "%.2f");
+        dragF("Rebote", b.restitution, 0.01f, 0, 1, "%.2f");
+        dragF("Amort. lineal", b.linearDamping, 0.01f, 0, 10, "%.2f");
+        dragF("Amort. angular", b.angularDamping, 0.01f, 0, 10, "%.2f");
+        dragF("Escala gravedad", b.gravityScale, 0.01f, -10, 10, "%.2f");
+        check("Bloquear rotación", b.lockRotation);
+    } else if (name == "Collider") {
+        Collider& c = *w.get<Collider>(e);
+        int shape = static_cast<int>(c.shape);
+        combo("Forma", shape, "Caja\0Esfera\0Cápsula\0");
+        c.shape = static_cast<Collider::Shape>(shape);
+        if (c.shape == Collider::Shape::Box) {
+            propLabel("Tamaño");
+            ImGui::DragFloat3("##csize", &c.size.x, 0.02f, 0.001f, 10000);
+            track();
+        } else {
+            dragF("Radio", c.radius, 0.01f, 0.001f, 1000, "%.2f");
+            if (c.shape == Collider::Shape::Capsule) dragF("Altura", c.height, 0.01f, 0.001f, 1000, "%.2f");
+        }
+        propLabel("Centro");
+        ImGui::DragFloat3("##ccenter", &c.center.x, 0.02f);
+        track();
+        check("Es trigger", c.isTrigger);
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(1);
+        if (ImGui::SmallButton("Ajustar al objeto")) {
+            pushUndo();
+            fitCollider(e);
+        }
     } else if (name == "Script") {
         Script& s = *w.get<Script>(e);
         propLabel("Archivo");

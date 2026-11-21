@@ -64,6 +64,18 @@ en `third_party/` con su versión fijada, así la compilación no depende de la 
 | Alternativas | Assimp (muy pesado, muchos formatos), tinygltf (C++, depende de json y stb) |
 | Motivo | Pequeño, sin dependencias, muy usado |
 
+### Jolt Physics 5.2.0
+| | |
+|---|---|
+| Función | Física 3D (cuerpos rígidos, colisiones, sensores, consultas) |
+| Licencia | MIT (`third_party/jolt/LICENSE`) |
+| Origen | `github.com/jrouwe/JoltPhysics`, etiqueta `v5.2.0` (commit a63aa3b8e24cf95f3fab2613f9a3015b164ef62c), solo la carpeta `Jolt/` |
+| Android | Sí: compila para ARM64/ARMv7 (NEON) y x86_64; se usa con 1-3 hilos |
+| Coste | ~2 MB de código máquina por ABI; compilación lenta (138 archivos) |
+| Limitaciones | Titán aún no expone colliders de malla, joints ni CharacterVirtual |
+| Alternativas | Bullet (más antiguo y lento), PhysX (más pesado, licencia BSD-3), Box2D (solo 2D) |
+| Motivo | Usado en juegos AAA (Horizon Forbidden West), multihilo, estable, licencia MIT |
+
 ### Bibliotecas del sistema
 - Android: `libandroid`, `libEGL`, `libGLESv3`, `liblog` (NDK r26.3, API mínima 24) y `native_app_glue` del NDK (Apache 2.0).
 - Escritorio: GLFW 3.3 (zlib) y Mesa `libGLESv2` (MIT). Solo para desarrollo y pruebas; no van en el APK.

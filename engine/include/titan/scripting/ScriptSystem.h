@@ -20,6 +20,7 @@
 
 #include "titan/core/Events.h"
 #include "titan/core/Input.h"
+#include "titan/core/PhysicsApi.h"
 #include "titan/core/Scene.h"
 #include "titan/core/Serialization.h"
 
@@ -41,6 +42,8 @@ public:
     virtual bool scriptLoadScene(const std::string& nameOrPath) = 0;
     // Texto en pantalla durante este fotograma (píxeles, origen arriba a la izquierda).
     virtual void scriptDrawText(float x, float y, float size, const std::string& text, Color color) = 0;
+    // Física de la escena (nulo si no hay).
+    virtual PhysicsApi* scriptPhysics() { return nullptr; }
 };
 
 struct ScriptError {
@@ -67,6 +70,8 @@ public:
     void detach();
 
     void fixedUpdate(float dt);
+    // Llama onCollisionEnter/Exit u onTriggerEnter/Exit(other) en los scripts de "self".
+    void dispatchContact(Entity self, Entity other, bool begin, bool trigger);
     void update(float dt);
     void lateUpdate(float dt);
 
@@ -104,7 +109,7 @@ private:
 
     int loadClass(AssetRef id, std::string& chunkName);
     void createInstance(Entity e, const Script& component);
-    bool call(Instance& inst, const char* method, int nargs, const float* arg);
+    bool call(Instance& inst, const char* method, int nargs, const float* arg, const Entity* entityArg = nullptr);
     void callAll(const char* method, float dt);
     void destroyInstance(Instance& inst);
     void reportError(const std::string& script, const std::string& entity, const std::string& function,

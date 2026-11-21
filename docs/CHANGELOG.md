@@ -1,5 +1,18 @@
 # Registro de cambios
 
+## 0.6.0 — 2026-11-21 · Física
+
+Añadido
+- Física 3D con Jolt Physics 5.2.0 detrás del módulo `titan_physics`: componentes `Rigidbody` (estático, dinámico,
+  cinemático; masa, fricción, rebote, amortiguación, escala de gravedad, bloquear rotación) y `Collider` (caja,
+  esfera, cápsula, centro, trigger). Paso fijo de 60 Hz, cinemáticos que siguen a su Transform.
+- Scripts: `onCollisionEnter/Exit(otro)`, `onTriggerEnter/Exit(otro)`, `addForce`, `addImpulse`, `addTorque`,
+  `setVelocity`, `getVelocity`, `teleport`, `Physics.raycast` (con entidad ignorada), `Physics.setGravity/getGravity`.
+- Editor: paneles de Rigidbody y Collider, colliders dibujados en verde (triggers en cian), "Ajustar al objeto",
+  menú Crear > Física. La plantilla 3D trae suelo sólido y un cubo que cae al pulsar Jugar.
+- `docs/UNITY_COMPARISON.md`: comparación sistema por sistema con Unity y plan para alcanzarlo.
+- 4 pruebas de física (caída y reposo, eventos de colisión, triggers, raycast, impulsos, gravedad).
+
 ## 0.5.0 — 2026-11-21 · Modelos 3D y modo horizontal
 
 Añadido

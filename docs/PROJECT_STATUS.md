@@ -1,4 +1,4 @@
-# Estado del proyecto — Titán 0.5.0
+# Estado del proyecto — Titán 0.6.0
 
 Fecha: 2026-11-21 · Generaciones 1 (Fundación) y 2 (Editor) en curso; primeros pasos de la 5 (3D)
 
@@ -50,7 +50,9 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 | Gizmo mover/rotar/escalar | [COMPLETADO Y PROBADO] (arrastres simulados: mover en X y rotar 71,8° en Y, guardados) |
 | Importar modelos glTF/GLB (mallas, materiales PBR, texturas incrustadas) | [COMPLETADO Y PROBADO] (Duck, BoxTextured, Fox de Khronos) |
 | Animación de esqueletos, mapas normales, OBJ | [PENDIENTE] |
-| Terreno, vegetación, física 3D, iluminación global, posprocesado (bloom, SSAO) | [PENDIENTE] |
+| Física 3D (Jolt): Rigidbody, Collider caja/esfera/cápsula, triggers, raycast, fuerzas, eventos en scripts | [COMPLETADO Y PROBADO] (4 pruebas + nivel de prueba en el editor) |
+| Colliders de malla, joints, controlador de personaje, física 2D | [PENDIENTE] |
+| Terreno, vegetación, iluminación global, posprocesado (bloom, SSAO) | [PENDIENTE] |
 
 ## Core
 
@@ -94,7 +96,7 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 | Función | Estado |
 |---|---|
 | onCreate, onStart, onUpdate, onFixedUpdate, onLateUpdate, onDestroy, onEnable, onDisable | [COMPLETADO Y PROBADO] |
-| onCollisionEnter/Exit, onTriggerEnter/Exit | [PENDIENTE] (necesitan física) |
+| onCollisionEnter/Exit, onTriggerEnter/Exit | [COMPLETADO Y PROBADO] |
 | API: Entity, Scene, Time, Input, Screen, Debug | [COMPLETADO Y PROBADO] |
 | Errores con archivo, línea, función y traza | [COMPLETADO Y PROBADO] |
 | Límite de tiempo y de memoria; aislamiento del sistema | [COMPLETADO Y PROBADO] |

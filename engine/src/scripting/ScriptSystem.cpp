@@ -209,6 +209,23 @@ int e_getScript(lua_State* L) {
     else lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
     return 1;
 }
+PhysicsApi& physics(lua_State* L) {
+    PhysicsApi* p = sys(L).host().scriptPhysics();
+    if (!p) luaL_error(L, "la física no está disponible");
+    return *p;
+}
+Entity body(lua_State* L) {
+    const Entity e = live(L, 1);
+    if (!physics(L).hasBody(e)) luaL_error(L, "'%s' no tiene cuerpo físico (añade Collider y Rigidbody)", scene(L).info(e).name.c_str());
+    return e;
+}
+int e_addForce(lua_State* L) { const Entity e = body(L); physics(L).addForce(e, check3(L, 2, {}), false); return 0; }
+int e_addImpulse(lua_State* L) { const Entity e = body(L); physics(L).addForce(e, check3(L, 2, {}), true); return 0; }
+int e_addTorque(lua_State* L) { const Entity e = body(L); physics(L).addTorque(e, check3(L, 2, {})); return 0; }
+int e_setVelocity(lua_State* L) { const Entity e = body(L); physics(L).setVelocity(e, check3(L, 2, {})); return 0; }
+int e_getVelocity(lua_State* L) { const Entity e = body(L); return push3(L, physics(L).velocity(e)); }
+int e_teleport(lua_State* L) { const Entity e = body(L); physics(L).teleport(e, check3(L, 2, {})); return 0; }
+
 int e_eq(lua_State* L) {
     const Entity a = toEntity(L, 1), b = toEntity(L, 2);
     lua_pushboolean(L, a == b);
@@ -232,7 +249,8 @@ const luaL_Reg kEntityMethods[] = {
     {"forward", e_forward}, {"right", e_right}, {"up", e_up},
     {"getColor", e_getColor}, {"setColor", e_setColor}, {"setSize", e_setSize},
     {"hasComponent", e_hasComponent}, {"addComponent", e_addComponent}, {"removeComponent", e_removeComponent},
-    {"getScript", e_getScript}, {nullptr, nullptr}};
+    {"getScript", e_getScript}, {"addForce", e_addForce}, {"addImpulse", e_addImpulse}, {"addTorque", e_addTorque},
+    {"setVelocity", e_setVelocity}, {"getVelocity", e_getVelocity}, {"teleport", e_teleport}, {nullptr, nullptr}};
 
 // ---------------------------------------------------------------- Tablas globales
 
@@ -322,6 +340,24 @@ int d_warn(lua_State* L) { TITAN_WARN("script", "%s", joinArgs(L).c_str()); retu
 int d_error(lua_State* L) { TITAN_ERROR("script", "%s", joinArgs(L).c_str()); return 0; }
 const luaL_Reg kDebugGlobals[] = {{"log", d_log}, {"warn", d_warn}, {"error", d_error}, {nullptr, nullptr}};
 
+int p_raycast(lua_State* L) {
+    const Vec3 o{float(luaL_checknumber(L, 1)), float(luaL_checknumber(L, 2)), float(luaL_checknumber(L, 3))};
+    const Vec3 d{float(luaL_checknumber(L, 4)), float(luaL_checknumber(L, 5)), float(luaL_checknumber(L, 6))};
+    RaycastHit hit;
+    const Entity ignore = lua_isnoneornil(L, 8) ? Entity{} : toEntity(L, 8);
+    if (!physics(L).raycast(o, d, float(luaL_optnumber(L, 7, 1000)), hit, ignore) || !scene(L).isValid(hit.entity)) {
+        lua_pushnil(L);
+        return 1;
+    }
+    pushEntity(L, hit.entity);
+    push3(L, hit.point);
+    lua_pushnumber(L, hit.distance);
+    return 5;
+}
+int p_setGravity(lua_State* L) { physics(L).setGravity(check3(L, 1, {})); return 0; }
+int p_getGravity(lua_State* L) { return push3(L, physics(L).gravity()); }
+const luaL_Reg kPhysicsGlobals[] = {{"raycast", p_raycast}, {"setGravity", p_setGravity}, {"getGravity", p_getGravity}, {nullptr, nullptr}};
+
 void setGlobalTable(lua_State* L, const char* name, const luaL_Reg* fns) {
     lua_newtable(L);
     luaL_setfuncs(L, fns, 0);
@@ -377,6 +413,7 @@ void ScriptSystem::registerApi() {
     setGlobalTable(L_, "Input", kInputGlobals);
     setGlobalTable(L_, "Screen", kScreenGlobals);
     setGlobalTable(L_, "Debug", kDebugGlobals);
+    setGlobalTable(L_, "Physics", kPhysicsGlobals);
     lua_pushcfunction(L_, d_log);
     lua_setglobal(L_, "print");
 }
@@ -468,7 +505,7 @@ void ScriptSystem::createInstance(Entity e, const Script& component) {
     instances_.push_back(std::move(inst));
 }
 
-bool ScriptSystem::call(Instance& inst, const char* method, int nargs, const float* arg) {
+bool ScriptSystem::call(Instance& inst, const char* method, int nargs, const float* arg, const Entity* entityArg) {
     lua_pushcfunction(L_, traceback);
     const int handler = lua_gettop(L_);
     lua_rawgeti(L_, LUA_REGISTRYINDEX, inst.ref);
@@ -478,7 +515,8 @@ bool ScriptSystem::call(Instance& inst, const char* method, int nargs, const flo
         return true;
     }
     lua_insert(L_, -2); // función, self
-    if (nargs) lua_pushnumber(L_, *arg);
+    if (entityArg) pushEntity(L_, *entityArg);
+    else if (nargs) lua_pushnumber(L_, *arg);
     armDeadline();
     const int status = lua_pcall(L_, 1 + nargs, 0, handler);
     if (status != LUA_OK) {
@@ -555,6 +593,16 @@ void ScriptSystem::callAll(const char* method, float dt) {
 }
 
 void ScriptSystem::fixedUpdate(float dt) { callAll("onFixedUpdate", dt); }
+
+void ScriptSystem::dispatchContact(Entity self, Entity other, bool begin, bool trigger) {
+    if (!scene_ || !scene_->isValid(self)) return;
+    const char* method = trigger ? (begin ? "onTriggerEnter" : "onTriggerExit") : (begin ? "onCollisionEnter" : "onCollisionExit");
+    for (size_t i = 0; i < instances_.size(); ++i) {
+        Instance& inst = instances_[i];
+        if (!inst.alive || inst.failed || inst.entity != self) continue;
+        call(inst, method, 1, nullptr, &other);
+    }
+}
 void ScriptSystem::update(float dt) { callAll("onUpdate", dt); }
 void ScriptSystem::lateUpdate(float dt) { callAll("onLateUpdate", dt); }
 

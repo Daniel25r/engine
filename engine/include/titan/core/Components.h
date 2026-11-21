@@ -132,6 +132,30 @@ struct Light {
     float range = 10.0f;           // solo puntual
 };
 
+// ---- Física (mismos conceptos que Rigidbody/Collider de Unity) ----
+// Una entidad con Collider y sin Rigidbody es un sólido estático (suelo, paredes).
+struct Rigidbody {
+    enum class Type { Static, Dynamic, Kinematic };
+    Type type = Type::Dynamic;    // Kinematic: lo mueve su Transform (scripts, animación) y empuja a los demás
+    float mass = 1.0f;            // kg
+    float friction = 0.5f;
+    float restitution = 0.0f;     // rebote (0..1)
+    float linearDamping = 0.05f;
+    float angularDamping = 0.05f;
+    float gravityScale = 1.0f;
+    bool lockRotation = false;    // no gira (personajes)
+};
+
+struct Collider {
+    enum class Shape { Box, Sphere, Capsule };
+    Shape shape = Shape::Box;
+    Vec3 size{1, 1, 1};           // caja: tamaño completo (antes de la escala del Transform)
+    float radius = 0.5f;          // esfera y cápsula
+    float height = 2.0f;          // cápsula: altura total
+    Vec3 center;                  // desplazamiento local
+    bool isTrigger = false;       // sensor: detecta pero no choca (onTriggerEnter/Exit)
+};
+
 struct Script {
     AssetRef script; // archivo .lua del proyecto
     bool enabled = true;

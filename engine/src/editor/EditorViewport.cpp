@@ -159,6 +159,37 @@ void Editor::Impl::drawGizmos() {
         if (l.type == Light::Type::Directional) renderer.drawLine(o, o + t.forward() * (s * 4), col);
     });
 
+    // Colliders en verde (como en los editores profesionales); los triggers, en cian.
+    scene.world().each<Collider, Transform>([&](Entity e, Collider& c, Transform& t) {
+        if (!scene.isActiveInHierarchy(e)) return;
+        const Mat4& m = t.worldMatrix();
+        const Color col = c.isTrigger ? Color{0.3f, 0.9f, 1, 0.8f} : Color{0.35f, 1, 0.45f, 0.8f};
+        if (c.shape == Collider::Shape::Box) {
+            Vec3 p[8];
+            for (int i = 0; i < 8; ++i)
+                p[i] = m.transformPoint(c.center + Vec3{(i & 1) ? c.size.x * 0.5f : -c.size.x * 0.5f,
+                                                        (i & 2) ? c.size.y * 0.5f : -c.size.y * 0.5f,
+                                                        (i & 4) ? c.size.z * 0.5f : -c.size.z * 0.5f});
+            const int ed[12][2] = {{0, 1}, {2, 3}, {4, 5}, {6, 7}, {0, 2}, {1, 3}, {4, 6}, {5, 7}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+            for (auto& d : ed) renderer.drawLine(p[d[0]], p[d[1]], col);
+        } else {
+            // Esfera: tres aros. Cápsula: aros en los extremos y cuatro líneas laterales.
+            const float r = c.radius, half = c.shape == Collider::Shape::Capsule ? std::max(0.0f, c.height * 0.5f - r) : 0.0f;
+            for (int ring = 0; ring < 3; ++ring)
+                for (int i = 0; i < 32; ++i) {
+                    auto pt = [&](int k, float yoff) {
+                        const float a = 6.2831853f * k / 32;
+                        const Vec3 v = ring == 0 ? Vec3{std::cos(a) * r, yoff, std::sin(a) * r}
+                                     : ring == 1 ? Vec3{std::cos(a) * r, std::sin(a) * r + (std::sin(a) > 0 ? half : -half), 0}
+                                                 : Vec3{0, std::sin(a) * r + (std::sin(a) > 0 ? half : -half), std::cos(a) * r};
+                        return m.transformPoint(c.center + v);
+                    };
+                    renderer.drawLine(pt(i, half), pt(i + 1, half), col);
+                    if (ring == 0 && half > 0) renderer.drawLine(pt(i, -half), pt(i + 1, -half), col);
+                }
+        }
+    });
+
     // Selección.
     Entity sel = selectedEntity();
     if (sel.isNull()) return;

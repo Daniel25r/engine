@@ -94,6 +94,10 @@ bool Runtime::activateScene(const std::string& text, const std::string& name) {
     scene_ = std::move(next);
     warnedNoCamera_ = false;
     TransformSystem::update(*scene_);
+    physics_.build(*scene_);
+    physicsDestroySub_ = events_.subscribe<EntityDestroyedEvent>([this](const EntityDestroyedEvent& ev) {
+        if (ev.scene == scene_.get()) physics_.removeEntity(ev.entity);
+    });
     events_.emit(SceneLoadedEvent{scene_.get()});
     TITAN_INFO("runtime", "Escena '%s' cargada (%zu entidades)", scene_->name().c_str(), scene_->entityCount());
     scripts_->attach(*scene_, events_);
@@ -132,14 +136,20 @@ void Runtime::frame(const Viewport& viewport) {
     last_ = frameStart;
     dt = std::min(dt, 0.25f);
     if (paused) dt = 0;
+    const bool simulate = !paused;
     delta_ = dt;
 
     // 1. Paso fijo con límite: tras un parón no se intenta "recuperar" todo el tiempo perdido.
     auto t = Clock::now();
     accumulator_ += dt;
     int steps = 0;
-    while (accumulator_ >= kFixedStep && steps < kMaxFixedStepsPerFrame) {
+    while (simulate && accumulator_ >= kFixedStep && steps < kMaxFixedStepsPerFrame) {
         scripts_->fixedUpdate(kFixedStep);
+        physics_.step(*scene_, kFixedStep);
+        for (const ContactEvent& ev : physics_.takeEvents()) {
+            scripts_->dispatchContact(ev.a, ev.b, ev.begin, ev.trigger);
+            scripts_->dispatchContact(ev.b, ev.a, ev.begin, ev.trigger);
+        }
         scene_->flushDestroyed();
         accumulator_ -= kFixedStep;
         ++steps;
@@ -229,10 +239,10 @@ void Runtime::render(const Viewport& viewport) {
         std::snprintf(text, sizeof(text),
                       "%.0f FPS  %.2f ms (scripts %.2f, transform %.2f, render %.2f)\n"
                       "%zu entidades  %d draw calls  %d mallas  %d sprites  %d triangulos\n"
-                      "%zu scripts  Lua %.0f KB  %zu errores",
+                      "%zu scripts  Lua %.0f KB  %zu errores  %zu cuerpos",
                       fps_, profile_.frameMs, profile_.scriptMs, profile_.transformMs, profile_.renderMs,
                       scene_->entityCount(), rs.drawCalls, rs.meshes, rs.sprites, rs.triangles,
-                      scripts_->instanceCount(), scripts_->memoryUsed() / 1024.0, scripts_->errors().size());
+                      scripts_->instanceCount(), scripts_->memoryUsed() / 1024.0, scripts_->errors().size(), physics_.bodyCount());
         // Arriba a la derecha: a la izquierda y abajo suele ir la interfaz del propio juego.
         const float h = std::max(12.0f, std::min(screen_.x, screen_.y) * 0.02f);
         size_t longest = 0, cur = 0;
@@ -286,6 +296,8 @@ void Runtime::shutdown() {
     if (!started_) return;
     started_ = false;
     if (scripts_) scripts_->detach();
+    physicsDestroySub_.reset();
+    physics_.clear();
     if (scene_) {
         events_.emit(SceneUnloadedEvent{scene_.get()});
         scene_.reset();
