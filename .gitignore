@@ -9,3 +9,4 @@ samples/*/package/
 *.tmp
 *.jks
 *.keystore
+*.bak
