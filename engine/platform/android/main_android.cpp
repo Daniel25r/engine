@@ -1,4 +1,5 @@
-// Capa de plataforma Android: ciclo de vida de la app, EGL/OpenGL ES 3, táctil y assets del APK.
+// Capa de plataforma Android: ciclo de vida de la app, EGL/OpenGL ES 3, táctil y archivos del APK.
+// Ejecuta el paquete de juego que va dentro de los assets del APK con el mismo Runtime que el escritorio.
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES3/gl3.h>
@@ -9,12 +10,12 @@
 
 #include <cstring>
 
-#include "forja/Engine.h"
-#include "forja/Log.h"
+#include "titan/core/Log.h"
+#include "titan/runtime/Runtime.h"
 
 namespace {
 
-class ApkAssets final : public forja::Assets {
+class ApkSource final : public titan::FileSource {
 public:
     AAssetManager* manager = nullptr;
 
@@ -37,15 +38,15 @@ struct App {
     EGLSurface surface = EGL_NO_SURFACE;
     bool focused = false;
     bool contextWasLost = false;
-    ApkAssets assets;
-    forja::Engine engine;
+    ApkSource files;
+    titan::Runtime engine;
 };
 
 bool createSurface(App& app) {
     if (app.display == EGL_NO_DISPLAY) {
         app.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
         if (!eglInitialize(app.display, nullptr, nullptr)) {
-            FORJA_ERROR("eglInitialize falló");
+            TITAN_ERROR("android", "eglInitialize falló");
             return false;
         }
         const EGLint attribs[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
@@ -57,7 +58,7 @@ bool createSurface(App& app) {
                                   EGL_NONE};
         EGLint count = 0;
         if (!eglChooseConfig(app.display, attribs, &app.config, 1, &count) || count < 1) {
-            FORJA_ERROR("Este dispositivo no ofrece OpenGL ES 3.0");
+            TITAN_ERROR("android", "Este dispositivo no ofrece OpenGL ES 3.0");
             return false;
         }
     }
@@ -66,20 +67,20 @@ bool createSurface(App& app) {
         const EGLint ctxAttribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
         app.context = eglCreateContext(app.display, app.config, EGL_NO_CONTEXT, ctxAttribs);
         if (app.context == EGL_NO_CONTEXT) {
-            FORJA_ERROR("No se pudo crear el contexto de OpenGL ES 3");
+            TITAN_ERROR("android", "No se pudo crear el contexto de OpenGL ES 3");
             return false;
         }
         freshContext = true;
     }
     app.surface = eglCreateWindowSurface(app.display, app.config, app.android->window, nullptr);
     if (app.surface == EGL_NO_SURFACE || !eglMakeCurrent(app.display, app.surface, app.surface, app.context)) {
-        FORJA_ERROR("No se pudo crear la superficie de dibujo (0x%x)", eglGetError());
+        TITAN_ERROR("android", "No se pudo crear la superficie de dibujo (0x%x)", eglGetError());
         return false;
     }
     eglSwapInterval(app.display, 1);
 
     if (!app.engine.running()) {
-        app.engine.startup(app.assets, forja::createGame());
+        if (!app.engine.start(app.files)) TITAN_ERROR("android", "No se pudo arrancar el juego");
     } else if (freshContext && app.contextWasLost) {
         app.engine.renderer().onContextRestored();
         app.contextWasLost = false;
@@ -115,7 +116,7 @@ void drawFrame(App& app) {
 
     const EGLint err = eglGetError();
     if (err == EGL_CONTEXT_LOST) {
-        FORJA_LOG("Se perdió el contexto de OpenGL; se recreará");
+        TITAN_INFO("android", "Se perdió el contexto de OpenGL; se recreará");
         app.engine.renderer().onContextLost();
         app.contextWasLost = true;
         destroySurface(app);
@@ -153,12 +154,12 @@ void onCommand(android_app* android, int32_t cmd) {
 int32_t onInput(android_app* android, AInputEvent* event) {
     if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) return 0;
     App& app = *static_cast<App*>(android->userData);
-    forja::Input& input = app.engine.input();
+    titan::Input& input = app.engine.input();
     const int32_t action = AMotionEvent_getAction(event);
     const int32_t kind = action & AMOTION_EVENT_ACTION_MASK;
     const size_t index =
         (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
-    auto pos = [&](size_t i) { return forja::Vec2{AMotionEvent_getX(event, i), AMotionEvent_getY(event, i)}; };
+    auto pos = [&](size_t i) { return titan::Vec2{AMotionEvent_getX(event, i), AMotionEvent_getY(event, i)}; };
 
     switch (kind) {
     case AMOTION_EVENT_ACTION_DOWN:
@@ -187,7 +188,7 @@ int32_t onInput(android_app* android, AInputEvent* event) {
 void android_main(android_app* android) {
     App app;
     app.android = android;
-    app.assets.manager = android->activity->assetManager;
+    app.files.manager = android->activity->assetManager;
     android->userData = &app;
     android->onAppCmd = onCommand;
     android->onInputEvent = onInput;

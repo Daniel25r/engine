@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "Forja"
+rootProject.name = "TitanPlayer"
 include(":app")

@@ -1,0 +1,103 @@
+{
+  "engineVersion": "0.2.0",
+  "entities": [
+    {
+      "active": true,
+      "components": {
+        "Camera": {
+          "clearColor": [
+            0.16470589,
+            0.08627451,
+            0.1882353,
+            1.0
+          ],
+          "far": 1000.0,
+          "fieldOfView": 60.0,
+          "near": 0.1,
+          "orthographicSize": 4.5,
+          "priority": 0,
+          "projection": "orthographic"
+        },
+        "Transform": {
+          "position": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "0db83185534d9d76",
+      "name": "Cámara",
+      "parent": null
+    },
+    {
+      "active": true,
+      "components": {
+        "Script": {
+          "enabled": true,
+          "script": "469c88fe6ffc1649"
+        },
+        "SpriteRenderer": {
+          "color": [
+            0.9098039,
+            0.40392157,
+            0.41960785,
+            1.0
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            1.0,
+            1.0
+          ],
+          "sortingOrder": 2,
+          "texture": "379a79517ac20d91",
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            3.0,
+            3.0,
+            1.0
+          ]
+        }
+      },
+      "id": "684f73ef9617aa87",
+      "name": "Nave grande",
+      "parent": null
+    }
+  ],
+  "format": "titan.scene",
+  "name": "nivel2",
+  "version": 1
+}

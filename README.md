@@ -1,77 +1,51 @@
-# Forja
+# Titán
 
-Motor de videojuegos 2D nativo para Android, escrito en C++17 sobre OpenGL ES 3.0.
+Motor de videojuegos propio para Android, en C++17 sobre OpenGL ES 3.0, con scripts en Lua.
+"Titán" es un nombre provisional; se cambia en `engine/include/titan/core/Version.h` y en `android/app/build.gradle.kts`.
 
-## Qué tiene (versión 0.1)
+**Estado: Generación 1 (Fundación), versión 0.2.0.** Funciona la cadena
+proyecto → escena → entidades → componentes → render → scripts → ejecución → guardado,
+probada en escritorio. El APK compila y se valida, pero todavía no se ha probado en un teléfono.
+Detalle honesto en [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
 
-| Parte | Archivo | Qué hace |
-|---|---|---|
-| Bucle de juego | `engine/src/Engine.cpp` | Lógica a paso fijo de 60 Hz, render a la velocidad de la pantalla, FPS |
-| ECS | `engine/include/forja/World.h` | Entidades con generación + componentes en arreglos densos (sparse sets) |
-| Render | `engine/src/Renderer.cpp` | Sprites por lotes (hasta 8192 por llamada), texturas PNG con mipmaps, cámara 2D, texto de depuración |
-| Entrada | `engine/include/forja/Input.h` | Multitáctil: eventos (empieza, se mueve, termina) y dedos activos |
-| Android | `engine/platform/android/main_android.cpp` | NativeActivity, EGL, ciclo de vida, pérdida de contexto, assets del APK |
-| Escritorio | `engine/platform/desktop/main_desktop.cpp` | Mismo OpenGL ES con GLFW, para desarrollar y probar sin el móvil |
-| Ejemplo | `sample/src/SwarmGame.cpp` | Un enjambre de partículas que tus dedos atraen |
-
-## Hacer un juego
-
-Un juego es una clase que hereda de `forja::Game` más la función `createGame()`:
-
-```cpp
-#include "forja/Engine.h"
-using namespace forja;
-
-struct Velocity { Vec2 v; };            // cualquier struct es un componente
-
-class MyGame : public Game {
-    void onStart(Engine& e) override {
-        TextureId tex = e.renderer().loadTexture("textures/orb.png");
-        Entity ball = e.world().create();
-        e.world().add<Transform>(ball, {{0, 0}});
-        e.world().add<Sprite>(ball, {tex, {64, 64}});
-        e.world().add<Velocity>(ball, {{100, 0}});
-    }
-    void onUpdate(Engine& e, float dt) override {        // 60 veces por segundo
-        e.world().each<Velocity, Transform>([&](Entity, Velocity& vel, Transform& t) {
-            t.position += vel.v * dt;
-        });
-    }
-};
-
-std::unique_ptr<Game> forja::createGame() { return std::make_unique<MyGame>(); }
-```
-
-Toda entidad con `Transform` + `Sprite` se dibuja sola. El mundo usa Y hacia arriba, y el centro de la pantalla es (0, 0).
-`camera().viewSize` dice cuántas unidades caben en el lado corto de la pantalla (720 por defecto).
-
-Para usar tu juego en lugar del ejemplo, cambia `GAME_SOURCES` en `CMakeLists.txt`.
-
-## Compilar
-
-**APK de Android** (necesita el SDK de Android con NDK 26.3 y CMake 3.22.1, o Android Studio):
+## En 1 minuto
 
 ```bash
-cd android
-./gradlew assembleRelease
+cmake -S . -B build/desktop -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build/desktop
+./build/desktop/titan_tests
+./build/desktop/titan demo mi_demo
+./build/desktop/titan tree mi_demo
+./build/desktop/titan set mi_demo Nave Transform.scale 2 2 1
+./build/desktop/titan package mi_demo mi_paquete
+./build/desktop/titan_player mi_paquete
 ```
 
-El APK queda en `android/app/build/outputs/apk/release/app-release.apk`.
-También puedes abrir la carpeta `android/` con Android Studio.
+## Documentación
 
-**Escritorio** (Linux, necesita `libglfw3-dev` y `libgles-dev`):
+| | |
+|---|---|
+| [PROJECT_STATUS](docs/PROJECT_STATUS.md) | Qué funciona y qué no, función por función |
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | Módulos, flujo del fotograma, decisiones |
+| [ROADMAP](docs/ROADMAP.md) | Generaciones siguientes |
+| [ENGINE_API](docs/ENGINE_API.md) | API de Lua, C++ y la herramienta `titan` |
+| [FILE_FORMATS](docs/FILE_FORMATS.md) | Proyecto, escenas, .meta y paquetes |
+| [ANDROID_PLATFORM](docs/ANDROID_PLATFORM.md) | Ciclo de vida, exportación, análisis de exportar desde el teléfono |
+| [BUILD_INSTRUCTIONS](docs/BUILD_INSTRUCTIONS.md) | Compilar en escritorio y para Android |
+| [TESTS](docs/TESTS.md) | Pruebas y resultados |
+| [DEPENDENCIES](docs/DEPENDENCIES.md) | Bibliotecas, licencias y alternativas |
+| [CHANGELOG](docs/CHANGELOG.md) | Cambios |
 
-```bash
-cmake -S . -B build/desktop -G Ninja
-cmake --build build/desktop
-./build/desktop/forja_desktop
+## Estructura
+
 ```
-
-El ratón hace de dedo. Para pruebas automáticas: `FORJA_FRAMES=180 FORJA_SCREENSHOT=captura.png ./build/desktop/forja_desktop`.
-
-**Recursos**: `python3 tools/make_assets.py` regenera la fuente de depuración y la textura del ejemplo.
-
-## Límites actuales
-
-- Solo 2D. Todavía no hay físicas con colisiones entre cuerpos, ni sonido, ni escenas guardadas en archivo, ni editor visual.
-- El APK va firmado con la clave de depuración. Para Google Play hace falta una clave propia.
+engine/include/titan/{core,render,scripting,runtime}   API pública
+engine/src/{core,render,scripting,runtime}             implementación
+engine/platform/{android,desktop}                      capa de plataforma
+engine/assets/                                         recursos del motor (fuente de depuración)
+third_party/{lua,nlohmann,stb}                         dependencias fijadas
+tools/titan/                                           herramienta de línea de comandos
+tests/                                                 pruebas
+android/                                               plantilla de exportación (Gradle)
+samples/demo/project/                                  proyecto de demostración
+docs/                                                  documentación técnica
+```

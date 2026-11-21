@@ -1,0 +1,1463 @@
+{
+  "engineVersion": "0.2.0",
+  "entities": [
+    {
+      "active": true,
+      "components": {
+        "Transform": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "b6407671d25d42a1",
+      "name": "Mundo",
+      "parent": null
+    },
+    {
+      "active": true,
+      "components": {
+        "Camera": {
+          "clearColor": [
+            0.078431375,
+            0.105882354,
+            0.16862746,
+            1.0
+          ],
+          "far": 1000.0,
+          "fieldOfView": 60.0,
+          "near": 0.1,
+          "orthographicSize": 4.5,
+          "priority": 0,
+          "projection": "orthographic"
+        },
+        "Transform": {
+          "position": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "c89592a454d24f9c",
+      "name": "Cámara",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "Script": {
+          "enabled": true,
+          "script": "0cfe23fb161361f7"
+        },
+        "SpriteRenderer": {
+          "color": [
+            0.9490196,
+            0.70980394,
+            0.2901961,
+            1.0
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            1.2,
+            1.2
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "95ef6698348c4940",
+      "name": "Núcleo",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "Script": {
+          "enabled": true,
+          "script": "48c3e1fa94bf0a05"
+        },
+        "SpriteRenderer": {
+          "color": [
+            0.37254903,
+            0.8156863,
+            0.78431374,
+            1.0
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            1.0,
+            1.0
+          ],
+          "sortingOrder": 2,
+          "texture": "379a79517ac20d91",
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            2.5,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "1e0f6f694d342dd3",
+      "name": "Nave",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "Script": {
+          "enabled": true,
+          "script": "0cfe23fb161361f7"
+        },
+        "SpriteRenderer": {
+          "color": [
+            1.0,
+            1.0,
+            1.0,
+            0.35
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.5,
+            0.5
+          ],
+          "sortingOrder": 1,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            0.0,
+            -0.75,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "c7ef505f685e019d",
+      "name": "Escudo",
+      "parent": "1e0f6f694d342dd3"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            1.6,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "a6f57b8351c404ba",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -1.3641285,
+            0.874763,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "a997790fe5cdfb5a",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            0.18358067,
+            -1.4643722,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "37b526290daf43bd",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            1.4298491,
+            1.3054636,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "c243c8cc99d7582e",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -2.5602608,
+            -0.31698826,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "8ffb0a9e2a2900bb",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            2.4046774,
+            -1.0708001,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "85dd3d52f52837d7",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -0.80471605,
+            2.0956123,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "373103422f718659",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -1.5441034,
+            -2.081043,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "db8371701b1f8a0a",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            3.381588,
+            0.8643969,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "add7de14796f0288",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -3.5586874,
+            1.0283672,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "7b56fea84d30077c",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            1.7376467,
+            -2.5994973,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "00d214267d9ccb9c",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            1.3020284,
+            2.9053981,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "d3a8201b629388fa",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -3.9800596,
+            -1.6144258,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "77b57eea967929df",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            4.7368336,
+            -0.7291115,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "f63858443873c941",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -2.9329777,
+            2.9205725,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "4e9bc9e259ff1a1f",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -0.6877834,
+            -3.7139242,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "f364a2bd7e1f0ace",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            4.2822185,
+            2.5260794,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "52e2e5f4761d2162",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -5.844991,
+            0.16942023,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "56d0ed58eb5e1c30",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            4.3236084,
+            -3.0121486,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "a6acecbeb971ff10",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -0.2929223,
+            4.440268,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "9f0ef4bba2eb611e",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -4.2290134,
+            -3.5469663,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "38ed3924ee15883b",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            6.788885,
+            0.6390873,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "bbeb8bace2106c27",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            -5.8278136,
+            2.8388073,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "15cfbe6ca6b3fcf3",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    },
+    {
+      "active": true,
+      "components": {
+        "SpriteRenderer": {
+          "color": [
+            0.8,
+            0.85,
+            1.0,
+            0.5
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "size": [
+            0.06,
+            0.06
+          ],
+          "sortingOrder": 0,
+          "texture": null,
+          "uv": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        "Transform": {
+          "position": [
+            1.6126655,
+            -5.01963,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "id": "9c3a3244c3ac46fe",
+      "name": "Estrella",
+      "parent": "b6407671d25d42a1"
+    }
+  ],
+  "format": "titan.scene",
+  "name": "principal",
+  "version": 1
+}

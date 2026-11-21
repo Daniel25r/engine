@@ -4,7 +4,7 @@
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
 
     <application
-        android:label="Forja"
+        android:label="@string/app_name"
         android:hasCode="false"
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
 
@@ -13,7 +13,7 @@
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|uiMode|density"
             android:screenOrientation="fullUser">
-            <meta-data android:name="android.app.lib_name" android:value="forja_game" />
+            <meta-data android:name="android.app.lib_name" android:value="titan_player" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

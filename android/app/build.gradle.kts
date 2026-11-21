@@ -1,24 +1,38 @@
+// Plantilla de exportación Android de Titán.
+// Empaqueta el runtime nativo (titan_player) con un paquete de juego generado por "titan package".
+//
+//   ./gradlew assembleRelease -PtitanPackage=/ruta/al/paquete \
+//       -PtitanAppId=com.estudio.juego -PtitanAppName="Mi juego" -PtitanVersionName=1.0 -PtitanVersionCode=1
 plugins {
     id("com.android.application")
 }
 
+fun prop(name: String, default: String) = (project.findProperty(name) as String?) ?: default
+
+val gamePackage = file(prop("titanPackage", "../../samples/demo/package"))
+if (!gamePackage.resolve("project.titan").exists()) {
+    throw GradleException("No hay un paquete de juego en $gamePackage. Genera uno con: titan package <proyecto> <salida>")
+}
+
 android {
-    namespace = "dev.forja.demo"
+    namespace = "dev.titan.player"
     compileSdk = 34
     ndkVersion = "26.3.11579264"
 
     defaultConfig {
-        applicationId = "dev.forja.demo"
+        applicationId = prop("titanAppId", "dev.titan.demo")
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = prop("titanVersionCode", "1").toInt()
+        versionName = prop("titanVersionName", "0.2.0")
+        resValue("string", "app_name", prop("titanAppName", "Titán Demo"))
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += prop("titanAbis", "arm64-v8a,armeabi-v7a,x86_64").split(",")
         }
         externalNativeBuild {
             cmake {
-                arguments += listOf("-DANDROID_STL=c++_static")
+                arguments += listOf("-DANDROID_STL=c++_static", "-DTITAN_BUILD_TESTS=OFF", "-DTITAN_BUILD_TOOLS=OFF")
+                cppFlags += listOf("-fexceptions")
             }
         }
     }
@@ -26,8 +40,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Firmado con la clave de depuración para poder instalarlo ya.
-            // Para publicar en Google Play hay que usar una clave propia.
+            // Sin clave propia configurada se firma con la clave de depuración (solo para pruebas).
+            // La firma de publicación se configurará sin guardar claves en el repositorio.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -39,5 +53,5 @@ android {
         }
     }
 
-    sourceSets["main"].assets.srcDirs("../../engine/assets", "../../sample/assets")
+    sourceSets["main"].assets.srcDirs("../../engine/assets", gamePackage)
 }

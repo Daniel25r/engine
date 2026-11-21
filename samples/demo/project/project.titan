@@ -1,0 +1,8 @@
+{
+  "dimension": "2d",
+  "engineVersion": "0.2.0",
+  "format": "titan.project",
+  "name": "Demostración técnica",
+  "startScene": "d0f53f81191e6668",
+  "version": 1
+}
