@@ -32,6 +32,7 @@ int usage() {
         "  titan add-entity <carpeta> <nombre> [padre]\n"
         "  titan add-component <carpeta> <entidad> <Componente>\n"
         "  titan assets <carpeta>                     listar los recursos y sus ids\n"
+        "  titan prefab <carpeta> <entidad>           guardar la entidad (con sus hijos) como prefabs/<nombre>.prefab\n"
         "  titan check <carpeta>                      validar escenas y referencias\n"
         "  titan package <carpeta> <salida>           generar el paquete de juego para el runtime\n\n"
         "Opción: --scene <ruta dentro de assets/> para trabajar en otra escena.\n",
@@ -398,6 +399,19 @@ int main(int argc, char** argv) {
         Entity e = findEntity(ctx, args[2]);
         if (e.isNull()) return 1;
         return cmdSet(ctx, e, args[3], std::vector<std::string>(args.begin() + 4, args.end()));
+    }
+    if (cmd == "prefab" && args.size() >= 3) {
+        Entity e = findEntity(ctx, args[2]);
+        if (e.isNull()) return 1;
+        const std::string rel = "prefabs/" + ctx.scene.info(e).name + ".prefab";
+        std::string err;
+        if (!fileio::writeAtomic(ctx.project->assetsDir() + "/" + rel, serializePrefab(ctx.scene, e, ctx.registry), true, &err)) {
+            std::fprintf(stderr, "Error: %s\n", err.c_str());
+            return 1;
+        }
+        ctx.project->assets().import(rel);
+        std::printf("Prefab guardado en assets/%s\n", rel.c_str());
+        return 0;
     }
     if (cmd == "add-entity" && args.size() >= 3) {
         Entity parent;

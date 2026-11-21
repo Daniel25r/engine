@@ -31,6 +31,8 @@ public:
     void clear();
     void step(Scene& scene, float dt);
     void removeEntity(Entity e);
+    // Crea los cuerpos de una entidad nueva y de sus hijos (prefabs instanciados durante el juego).
+    void addSubtree(Scene& scene, Entity root);
     std::vector<ContactEvent> takeEvents();
     size_t bodyCount() const;
 
@@ -49,6 +51,7 @@ public:
     struct Impl;
 
 private:
+    void createBodies(Scene& scene, const std::vector<Entity>& list);
     std::unique_ptr<Impl> impl_;
 };
 

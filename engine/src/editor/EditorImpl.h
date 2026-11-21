@@ -169,6 +169,19 @@ struct Editor::Impl {
     bool localBounds(Entity e, Vec3& min, Vec3& max);
     void addModelToScene(const AssetRecord& r);
     void fitCollider(Entity e); // ajusta forma y tamaño del Collider a la malla o el modelo
+    // Variables "props" que declara un script (se leen ejecutando el archivo en un intérprete aislado).
+    struct ScriptProp {
+        std::string name;
+        int type; // 0 número, 1 booleano, 2 texto
+        double number = 0;
+        bool boolean = false;
+        std::string text;
+    };
+    std::unordered_map<uint64_t, std::vector<ScriptProp>> propsCache;
+    const std::vector<ScriptProp>& scriptProps(AssetRef script);
+    void drawScriptProps(Script& s);
+    void savePrefab(Entity e);
+    void instantiatePrefabAsset(const AssetRecord& r);
     void handleShortcuts();
     void touchScroll();
     void track(); // llamar tras cada control de edición continua (arrastres y texto)

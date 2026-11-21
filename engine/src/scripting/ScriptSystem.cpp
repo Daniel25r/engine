@@ -270,7 +270,13 @@ const luaL_Reg kEntityGlobals[] = {{"find", g_find}, {"get", g_get}, {"create", 
 
 int s_load(lua_State* L) { lua_pushboolean(L, sys(L).host().scriptLoadScene(luaL_checkstring(L, 1))); return 1; }
 int s_name(lua_State* L) { lua_pushstring(L, scene(L).name().c_str()); return 1; }
-const luaL_Reg kSceneGlobals[] = {{"load", s_load}, {"name", s_name}, {nullptr, nullptr}};
+int s_instantiate(lua_State* L) {
+    const char* name = luaL_checkstring(L, 1);
+    const Vec3 p = check3(L, 2, {});
+    pushEntity(L, sys(L).host().scriptInstantiate(name, p));
+    return 1;
+}
+const luaL_Reg kSceneGlobals[] = {{"load", s_load}, {"name", s_name}, {"instantiate", s_instantiate}, {nullptr, nullptr}};
 
 int t_delta(lua_State* L) { lua_pushnumber(L, sys(L).host().scriptDeltaTime()); return 1; }
 int t_fixed(lua_State* L) { lua_pushnumber(L, sys(L).host().scriptFixedDeltaTime()); return 1; }
@@ -494,6 +500,31 @@ void ScriptSystem::createInstance(Entity e, const Script& component) {
     lua_newtable(L_);                       // self
     pushEntity(L_, e);
     lua_setfield(L_, -2, "entity");
+    // Variables del Inspector: primero los valores por defecto de Clase.props, luego los de esta entidad.
+    lua_rawgeti(L_, LUA_REGISTRYINDEX, cls);
+    lua_getfield(L_, -1, "props");
+    if (lua_istable(L_, -1)) {
+        lua_pushnil(L_);
+        while (lua_next(L_, -2)) {
+            if (lua_type(L_, -2) == LUA_TSTRING) {
+                lua_pushvalue(L_, -2);
+                lua_insert(L_, -2);
+                lua_settable(L_, -6); // self[clave] = valor
+            } else {
+                lua_pop(L_, 1);
+            }
+        }
+    }
+    lua_pop(L_, 2);
+    const Json over = Json::parse(component.props, nullptr, false);
+    if (over.is_object())
+        for (auto it = over.begin(); it != over.end(); ++it) {
+            if (it->is_number()) lua_pushnumber(L_, it->get<double>());
+            else if (it->is_boolean()) lua_pushboolean(L_, it->get<bool>());
+            else if (it->is_string()) lua_pushstring(L_, it->get<std::string>().c_str());
+            else continue;
+            lua_setfield(L_, -2, it.key().c_str());
+        }
     lua_newtable(L_);                       // metatabla: los métodos se buscan en la clase
     lua_rawgeti(L_, LUA_REGISTRYINDEX, cls);
     lua_setfield(L_, -2, "__index");
@@ -593,6 +624,19 @@ void ScriptSystem::callAll(const char* method, float dt) {
 }
 
 void ScriptSystem::fixedUpdate(float dt) { callAll("onFixedUpdate", dt); }
+
+void ScriptSystem::attachSubtree(Entity root) {
+    if (!scene_ || !scene_->isValid(root)) return;
+    const size_t first = instances_.size();
+    std::vector<Entity> all;
+    scene_->traverse([&](Entity e, int) {
+        if (e == root || scene_->isDescendantOf(e, root)) all.push_back(e);
+    });
+    for (Entity e : all)
+        if (const Script* s = scene_->world().get<Script>(e)) createInstance(e, *s);
+    for (size_t i = first; i < instances_.size(); ++i) call(instances_[i], "onCreate", 0, nullptr);
+    // onStart se llama antes de su primer update (callAll), igual que en las entidades activadas más tarde.
+}
 
 void ScriptSystem::dispatchContact(Entity self, Entity other, bool begin, bool trigger) {
     if (!scene_ || !scene_->isValid(self)) return;

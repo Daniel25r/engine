@@ -13,6 +13,7 @@
 //
 // Seguridad: sin io, os, package, load ni dofile; límite de memoria del intérprete y
 // límite de tiempo por llamada para que un bucle infinito no congele el juego ni el editor.
+#include <deque>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -44,6 +45,8 @@ public:
     virtual void scriptDrawText(float x, float y, float size, const std::string& text, Color color) = 0;
     // Física de la escena (nulo si no hay).
     virtual PhysicsApi* scriptPhysics() { return nullptr; }
+    // Crea una instancia de un prefab (nombre o ruta) en la posición dada. Nula si no existe.
+    virtual Entity scriptInstantiate(const std::string& prefab, const Vec3& position) { return {}; }
 };
 
 struct ScriptError {
@@ -72,6 +75,8 @@ public:
     void fixedUpdate(float dt);
     // Llama onCollisionEnter/Exit u onTriggerEnter/Exit(other) en los scripts de "self".
     void dispatchContact(Entity self, Entity other, bool begin, bool trigger);
+    // Crea los scripts de una entidad nueva y de sus hijos (prefabs instanciados durante el juego).
+    void attachSubtree(Entity root);
     void update(float dt);
     void lateUpdate(float dt);
 
@@ -122,7 +127,8 @@ private:
     lua_State* L_ = nullptr;
     Scene* scene_ = nullptr;
     Subscription destroyedSub_;
-    std::vector<Instance> instances_;
+    // deque: crear instancias mientras se recorren (Scene.instantiate en onUpdate) no invalida referencias.
+    std::deque<Instance> instances_;
     std::unordered_map<uint64_t, int> classRefs_;     // AssetRef -> tabla de la clase
     std::unordered_map<uint64_t, std::string> classNames_;
     std::vector<ScriptError> errors_;

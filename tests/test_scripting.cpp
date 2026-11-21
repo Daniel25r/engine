@@ -231,3 +231,17 @@ TEST("scripts: setActive llama onDisable/onEnable y detiene onUpdate") {
     f.scripts.update(0.1f);
     CHECK(f.scripts.runString("assert(cuentas.update == 2 and cuentas.enable == 1 and cuentas.disable == 1)"));
 }
+
+TEST("scripts: props del script con valores cambiados en el editor") {
+    Fixture f;
+    const AssetRef s = f.addScript("props.lua", R"(
+        local P = { props = { velocidad = 5, nombre = "base", activo = true } }
+        function P:onStart() resultado = self.velocidad .. "/" .. self.nombre .. "/" .. tostring(self.activo) end
+        return P)");
+    Entity e = f.scene.createEntity("X");
+    Script sc{s, true};
+    sc.props = R"({"velocidad": 12, "nombre": "editado"})";
+    f.scene.world().add<Script>(e, sc);
+    f.scripts.attach(f.scene, f.bus);
+    CHECK(f.scripts.runString("assert(resultado == '12.0/editado/true' or resultado == '12/editado/true', resultado)"));
+}

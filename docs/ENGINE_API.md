@@ -32,7 +32,11 @@ return Nave
 | `onEnable()` / `onDisable()` | Al llamar `setActive` sobre la entidad del script |
 | `onDestroy()` | Antes de destruir la entidad o al descargar la escena |
 
-Pendientes (llegarán con la física): `onCollisionEnter`, `onCollisionExit`, `onTriggerEnter`, `onTriggerExit`.
+| `onCollisionEnter(otro)` / `onCollisionExit(otro)` | Empieza / termina un choque físico |
+| `onTriggerEnter(otro)` / `onTriggerExit(otro)` | Algo entra / sale de un Collider marcado como trigger |
+
+Variables editables en Detalles: `local Clase = { props = { velocidad = 5, activo = true, nombre = "x" } }`.
+Cada entidad puede cambiar esos valores en el editor; en el script se leen como `self.velocidad`.
 
 Solo reciben updates las instancias cuyo `Script.enabled` es true y cuya entidad está activa en la jerarquía.
 Si un método lanza un error, el error se registra y esa instancia deja de ejecutarse.
@@ -54,6 +58,7 @@ Si un método lanza un error, el error se registra y esa instancia deja de ejecu
 | `getColor()`, `setColor(r,g,b[,a])`, `setSize(w,h)` | Del `SpriteRenderer` |
 | `hasComponent(n)`, `addComponent(n)`, `removeComponent(n)` | Por nombre: `Camera`, `SpriteRenderer`, `MeshRenderer`, `Light`, `Script` |
 | `getScript()` | La instancia del script de esa entidad, para que los scripts se comuniquen |
+| `addForce`, `addImpulse`, `addTorque`, `setVelocity`, `getVelocity`, `teleport` (x,y,z) | Física (necesita Collider + Rigidbody) |
 
 Las funciones que devuelven vectores devuelven varios valores: `local x, y, z = e:getPosition()`.
 
@@ -63,6 +68,9 @@ Las funciones que devuelven vectores devuelven varios valores: `local x, y, z = 
 |---|---|
 | `Entity.find(nombre)`, `Entity.get(id)`, `Entity.create(nombre [, padre])` | Buscar y crear entidades |
 | `Scene.load(nombre o ruta)`, `Scene.name()` | Cambiar de escena (se aplica al final del fotograma) |
+| `Scene.instantiate(prefab, x, y, z)` → entidad | Crear una copia de un prefab con sus scripts y su física |
+| `Physics.raycast(ox,oy,oz, dx,dy,dz [, distancia, ignorar])` → entidad, x, y, z, distancia | Rayo contra los colliders |
+| `Physics.setGravity(x,y,z)`, `Physics.getGravity()` | Gravedad del mundo |
 | `Time.delta()`, `Time.fixedDelta()`, `Time.time()`, `Time.frame()` | Tiempo |
 | `Input.touchCount()`, `Input.touch(i)` → `{id, x, y, phase}`, `Input.touchWorld(i)` → x,y,z (plano z = 0 en 2D; suelo y = 0 con cámara en perspectiva), `Input.tapped()` | Táctil; `i` empieza en 1; `phase` es "began" o "held" |
 | `Screen.width()`, `Screen.height()` | Píxeles |

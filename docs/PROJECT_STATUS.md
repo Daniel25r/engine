@@ -1,4 +1,4 @@
-# Estado del proyecto — Titán 0.6.0
+# Estado del proyecto — Titán 0.7.0
 
 Fecha: 2026-11-21 · Generaciones 1 (Fundación) y 2 (Editor) en curso; primeros pasos de la 5 (3D)
 
@@ -73,7 +73,8 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 | Base de datos de recursos con .meta, ids estables y detección de duplicados | [COMPLETADO Y PROBADO] |
 | Paquete de juego con validación de referencias | [COMPLETADO Y PROBADO] |
 | Carga aditiva, carga asíncrona, persistencia entre escenas | [PENDIENTE] |
-| Prefabs | [PENDIENTE] |
+| Prefabs (crear, colocar, instanciar en juego) | [COMPLETADO Y PROBADO] (prueba + cañón que dispara 46 balas en el editor); variantes [PENDIENTE] |
+| Variables de script en Detalles (props) | [COMPLETADO Y PROBADO] |
 | Deshacer / rehacer (sistema de comandos) | [PENDIENTE] (Generación 2, con el editor) |
 
 ## Runtime y render

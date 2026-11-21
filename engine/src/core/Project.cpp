@@ -22,13 +22,14 @@ const char* assetTypeName(AssetType t) {
     case AssetType::Model: return "model";
     case AssetType::Font: return "font";
     case AssetType::Data: return "data";
+    case AssetType::Prefab: return "prefab";
     default: return "unknown";
     }
 }
 
 AssetType assetTypeFromName(const std::string& n) {
     for (AssetType t : {AssetType::Scene, AssetType::Texture, AssetType::Script, AssetType::Audio, AssetType::Model,
-                        AssetType::Font, AssetType::Data})
+                        AssetType::Font, AssetType::Data, AssetType::Prefab})
         if (n == assetTypeName(t)) return t;
     return AssetType::Unknown;
 }
@@ -37,6 +38,7 @@ AssetType assetTypeFromExtension(const std::string& path) {
     std::string ext = fs::path(path).extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
     if (ext == ".scene") return AssetType::Scene;
+    if (ext == ".prefab") return AssetType::Prefab;
     if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") return AssetType::Texture;
     if (ext == ".lua") return AssetType::Script;
     if (ext == ".wav" || ext == ".ogg" || ext == ".mp3") return AssetType::Audio;
@@ -295,7 +297,7 @@ bool Project::package(const std::string& outDir, const ComponentRegistry& regist
 
     // 2. Resolución de recursos: cada escena debe cargar y sus referencias deben existir.
     for (const AssetRecord* r : assets_.all()) {
-        if (r->type != AssetType::Scene) continue;
+        if (r->type != AssetType::Scene && r->type != AssetType::Prefab) continue;
         Scene scene(r->path);
         const LoadReport rep = loadSceneFile(assets_.absolutePath(*r), scene, registry);
         for (auto& e : rep.errors) errors.push_back(r->path + ": " + e);

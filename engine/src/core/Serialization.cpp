@@ -99,6 +99,13 @@ void FieldReader::read(const char* key, Quat& v) {
     }
 }
 
+void FieldReader::readRaw(const char* key, std::string& v) {
+    if (auto* j = field(key)) {
+        if (j->is_object()) v = j->dump();
+        else warn(key, "se esperaba un objeto");
+    }
+}
+
 void FieldReader::readAsset(const char* key, AssetRef& v) {
     if (auto* j = field(key)) {
         UUID id;
@@ -283,10 +290,16 @@ ComponentRegistry ComponentRegistry::createDefault() {
         });
 
     r.addSimple<Script>(
-        "Script", [](const Script& sc) { return Json{{"script", assetToJson(sc.script)}, {"enabled", sc.enabled}}; },
+        "Script",
+        [](const Script& sc) {
+            Json props = Json::parse(sc.props, nullptr, false);
+            if (props.is_discarded() || !props.is_object()) props = Json::object();
+            return Json{{"script", assetToJson(sc.script)}, {"enabled", sc.enabled}, {"props", props}};
+        },
         [](Script& sc, FieldReader& rd) {
             rd.readAsset("script", sc.script);
             rd.read("enabled", sc.enabled);
+            rd.readRaw("props", sc.props);
         });
     return r;
 }
@@ -437,6 +450,38 @@ LoadReport deserializeScene(const std::string& text, Scene& scene, const Compone
         }
     }
     return report;
+}
+
+Entity copySubtree(Scene& src, Entity from, Scene& dst, Entity dstParent, const ComponentRegistry& registry) {
+    Entity to = dst.createEntity(src.info(from).name, dstParent);
+    dst.info(to).active = src.info(from).active;
+    for (const auto& type : registry.types()) {
+        if (!type.has(src, from)) continue;
+        const Json data = type.save(src, from);
+        LoadReport ignored;
+        FieldReader reader(data, type.name, ignored);
+        type.load(dst, to, reader);
+    }
+    if (auto* kept = src.world().get<PreservedComponents>(from)) dst.world().add<PreservedComponents>(to, *kept);
+    for (Entity c : src.children(from)) copySubtree(src, c, dst, to, registry);
+    return to;
+}
+
+std::string serializePrefab(Scene& scene, Entity root, const ComponentRegistry& registry) {
+    Scene tmp(scene.info(root).name);
+    Entity r = copySubtree(scene, root, tmp, {}, registry);
+    tmp.transform(r).setPosition({}); // el prefab se guarda en el origen; al instanciarlo se coloca donde toque
+    return serializeScene(tmp, registry);
+}
+
+Entity instantiatePrefab(const std::string& text, Scene& scene, Entity parent, const ComponentRegistry& registry,
+                         LoadReport* report) {
+    Scene tmp("prefab");
+    LoadReport rep = deserializeScene(text, tmp, registry);
+    if (report) *report = rep;
+    const auto roots = tmp.roots();
+    if (!rep.ok() || roots.empty()) return {};
+    return copySubtree(tmp, roots.front(), scene, parent, registry);
 }
 
 bool saveSceneFile(Scene& scene, const ComponentRegistry& registry, const std::string& path, std::string* error) {

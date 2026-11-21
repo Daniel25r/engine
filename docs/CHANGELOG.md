@@ -1,5 +1,19 @@
 # Registro de cambios
 
+## 0.7.0 — 2026-11-21 · Variables de script y prefabs
+
+Añadido
+- Variables de script editables en Detalles (como los campos públicos de Unity): el script declara
+  `local Clase = { props = { velocidad = 5, activo = true, nombre = "x" } }` y cada entidad puede cambiar los
+  valores (se muestran en azul; clic derecho vuelve al valor del script). En el juego llegan como `self.velocidad`.
+- Prefabs (`.prefab`): "Guardar como prefab" en Detalles, "Añadir a la escena" en el navegador de contenido,
+  `Scene.instantiate("Nombre", x, y, z)` en Lua (crea la copia con sus scripts y su física) y `titan prefab` en la CLI.
+- `copySubtree`: una sola implementación para Duplicar y prefabs.
+
+Corregido
+- Crear instancias de script mientras se recorren (por ejemplo, instanciar en onUpdate) ya no puede invalidar
+  referencias internas (se usa `std::deque`).
+
 ## 0.6.0 — 2026-11-21 · Física
 
 Añadido

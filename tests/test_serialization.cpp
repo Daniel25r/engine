@@ -132,3 +132,26 @@ TEST("archivos: guardado atómico con copia de seguridad y recuperación") {
     CHECK(rep.recoveredFromBackup);
     CHECK(!loaded.findByName("Primera").isNull()); // la .bak era la versión anterior
 }
+
+TEST("prefabs: guardar un subárbol e instanciarlo con ids nuevos") {
+    const ComponentRegistry reg = ComponentRegistry::createDefault();
+    Scene a("A");
+    Entity enemy = a.createEntity("Enemigo");
+    a.transform(enemy).setPosition({7, 0, 0});
+    a.world().add<Collider>(enemy);
+    Entity gun = a.createEntity("Arma", enemy);
+    a.transform(gun).setPosition({0.5f, 1, 0});
+    const std::string prefab = serializePrefab(a, enemy, reg);
+
+    Scene b("B");
+    Entity i1 = instantiatePrefab(prefab, b, {}, reg);
+    Entity i2 = instantiatePrefab(prefab, b, {}, reg);
+    CHECK(!i1.isNull() && !i2.isNull());
+    CHECK_EQ(b.entityCount(), 4u);
+    CHECK(b.info(i1).id != b.info(i2).id);
+    CHECK(b.info(i1).id != a.info(enemy).id);
+    CHECK_VEC3(b.transform(i1).position(), 0, 0, 0); // el prefab se guarda en el origen
+    CHECK(b.world().has<Collider>(i1));
+    CHECK_EQ(b.children(i1).size(), 1u);
+    CHECK_VEC3(b.transform(b.children(i1)[0]).position(), 0.5f, 1, 0);
+}

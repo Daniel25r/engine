@@ -159,6 +159,8 @@ struct Collider {
 struct Script {
     AssetRef script; // archivo .lua del proyecto
     bool enabled = true;
+    // Valores de las variables "props" del script cambiados en el editor para esta entidad (objeto JSON).
+    std::string props = "{}";
 };
 
 } // namespace titan

@@ -144,10 +144,24 @@ void PhysicsWorld::clear() {
 
 void PhysicsWorld::build(Scene& scene) {
     clear();
-    World& world = scene.world();
     std::vector<Entity> withCollider;
-    world.each<Collider>([&](Entity e, Collider&) { withCollider.push_back(e); });
-    for (Entity e : withCollider) {
+    scene.world().each<Collider>([&](Entity e, Collider&) { withCollider.push_back(e); });
+    createBodies(scene, withCollider);
+    impl_->system->OptimizeBroadPhase();
+    TITAN_INFO("physics", "%zu cuerpos físicos en '%s'", impl_->bodies.size(), scene.name().c_str());
+}
+
+void PhysicsWorld::addSubtree(Scene& scene, Entity root) {
+    std::vector<Entity> list;
+    scene.traverse([&](Entity e, int) {
+        if ((e == root || scene.isDescendantOf(e, root)) && scene.world().has<Collider>(e)) list.push_back(e);
+    });
+    createBodies(scene, list);
+}
+
+void PhysicsWorld::createBodies(Scene& scene, const std::vector<Entity>& list) {
+    World& world = scene.world();
+    for (Entity e : list) {
         if (!scene.isActiveInHierarchy(e)) continue;
         const Collider& c = *world.get<Collider>(e);
         const Rigidbody* rb = world.get<Rigidbody>(e);
@@ -209,8 +223,6 @@ void PhysicsWorld::build(Scene& scene) {
         impl_->owners[id.GetIndexAndSequenceNumber()] = e;
         if (c.isTrigger) impl_->contacts.sensors[id.GetIndexAndSequenceNumber()] = true;
     }
-    impl_->system->OptimizeBroadPhase();
-    TITAN_INFO("physics", "%zu cuerpos físicos en '%s'", impl_->bodies.size(), scene.name().c_str());
 }
 
 void PhysicsWorld::removeEntity(Entity e) {

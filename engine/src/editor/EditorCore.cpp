@@ -11,6 +11,9 @@
 #include "EditorImpl.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "imgui_internal.h"
+#include "lauxlib.h"
+#include "lua.h"
+#include "lualib.h"
 #include "titan/core/FileIO.h"
 #include "titan/core/Templates.h"
 #include "titan/core/Version.h"
@@ -304,6 +307,7 @@ bool Editor::Impl::saveCode() {
         return false;
     }
     codeDirty = false;
+    propsCache.clear(); // las variables del script pueden haber cambiado
     return true;
 }
 
@@ -360,6 +364,74 @@ bool Editor::Impl::localBounds(Entity e, Vec3& min, Vec3& max) {
     min = {-0.5f, -0.5f, -0.5f};
     max = {0.5f, 0.5f, 0.5f};
     return true;
+}
+
+const std::vector<Editor::Impl::ScriptProp>& Editor::Impl::scriptProps(AssetRef script) {
+    auto it = propsCache.find(script.value);
+    if (it != propsCache.end()) return it->second;
+    std::vector<ScriptProp>& out = propsCache[script.value];
+    const AssetRecord* r = project ? project->assets().find(script) : nullptr;
+    std::string code;
+    if (!r || !fileio::readText(project->assetsDir() + "/" + r->path, code)) return out;
+    // Intérprete aislado y con límite de instrucciones: un bucle infinito en el script no congela el editor.
+    lua_State* L = luaL_newstate();
+    luaL_requiref(L, LUA_GNAME, luaopen_base, 1);
+    luaL_requiref(L, LUA_MATHLIBNAME, luaopen_math, 1);
+    luaL_requiref(L, LUA_STRLIBNAME, luaopen_string, 1);
+    lua_settop(L, 0);
+    lua_sethook(L, [](lua_State* s, lua_Debug*) { luaL_error(s, "demasiado largo"); }, LUA_MASKCOUNT, 2000000);
+    if (luaL_loadbufferx(L, code.data(), code.size(), "props", "t") == LUA_OK && lua_pcall(L, 0, 1, 0) == LUA_OK &&
+        lua_istable(L, -1)) {
+        lua_getfield(L, -1, "props");
+        if (lua_istable(L, -1)) {
+            lua_pushnil(L);
+            while (lua_next(L, -2)) {
+                if (lua_type(L, -2) == LUA_TSTRING) {
+                    ScriptProp p;
+                    p.name = lua_tostring(L, -2);
+                    if (lua_type(L, -1) == LUA_TNUMBER) { p.type = 0; p.number = lua_tonumber(L, -1); out.push_back(p); }
+                    else if (lua_type(L, -1) == LUA_TBOOLEAN) { p.type = 1; p.boolean = lua_toboolean(L, -1); out.push_back(p); }
+                    else if (lua_type(L, -1) == LUA_TSTRING) { p.type = 2; p.text = lua_tostring(L, -1); out.push_back(p); }
+                }
+                lua_pop(L, 1);
+            }
+        }
+    }
+    lua_close(L);
+    std::sort(out.begin(), out.end(), [](const ScriptProp& a, const ScriptProp& b) { return a.name < b.name; });
+    return out;
+}
+
+void Editor::Impl::savePrefab(Entity e) {
+    if (!project || e.isNull()) return;
+    std::string base;
+    for (char c : scene.info(e).name) base += (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-') ? c : '_';
+    if (base.empty()) base = "prefab";
+    const std::string rel = "prefabs/" + base + ".prefab";
+    std::string err;
+    if (!fileio::writeAtomic(project->assetsDir() + "/" + rel, serializePrefab(scene, e, registry), true, &err)) {
+        TITAN_ERROR("editor", "No se pudo guardar el prefab: %s", err.c_str());
+        return;
+    }
+    project->assets().import(rel);
+    TITAN_INFO("editor", "Prefab guardado: %s (úsalo con Scene.instantiate(\"%s\", x, y, z))", rel.c_str(), base.c_str());
+    setStatus("Prefab guardado: " + rel);
+}
+
+void Editor::Impl::instantiatePrefabAsset(const AssetRecord& r) {
+    std::string text;
+    if (!fileio::readText(project->assetsDir() + "/" + r.path, text)) return;
+    pushUndo();
+    const Entity e = instantiatePrefab(text, scene, {}, registry);
+    if (e.isNull()) {
+        setStatus("El prefab no se pudo leer (ver Registro)");
+        return;
+    }
+    Vec3 p = spawnPoint();
+    if (threeD()) p.y = scene.transform(e).position().y + 0.0f;
+    scene.transform(e).setPosition(p);
+    select(e);
+    dirty = true;
 }
 
 void Editor::Impl::fitCollider(Entity e) {
@@ -544,22 +616,8 @@ void Editor::Impl::duplicateSelected() {
     Entity src = selectedEntity();
     if (src.isNull()) return;
     pushUndo();
-    // Copia el subárbol completo con ids nuevos, a través del registro de componentes.
-    std::function<Entity(Entity, Entity, bool)> copy = [&](Entity from, Entity parent, bool root) {
-        Entity to = scene.createEntity(scene.info(from).name + (root ? " (copia)" : ""), parent);
-        scene.info(to).active = scene.info(from).active;
-        for (const auto& type : registry.types()) {
-            if (!type.has(scene, from)) continue;
-            const Json data = type.save(scene, from);
-            LoadReport ignored;
-            FieldReader reader(data, type.name, ignored);
-            type.load(scene, to, reader);
-        }
-        if (auto* kept = scene.world().get<PreservedComponents>(from)) scene.world().add<PreservedComponents>(to, *kept);
-        for (Entity c : scene.children(from)) copy(c, to, false);
-        return to;
-    };
-    Entity dup = copy(src, scene.parent(src), true);
+    Entity dup = copySubtree(scene, src, scene, scene.parent(src), registry);
+    scene.info(dup).name += " (copia)";
     if (threeD()) scene.transform(dup).translate({1, 0, 0});
     else scene.transform(dup).translate({0.5f, -0.5f, 0});
     select(dup);

@@ -76,6 +76,7 @@ public:
     bool scriptLoadScene(const std::string& nameOrPath) override;
     void scriptDrawText(float x, float y, float size, const std::string& text, Color color) override;
     PhysicsApi* scriptPhysics() override { return &physics_; }
+    Entity scriptInstantiate(const std::string& prefab, const Vec3& position) override;
     PhysicsWorld& physics() { return physics_; }
 
 private:

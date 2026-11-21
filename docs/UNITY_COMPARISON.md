@@ -2,7 +2,7 @@
 
 Este documento recorre los sistemas de Unity 6 (el editor, el runtime y los paquetes oficiales más usados),
 explica brevemente cómo funcionan y dice dónde está Titán. Es la hoja de ruta para llegar a su nivel.
-Estado de Titán a fecha de la versión 0.6.0.
+Estado de Titán a fecha de la versión 0.7.0.
 
 Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 
@@ -12,7 +12,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 |---|---|---|
 | GameObject + Component | Cada objeto es un contenedor de componentes; los scripts heredan de MonoBehaviour | ✅ Entidades ECS con componentes; scripts por entidad |
 | Escenas (.unity, YAML) | Escenas serializadas; carga aditiva y asíncrona | 🟡 Escenas JSON versionadas; falta carga aditiva y asíncrona |
-| Prefabs y variantes | Plantillas reutilizables con anulaciones por instancia | ❌ Siguiente gran sistema del editor |
+| Prefabs y variantes | Plantillas reutilizables con anulaciones por instancia | 🟡 Crear, colocar e instanciar en juego; ❌ variantes y propagación de cambios a instancias |
 | Asset Database + .meta | Ids (GUID) persistentes en .meta, reimportación automática | ✅ Ids de 64 bits en .meta, detección de duplicados; 🟡 sin reimportación al cambiar el archivo |
 | Undo/Redo | Sistema de comandos en todo el editor | 🟡 Instantáneas de escena |
 | Play Mode | Ejecuta la escena en el editor; los cambios se descartan al salir | ✅ Igual (Jugar/Pausa/Detener) |
@@ -27,7 +27,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 | OnCollisionEnter/Exit, OnTriggerEnter/Exit | Eventos de física | ✅ Desde v0.6 |
 | Coroutines | Funciones que esperan | 🟡 Lua tiene corrutinas nativas; falta `wait(segundos)` integrado |
 | Visual Scripting | Grafos de nodos | ❌ |
-| Inspector de variables públicas ([SerializeField]) | Las variables del script se editan en el Inspector | ❌ Importante: se hará con una tabla `props` en el script |
+| Inspector de variables públicas ([SerializeField]) | Las variables del script se editan en el Inspector | ✅ Tabla `props` (números, booleanos, textos) |
 
 ## 3. Gráficos
 
@@ -83,8 +83,8 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 En este orden, porque cada paso hace posibles juegos que antes no lo eran:
 
 1. **Física** ✅ (v0.6)
-2. **Variables de script editables en el Inspector** y `wait()`: programar sin tocar código para ajustar valores.
-3. **Prefabs**: reutilizar enemigos, balas, decorados.
+2. **Variables de script editables en el Inspector** ✅ (v0.7)
+3. **Prefabs** ✅ básicos (v0.7); faltan variantes y propagación
 4. **Animación esquelética** (glTF) con Animator sencillo: personajes que caminan.
 5. **Audio** (miniaudio): música y efectos 2D/3D.
 6. **UI de juego**: botones, imágenes, texto con fuentes TTF, joystick virtual.

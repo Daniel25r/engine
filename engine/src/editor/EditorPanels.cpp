@@ -950,6 +950,10 @@ void Editor::Impl::drawDetails() {
     if (auto* kept = scene.world().get<PreservedComponents>(e))
         for (auto it = kept->data.begin(); it != kept->data.end(); ++it)
             ImGui::TextDisabled("%s (tipo desconocido, se conserva)", it.key().c_str());
+    ImGui::Spacing();
+    if (ImGui::Button("Guardar como prefab", ImVec2(-1, 0))) savePrefab(e);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Guarda este objeto, sus hijos y componentes en prefabs/ para reutilizarlo");
     ImGui::PopID();
 }
 
@@ -1096,6 +1100,9 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(1);
         if (const AssetRecord* r = project->assets().find(s.script)) {
+            drawScriptProps(s);
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(1);
             if (ImGui::Button("Editar código")) openScriptFile(r->path);
         } else if (ImGui::Button("Crear script nuevo")) {
             const std::string cls = identifierFrom(scene.info(e).name);
@@ -1106,6 +1113,43 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
             s.script = project->assets().import(rel);
             openScriptFile(rel);
         }
+    }
+}
+
+void Editor::Impl::drawScriptProps(Script& s) {
+    const auto& props = scriptProps(s.script);
+    if (props.empty()) return;
+    Json over = Json::parse(s.props, nullptr, false);
+    if (!over.is_object()) over = Json::object();
+    bool changed = false;
+    for (const ScriptProp& p : props) {
+        propLabel(p.name.c_str());
+        ImGui::PushID(p.name.c_str());
+        const bool overridden = over.contains(p.name);
+        if (overridden) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.72f, 1, 1)); // valor cambiado en esta entidad
+        if (p.type == 0) {
+            float v = static_cast<float>(overridden && over[p.name].is_number() ? over[p.name].get<double>() : p.number);
+            if (ImGui::DragFloat("##p", &v, 0.05f)) { over[p.name] = v; changed = true; }
+            track();
+        } else if (p.type == 1) {
+            bool v = overridden && over[p.name].is_boolean() ? over[p.name].get<bool>() : p.boolean;
+            if (ImGui::Checkbox("##p", &v)) { pushUndo(); over[p.name] = v; changed = true; }
+        } else {
+            std::string v = overridden && over[p.name].is_string() ? over[p.name].get<std::string>() : p.text;
+            if (ImGui::InputText("##p", &v)) { over[p.name] = v; changed = true; }
+            track();
+        }
+        if (overridden) ImGui::PopStyleColor();
+        if (overridden && ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+            pushUndo();
+            over.erase(p.name); // clic derecho: volver al valor del script
+            changed = true;
+        }
+        ImGui::PopID();
+    }
+    if (changed) {
+        s.props = over.dump();
+        dirty = true;
     }
 }
 
@@ -1274,6 +1318,12 @@ void Editor::Impl::drawContent() {
             ImGui::SameLine();
             if (ImGui::SmallButton("Editar")) openScriptFile(sel->path);
         }
+        if (sel->type == AssetType::Prefab) {
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, kBlue);
+            if (ImGui::SmallButton("Añadir a la escena##prefab")) instantiatePrefabAsset(*sel);
+            ImGui::PopStyleColor();
+        }
         if (sel->type == AssetType::Model) {
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Button, kBlue);
@@ -1350,13 +1400,16 @@ void Editor::Impl::drawContent() {
                 openScriptFile(r->path);
             } else if (r->type == AssetType::Model) {
                 addModelToScene(*r);
+            } else if (r->type == AssetType::Prefab) {
+                instantiatePrefabAsset(*r);
             }
         }
         const ImVec2 a = ImGui::GetItemRectMin();
         const ImVec2 thumbA(a.x + 6 * scale, a.y + 6 * scale), thumbB(a.x + tile - 6 * scale, a.y + tile - ImGui::GetFontSize() - 10 * scale);
         static const ImU32 typeColors[] = {IM_COL32(120, 120, 120, 255), IM_COL32(230, 140, 40, 255), IM_COL32(200, 70, 70, 255),
                                            IM_COL32(70, 160, 230, 255),  IM_COL32(170, 90, 220, 255), IM_COL32(60, 190, 120, 255),
-                                           IM_COL32(200, 200, 80, 255),  IM_COL32(150, 150, 150, 255)};
+                                           IM_COL32(200, 200, 80, 255),  IM_COL32(150, 150, 150, 255),
+                                           IM_COL32(80, 200, 230, 255)};
         const ImU32 tc = typeColors[static_cast<int>(r->type)];
         if (r->type == AssetType::Texture) {
             const TextureHandle h = editorTexture(r->id);

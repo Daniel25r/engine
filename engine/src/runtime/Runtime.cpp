@@ -120,6 +120,27 @@ bool Runtime::scriptLoadScene(const std::string& nameOrPath) {
     return false;
 }
 
+Entity Runtime::scriptInstantiate(const std::string& name, const Vec3& position) {
+    for (const AssetRecord* r : assets_.all()) {
+        if (r->type != AssetType::Prefab) continue;
+        const size_t slash = r->path.find_last_of('/');
+        std::string base = r->path.substr(slash == std::string::npos ? 0 : slash + 1);
+        base = base.substr(0, base.rfind('.'));
+        if (r->path != name && base != name) continue;
+        std::string text;
+        if (!files_->readText("assets/" + r->path, text)) break;
+        const Entity e = instantiatePrefab(text, *scene_, {}, registry_);
+        if (e.isNull()) break;
+        scene_->transform(e).setPosition(position);
+        TransformSystem::update(*scene_);
+        physics_.addSubtree(*scene_, e);
+        scripts_->attachSubtree(e);
+        return e;
+    }
+    TITAN_ERROR("runtime", "Scene.instantiate: no existe el prefab '%s'", name.c_str());
+    return {};
+}
+
 void Runtime::applyPendingSceneLoad() {
     if (pendingScene_.isNull()) return;
     const UUID id = pendingScene_;

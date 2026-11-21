@@ -38,6 +38,8 @@ public:
     void read(const char* key, Color& v);
     void read(const char* key, Rect& v);
     void readAsset(const char* key, AssetRef& v);
+    // Copia un objeto JSON tal cual, como texto.
+    void readRaw(const char* key, std::string& v);
     template <class E>
     void readEnum(const char* key, E& v, std::initializer_list<std::pair<const char*, E>> names) {
         std::string s;
@@ -95,6 +97,15 @@ struct PreservedComponents {
 };
 
 constexpr int kSceneFormatVersion = 1;
+
+// Copia una entidad con todos sus hijos y componentes (con ids nuevos) a otra escena, o a la misma.
+// Es la base de Duplicar y de los prefabs.
+Entity copySubtree(Scene& src, Entity root, Scene& dst, Entity dstParent, const ComponentRegistry& registry);
+// Prefab: un archivo de escena cuyo contenido es un único subárbol.
+std::string serializePrefab(Scene& scene, Entity root, const ComponentRegistry& registry);
+// Crea en "scene" una instancia del prefab (texto) bajo "parent". Devuelve la raíz creada o nula si falla.
+Entity instantiatePrefab(const std::string& text, Scene& scene, Entity parent, const ComponentRegistry& registry,
+                         LoadReport* report = nullptr);
 
 std::string serializeScene(Scene& scene, const ComponentRegistry& registry);
 // Vacía la escena y la rellena desde el texto. Si hay errores la escena queda vacía.
