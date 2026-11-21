@@ -91,6 +91,26 @@ struct SpriteRenderer {
     bool visible = true;
 };
 
+// Primitivas de geometría generadas por el motor (los modelos importados llegarán con glTF).
+enum class MeshPrimitive { Cube, Sphere, Plane, Cylinder, Cone, Capsule };
+
+struct MeshRenderer {
+    MeshPrimitive mesh = MeshPrimitive::Cube;
+    AssetRef texture;           // nulo = sin textura
+    Color color;                // color base del material
+    float shininess = 32.0f;    // brillo especular (Blinn-Phong)
+    bool unlit = false;         // ignora las luces
+    bool visible = true;
+};
+
+struct Light {
+    enum class Type { Directional, Point };
+    Type type = Type::Directional; // la direccional ilumina hacia su forward() (-Z local)
+    Color color;
+    float intensity = 1.0f;
+    float range = 10.0f;           // solo puntual
+};
+
 struct Script {
     AssetRef script; // archivo .lua del proyecto
     bool enabled = true;

@@ -18,6 +18,22 @@ cmake --build build/desktop
 
 Resultado: `titan` (herramienta), `titan_player` (reproductor) y `titan_tests`.
 
+## Editor
+
+Escritorio:
+
+```bash
+./build/desktop/titan_editor --projects ~/TitanProyectos
+```
+
+Android (APK del editor):
+
+```bash
+cd android && ./gradlew :editor:assembleRelease
+```
+
+Queda en `android/editor/build/outputs/apk/release/editor-release.apk`.
+
 ## Crear y ejecutar un juego en escritorio
 
 ```bash
@@ -52,7 +68,7 @@ y JDK 17 o superior. Escribe la ruta del SDK en `android/local.properties` (`sdk
 2. Compila:
 
 ```bash
-cd android && ./gradlew assembleRelease
+cd android && ./gradlew :app:assembleRelease
 ```
 
 El APK queda en `android/app/build/outputs/apk/release/app-release.apk`.

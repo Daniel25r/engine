@@ -38,6 +38,8 @@ add_library(titan_core STATIC
     engine/src/core/Scene.cpp
     engine/src/core/Serialization.cpp
     engine/src/core/Project.cpp
+    engine/src/core/Geometry.cpp
+    engine/src/core/Templates.cpp
 )
 target_include_directories(titan_core PUBLIC engine/include third_party)
 target_compile_options(titan_core PRIVATE ${TITAN_WARNINGS})
@@ -68,9 +70,37 @@ endif()
 
 # ------------------------------------------------------------------ titan_runtime (bucle + sistemas)
 
-add_library(titan_runtime STATIC engine/src/runtime/Runtime.cpp)
+add_library(titan_runtime STATIC engine/src/runtime/Runtime.cpp engine/src/runtime/SceneRenderer.cpp)
 target_link_libraries(titan_runtime PUBLIC titan_core titan_render titan_scripting)
 target_compile_options(titan_runtime PRIVATE ${TITAN_WARNINGS})
+
+# ------------------------------------------------------------------ Dear ImGui 1.91.5 (MIT): interfaz del editor
+
+add_library(titan_imgui STATIC
+    third_party/imgui/imgui.cpp
+    third_party/imgui/imgui_draw.cpp
+    third_party/imgui/imgui_tables.cpp
+    third_party/imgui/imgui_widgets.cpp
+    third_party/imgui/imgui_stdlib.cpp
+    third_party/imgui/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(titan_imgui PUBLIC third_party/imgui)
+target_compile_definitions(titan_imgui PUBLIC IMGUI_IMPL_OPENGL_ES3 IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
+if(ANDROID)
+    target_link_libraries(titan_imgui PUBLIC GLESv3)
+else()
+    target_link_libraries(titan_imgui PUBLIC GLESv2)
+endif()
+
+# ------------------------------------------------------------------ titan_editor (el editor, común a Android y escritorio)
+
+add_library(titan_editor STATIC
+    engine/src/editor/EditorCore.cpp
+    engine/src/editor/EditorPanels.cpp
+    engine/src/editor/EditorViewport.cpp
+)
+target_link_libraries(titan_editor PUBLIC titan_runtime titan_imgui titan_lua)
+target_compile_options(titan_editor PRIVATE ${TITAN_WARNINGS})
 
 # ------------------------------------------------------------------ Plataformas
 
@@ -82,12 +112,21 @@ if(ANDROID)
     add_library(titan_player SHARED engine/platform/android/main_android.cpp)
     target_link_libraries(titan_player PRIVATE titan_runtime native_app_glue android EGL)
     target_link_options(titan_player PRIVATE "-u" "ANativeActivity_onCreate")
+
+    add_library(titan_editor_jni SHARED engine/platform/android/editor_jni.cpp)
+    target_link_libraries(titan_editor_jni PRIVATE titan_editor android log)
 else()
     find_package(glfw3 3.3 REQUIRED)
     add_executable(titan_player engine/platform/desktop/main_desktop.cpp)
     target_include_directories(titan_player PRIVATE third_party/stb)
     target_link_libraries(titan_player PRIVATE titan_runtime glfw)
     target_compile_definitions(titan_player PRIVATE TITAN_ENGINE_ASSETS="${CMAKE_SOURCE_DIR}/engine/assets")
+
+    add_executable(titan_editor_desktop engine/platform/desktop/editor_desktop.cpp)
+    set_target_properties(titan_editor_desktop PROPERTIES OUTPUT_NAME titan_editor)
+    target_include_directories(titan_editor_desktop PRIVATE third_party/stb)
+    target_link_libraries(titan_editor_desktop PRIVATE titan_editor glfw)
+    target_compile_definitions(titan_editor_desktop PRIVATE TITAN_ENGINE_ASSETS="${CMAKE_SOURCE_DIR}/engine/assets")
 
     if(TITAN_BUILD_TOOLS)
         add_executable(titan tools/titan/main.cpp)
@@ -106,6 +145,7 @@ else()
             tests/test_serialization.cpp
             tests/test_project.cpp
             tests/test_scripting.cpp
+            tests/test_geometry.cpp
         )
         target_link_libraries(titan_tests PRIVATE titan_core titan_scripting)
         add_test(NAME titan_tests COMMAND titan_tests)

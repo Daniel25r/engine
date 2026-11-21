@@ -18,8 +18,21 @@ Runtime::Runtime() : registry_(ComponentRegistry::createDefault()) {}
 
 Runtime::~Runtime() { shutdown(); }
 
-bool Runtime::start(FileSource& files) {
+bool Runtime::initSystems(FileSource& files) {
     files_ = &files;
+    if (!renderer_.init(files)) return false;
+    scripts_ = std::make_unique<ScriptSystem>(*this, registry_, [this](AssetRef id, std::string& name, std::string& src) {
+        const AssetRecord* r = assets_.find(id);
+        if (!r || r->type != AssetType::Script) return false;
+        name = r->path;
+        return files_->readText("assets/" + r->path, src);
+    });
+    started_ = true;
+    last_ = Clock::now();
+    return true;
+}
+
+bool Runtime::start(FileSource& files) {
     std::string text, error;
     if (!files.readText("project.titan", text)) {
         TITAN_ERROR("runtime", "El paquete no contiene project.titan");
@@ -35,23 +48,24 @@ bool Runtime::start(FileSource& files) {
         TITAN_ERROR("runtime", "Índice de recursos no válido: %s", error.c_str());
         return false;
     }
-    if (!renderer_.init(files)) return false;
-
-    scripts_ = std::make_unique<ScriptSystem>(*this, registry_, [this](AssetRef id, std::string& name, std::string& src) {
-        const AssetRecord* r = assets_.find(id);
-        if (!r || r->type != AssetType::Script) return false;
-        name = r->path;
-        return files_->readText("assets/" + r->path, src);
-    });
-
-    started_ = true;
+    if (!initSystems(files)) return false;
     if (!loadScene(startScene)) {
         TITAN_ERROR("runtime", "No se pudo cargar la escena inicial");
         shutdown();
         return false;
     }
-    last_ = Clock::now();
     TITAN_INFO("runtime", "%s %s ejecutando '%s'", kEngineName, kEngineVersion, projectName_.c_str());
+    return true;
+}
+
+bool Runtime::startEmbedded(FileSource& projectRoot, const AssetDatabase& assets, const std::string& sceneText,
+                            const std::string& sceneName) {
+    assets_ = assets;
+    if (!initSystems(projectRoot)) return false;
+    if (!activateScene(sceneText, sceneName)) {
+        shutdown();
+        return false;
+    }
     return true;
 }
 
@@ -59,13 +73,17 @@ bool Runtime::loadScene(UUID id) {
     const AssetRecord* r = assets_.find(id);
     std::string text;
     if (!r || r->type != AssetType::Scene || !files_->readText("assets/" + r->path, text)) {
-        TITAN_ERROR("runtime", "No existe la escena %s en el paquete", id.toString().c_str());
+        TITAN_ERROR("runtime", "No existe la escena %s", id.toString().c_str());
         return false;
     }
-    auto next = std::make_unique<Scene>(r->path, &events_);
+    return activateScene(text, r->path);
+}
+
+bool Runtime::activateScene(const std::string& text, const std::string& name) {
+    auto next = std::make_unique<Scene>(name, &events_);
     const LoadReport report = deserializeScene(text, *next, registry_);
-    for (auto& w : report.warnings) TITAN_WARN("runtime", "%s: %s", r->path.c_str(), w.c_str());
-    for (auto& e : report.errors) TITAN_ERROR("runtime", "%s: %s", r->path.c_str(), e.c_str());
+    for (auto& w : report.warnings) TITAN_WARN("runtime", "%s: %s", name.c_str(), w.c_str());
+    for (auto& e : report.errors) TITAN_ERROR("runtime", "%s: %s", name.c_str(), e.c_str());
     if (!report.ok()) return false;
 
     if (scene_) {
@@ -105,10 +123,10 @@ void Runtime::applyPendingSceneLoad() {
     loadScene(id);
 }
 
-void Runtime::frame(int width, int height) {
+void Runtime::frame(const Viewport& viewport) {
     if (!started_ || !scene_) return;
     const auto frameStart = Clock::now();
-    screen_ = {static_cast<float>(std::max(width, 1)), static_cast<float>(std::max(height, 1))};
+    screen_ = {static_cast<float>(std::max(viewport.width, 1)), static_cast<float>(std::max(viewport.height, 1))};
 
     float dt = std::chrono::duration<float>(frameStart - last_).count();
     last_ = frameStart;
@@ -141,7 +159,7 @@ void Runtime::frame(int width, int height) {
 
     // 5. Render.
     t = Clock::now();
-    render();
+    render(viewport);
     profile_.renderMs = msSince(t);
 
     input_.endFrame();
@@ -159,19 +177,6 @@ void Runtime::frame(int width, int height) {
     applyPendingSceneLoad();
 }
 
-Entity Runtime::findCamera() const {
-    Entity best;
-    int bestPriority = 0;
-    scene_->world().each<Camera>([&](Entity e, Camera& c) {
-        if (!scene_->isActiveInHierarchy(e)) return;
-        if (best.isNull() || c.priority > bestPriority || (c.priority == bestPriority && e.index < best.index)) {
-            best = e;
-            bestPriority = c.priority;
-        }
-    });
-    return best;
-}
-
 TextureHandle Runtime::textureFor(AssetRef ref) {
     if (ref.isNull()) return kWhiteTexture;
     auto it = textures_.find(ref.value);
@@ -183,76 +188,72 @@ TextureHandle Runtime::textureFor(AssetRef ref) {
         opt.mipmaps = r->importSettings.value("mipmaps", true);
         h = renderer_.loadTexture("assets/" + r->path, opt);
     } else {
-        TITAN_ERROR("render", "Textura %s no encontrada en el paquete", ref.toString().c_str());
+        TITAN_ERROR("render", "Textura %s no encontrada", ref.toString().c_str());
     }
     textures_[ref.value] = h; // también se cachean los fallos para no repetir el error
     return h;
 }
 
-void Runtime::render() {
+void Runtime::render(const Viewport& viewport) {
     const float aspect = screen_.x / screen_.y;
-    const Entity camEntity = findCamera();
-    Camera cam;
-    Mat4 camWorld = Mat4::translate({0, 0, 10});
-    if (!camEntity.isNull()) {
-        cam = *scene_->world().get<Camera>(camEntity);
-        camWorld = scene_->transform(camEntity).worldMatrix();
-    } else if (!warnedNoCamera_) {
-        TITAN_WARN("render", "La escena no tiene ninguna cámara activa; se usa una por defecto");
+    SceneView view;
+    if (!SceneRenderer::cameraView(*scene_, aspect, view)) {
+        if (!warnedNoCamera_) TITAN_WARN("render", "La escena no tiene ninguna cámara activa; se usa una por defecto");
         warnedNoCamera_ = true;
+        Camera def;
+        view.view = Mat4::translate({0, 0, 10}).inverted();
+        view.projection = def.projectionMatrix(aspect);
     }
-    viewProj_ = cam.projectionMatrix(aspect) * camWorld.inverted();
+    viewProj_ = view.projection * view.view;
+    perspective_ = view.perspective;
+    sceneRenderer_.render(*scene_, renderer_, viewport, view, [this](AssetRef r) { return textureFor(r); });
 
-    renderer_.beginFrame(static_cast<int>(screen_.x), static_cast<int>(screen_.y), cam.clearColor);
-    renderer_.setViewProjection(viewProj_);
-
-    drawList_.clear();
-    scene_->world().each<SpriteRenderer, Transform>([&](Entity e, SpriteRenderer& sp, Transform& tr) {
-        if (!sp.visible || !scene_->isActiveInHierarchy(e)) return;
-        drawList_.push_back({sp.sortingOrder, textureFor(sp.texture), &tr.worldMatrix(), &sp});
-    });
-    // Orden de dibujo: sortingOrder; dentro del mismo orden, por textura para agrupar lotes.
-    std::stable_sort(drawList_.begin(), drawList_.end(), [](const DrawItem& a, const DrawItem& b) {
-        return a.order != b.order ? a.order < b.order : a.texture < b.texture;
-    });
-    for (const DrawItem& d : drawList_)
-        renderer_.drawSprite(d.texture, *d.world, d.sprite->size, d.sprite->pivot, d.sprite->uv, d.sprite->color);
-
+    for (const auto& t : scriptTexts_) renderer_.drawText({t.x, t.y}, t.size, t.text, t.color);
+    scriptTexts_.clear();
     if (showStats) {
         const RenderStats& rs = renderer_.stats();
         char text[512];
         std::snprintf(text, sizeof(text),
                       "%.0f FPS  %.2f ms (scripts %.2f, transform %.2f, render %.2f)\n"
-                      "%zu entidades  %zu componentes  %d draw calls  %d sprites\n"
+                      "%zu entidades  %d draw calls  %d mallas  %d sprites  %d triangulos\n"
                       "%zu scripts  Lua %.0f KB  %zu errores",
                       fps_, profile_.frameMs, profile_.scriptMs, profile_.transformMs, profile_.renderMs,
-                      scene_->entityCount(), scene_->world().componentCount(), rs.drawCalls, rs.quads,
+                      scene_->entityCount(), rs.drawCalls, rs.meshes, rs.sprites, rs.triangles,
                       scripts_->instanceCount(), scripts_->memoryUsed() / 1024.0, scripts_->errors().size());
-        const float h = std::max(14.0f, std::min(screen_.x, screen_.y) * 0.024f);
-        renderer_.drawText({h * 0.8f, h * 0.8f}, h, text, Color{1, 1, 1, 0.85f});
+        // Arriba a la derecha: a la izquierda y abajo suele ir la interfaz del propio juego.
+        const float h = std::max(12.0f, std::min(screen_.x, screen_.y) * 0.02f);
+        size_t longest = 0, cur = 0;
+        for (const char* c = text; *c; ++c) cur = (*c == '\n') ? (longest = std::max(longest, cur), 0) : cur + 1;
+        longest = std::max(longest, cur);
+        renderer_.drawText({std::max(h * 0.5f, screen_.x - longest * h * 0.5f - h * 0.6f), h * 0.6f}, h, text,
+                           Color{1, 1, 1, 0.7f});
     }
     renderer_.endFrame();
 }
 
+void Runtime::scriptDrawText(float x, float y, float size, const std::string& text, Color color) {
+    if (scriptTexts_.size() < 256) scriptTexts_.push_back({x, y, size, text, color});
+}
+
 bool Runtime::scriptScreenToWorld(Vec2 px, Vec3& world) const {
-    const Vec3 ndc{px.x / screen_.x * 2.0f - 1.0f, 1.0f - px.y / screen_.y * 2.0f, 0.0f};
+    const float nx = px.x / screen_.x * 2.0f - 1.0f, ny = 1.0f - px.y / screen_.y * 2.0f;
     Mat4 inv;
     if (!viewProj_.inverse(inv)) return false;
-    // Punto sobre el plano Z = 0 (el plano de juego en 2D): se interseca el rayo near-far.
     auto unproject = [&](float z) {
-        const float x = ndc.x, y = ndc.y;
         const float* m = inv.m;
-        const float w = m[3] * x + m[7] * y + m[11] * z + m[15];
-        return Vec3{(m[0] * x + m[4] * y + m[8] * z + m[12]) / w, (m[1] * x + m[5] * y + m[9] * z + m[13]) / w,
-                    (m[2] * x + m[6] * y + m[10] * z + m[14]) / w};
+        const float w = m[3] * nx + m[7] * ny + m[11] * z + m[15];
+        return Vec3{(m[0] * nx + m[4] * ny + m[8] * z + m[12]) / w, (m[1] * nx + m[5] * ny + m[9] * z + m[13]) / w,
+                    (m[2] * nx + m[6] * ny + m[10] * z + m[14]) / w};
     };
     const Vec3 a = unproject(-1.0f), b = unproject(1.0f);
-    const float dz = b.z - a.z;
-    if (std::fabs(dz) < 1e-8f) {
+    // Plano de juego: Z = 0 con cámara ortográfica (2D), suelo Y = 0 con cámara en perspectiva (3D).
+    const float da = perspective_ ? a.y : a.z, db = perspective_ ? b.y : b.z;
+    if (std::fabs(db - da) < 1e-8f) {
         world = a;
         return true;
     }
-    const float k = -a.z / dz;
+    const float k = -da / (db - da);
+    if (k < 0) return false; // el rayo no llega al plano (mira hacia arriba)
     world = a + (b - a) * k;
     return true;
 }

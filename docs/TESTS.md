@@ -53,11 +53,13 @@ Arnés propio y mínimo (`tests/Test.h`), sin dependencias. Las pruebas que toca
 [ OK ] scripts: errores de sintaxis y scripts que no devuelven tabla
 [ OK ] scripts: un bucle infinito se corta por tiempo y el sistema sigue funcionando
 [ OK ] scripts: límite de memoria
+[ OK ] scripts: Screen.text con y sin color
 [ OK ] scripts: sin acceso al sistema (io, os, load, require)
 [ OK ] scripts: usar una entidad destruida da un error claro
 [ OK ] scripts: setActive llama onDisable/onEnable y detiene onUpdate
+[ OK ] geometría: primitivas cerradas, antihorarias y con normales hacia fuera
 
-43 pruebas, 0 fallidas (178.4 ms)
+45 pruebas, 0 fallidas (137.7 ms)
 ```
 
 ## Pruebas de integración ejecutadas a mano en esta sesión
@@ -69,6 +71,18 @@ Arnés propio y mínimo (`tests/Test.h`), sin dependencias. Las pruebas que toca
 | Paquete y runtime | `titan package` + `titan_player` con Xvfb y captura | La escena se dibuja; los scripts mueven la nave; el hijo sigue al padre; 0 errores de script |
 | Cambio de escena desde scripts | `TITAN_TAPS` con 3 toques simulados | `principal` → `nivel2` → `principal` a los 2 s, según el registro |
 | APK | `gradlew assembleRelease`, `apksigner verify`, `aapt2 dump badging`, `llvm-nm`, `llvm-readelf` | Firmado; 3 ABI; paquete incluido; `ANativeActivity_onCreate` exportado; solo depende de bibliotecas del sistema |
+
+## Pruebas del editor (sesión 0.3.0, ejecutadas con `titan_editor` y toques simulados)
+
+| Prueba | Resultado |
+|---|---|
+| Crear proyecto "3D Exploración" desde el editor y abrirlo | Escena 3D con luces, sombreado e inspector con los componentes reales del Jugador (captura `docs/editor-3d.png`) |
+| Jugar en el editor (3D) + 3 toques en el suelo | El jugador camina hasta el punto, recoge una gema ("Gemas: 1 / 5"), la cámara le sigue, 0 errores de script |
+| La misma prueba antes de la corrección | Detectó el fallo de `Screen.text` (argumento 5): corregido y cubierto por una prueba nueva |
+| Jugar en el editor (2D plataformas) con toques mantenidos | El jugador corre y salta, recoge una moneda, la cámara 2D le sigue |
+| Arrastrar la Caja en la vista 3D, cerrar el editor y leerla con `titan inspect` | Posición de (3.5, 0.5, -1) a (3.40, 0.5, 4.10): se mueve sobre el suelo y queda guardada |
+| Editor a 1080×2280, densidad 2,75, modo táctil | Distribución de teléfono legible (vista arriba y panel abajo, pestañas) |
+| APK del editor | Firmado, 3 ABI, 11 funciones JNI exportadas, clases Kotlin en el dex |
 
 ## Mediciones
 

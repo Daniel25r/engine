@@ -12,5 +12,6 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "TitanPlayer"
-include(":app")
+rootProject.name = "Titan"
+include(":app")      // runtime: plantilla para exportar juegos
+include(":editor")   // editor de juegos

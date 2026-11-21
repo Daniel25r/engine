@@ -21,6 +21,7 @@
 #include "titan/core/Scene.h"
 #include "titan/core/Serialization.h"
 #include "titan/render/Renderer.h"
+#include "titan/runtime/SceneRenderer.h"
 #include "titan/scripting/ScriptSystem.h"
 
 namespace titan {
@@ -40,7 +41,12 @@ public:
 
     // Carga project.titan, el índice de recursos y la escena inicial. Necesita un contexto GL activo.
     bool start(FileSource& files);
-    void frame(int width, int height);
+    // Modo Play del editor: ejecuta una escena en memoria (con sus cambios sin guardar) usando los
+    // recursos del proyecto abierto. Los cambios que haga el juego no tocan la escena del editor.
+    bool startEmbedded(FileSource& projectRoot, const AssetDatabase& assets, const std::string& sceneText,
+                       const std::string& sceneName);
+    void frame(int width, int height) { frame(Viewport{0, 0, width, height}); }
+    void frame(const Viewport& viewport);
     void pause();
     void resume();
     void shutdown();
@@ -65,12 +71,14 @@ public:
     Vec2 scriptScreenSize() const override { return screen_; }
     bool scriptScreenToWorld(Vec2 pixels, Vec3& world) const override;
     bool scriptLoadScene(const std::string& nameOrPath) override;
+    void scriptDrawText(float x, float y, float size, const std::string& text, Color color) override;
 
 private:
+    bool initSystems(FileSource& files);
     bool loadScene(UUID id);
+    bool activateScene(const std::string& text, const std::string& name);
     void applyPendingSceneLoad();
-    void render();
-    Entity findCamera() const;
+    void render(const Viewport& viewport);
     TextureHandle textureFor(AssetRef ref);
 
     using Clock = std::chrono::steady_clock;
@@ -94,6 +102,10 @@ private:
     uint64_t frameIndex_ = 0;
     Vec2 screen_{1, 1};
     Mat4 viewProj_;
+    bool perspective_ = false;
+    SceneRenderer sceneRenderer_;
+    struct ScriptText { float x, y, size; std::string text; Color color; };
+    std::vector<ScriptText> scriptTexts_;
     bool started_ = false;
     bool quitRequested_ = false;
     bool warnedNoCamera_ = false;
@@ -101,14 +113,6 @@ private:
     FrameProfile profile_;
     float fps_ = 0, fpsTimer_ = 0;
     int fpsFrames_ = 0;
-
-    struct DrawItem {
-        int order;
-        TextureHandle texture;
-        const Mat4* world;
-        const SpriteRenderer* sprite;
-    };
-    std::vector<DrawItem> drawList_;
 };
 
 } // namespace titan

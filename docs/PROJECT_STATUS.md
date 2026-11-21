@@ -1,6 +1,6 @@
-# Estado del proyecto — Titán 0.2.0
+# Estado del proyecto — Titán 0.3.0
 
-Fecha: 2026-11-21 · Generación actual: **1 (Fundación)**
+Fecha: 2026-11-21 · Generaciones 1 (Fundación) y 2 (Editor) en curso; primeros pasos de la 5 (3D)
 
 Etiquetas: [COMPLETADO Y PROBADO] · [IMPLEMENTADO Y COMPILADO] · [IMPLEMENTADO, PENDIENTE DE PRUEBA REAL] ·
 [IMPLEMENTACIÓN PARCIAL] · [PROTOTIPO TÉCNICO] · [EN DESARROLLO] · [PENDIENTE] · [BLOQUEADO]
@@ -14,9 +14,39 @@ de escritorio. **Nada se ha probado en un dispositivo Android real**: en este en
 | Hito | Estado | Evidencia |
 |---|---|---|
 | A — Motor básico real | **Cumplido en escritorio** | Prueba "proyecto: crear, guardar escena, cerrar y volver a abrir"; demostración con `titan` (ver TESTS.md) |
-| B — Primer juego 2D | Parcial | Hay proyecto, imagen, script, movimiento, cámara y ejecución. Faltan colisiones, física, interfaz y sonido |
-| C — Primer juego 3D | Pendiente | — |
+| B — Primer juego 2D | Parcial | Desde el editor: proyecto 2D, importar imagen, personaje, script, movimiento, cámara, escena, Jugar, texto en pantalla, guardar. Faltan colisionadores/física (las colisiones de la plantilla son por distancia en Lua) y sonido |
+| C — Primer juego 3D | Parcial | Desde el editor: proyecto 3D, primitivas, material (color, textura, brillo), cámara, luces, personaje con script, Jugar. Faltan importar modelos y física 3D |
 | D — Juego independiente | Parcial | `titan package` + plantilla Gradle generan un APK firmado y validado. Falta instalarlo en un dispositivo y exportar desde el propio Android |
+
+## Editor (en la app)
+
+Probado en escritorio con el mismo código que en Android, manejado de forma automática (toques simulados y capturas).
+**No probado en un teléfono.**
+
+| Función | Estado |
+|---|---|
+| Navegador de proyectos: crear con plantilla 2D/3D, abrir, borrar con confirmación, reabrir el último | [COMPLETADO Y PROBADO] (crear y abrir) |
+| Vista de escena: cámara de edición 2D/3D, rejilla, gizmos de cámaras y luces, selección resaltada | [COMPLETADO Y PROBADO] |
+| Seleccionar tocando y mover arrastrando (sobre el suelo en 3D, plano XY en 2D) con imán | [COMPLETADO Y PROBADO] (arrastre guardado y releído) |
+| Gestos: girar, desplazar, pellizcar para zoom | [IMPLEMENTADO, PENDIENTE DE PRUEBA REAL] (multitáctil sin probar) |
+| Jerarquía: crear (vacío, sprite, 6 primitivas, cámara, luces), duplicar, eliminar, arrastrar para cambiar padre | [IMPLEMENTADO Y COMPILADO] |
+| Inspector: nombre, activo, Transform, Camera, SpriteRenderer, MeshRenderer, Light, Script; añadir y quitar componentes | [COMPLETADO Y PROBADO] (visual) |
+| Editor de código: abrir, crear, guardar, comprobar sintaxis con línea, atajos táctiles | [IMPLEMENTACIÓN PARCIAL] (sin resaltado de sintaxis, autocompletado ni pestañas múltiples) |
+| Recursos: importar (selector del sistema en Android, ruta en escritorio), asignar texturas y scripts, escenas | [IMPLEMENTADO Y COMPILADO] |
+| Consola con filtros y errores de script con enlace al archivo | [COMPLETADO Y PROBADO] |
+| Jugar / Detener dentro del editor (los cambios del juego se descartan al detener) | [COMPLETADO Y PROBADO] (2D y 3D) |
+| Deshacer / rehacer | [IMPLEMENTACIÓN PARCIAL] (instantáneas de escena, no comandos) |
+| Guardado automático al salir o pausar la app | [IMPLEMENTADO, PENDIENTE DE PRUEBA REAL] |
+| Exportar desde el editor | [IMPLEMENTACIÓN PARCIAL] (genera el paquete del juego; el APK se compila en un PC) |
+| Teclado en pantalla de Android para escribir código | [IMPLEMENTADO, PENDIENTE DE PRUEBA REAL] |
+
+## 3D
+
+| Función | Estado |
+|---|---|
+| Primitivas (cubo, esfera, plano, cilindro, cono, cápsula) con normales y caras correctas | [COMPLETADO Y PROBADO] |
+| Luz ambiente + direccional + 4 puntuales (Blinn-Phong), profundidad, culling, transparencias | [COMPLETADO Y PROBADO] (visual) |
+| Sombras, PBR, importar glTF/OBJ, física 3D | [PENDIENTE] |
 
 ## Core
 
@@ -46,7 +76,7 @@ de escritorio. **Nada se ha probado en un dispositivo Android real**: en este en
 |---|---|
 | Bucle con paso fijo de 60 Hz y límite de 5 pasos | [IMPLEMENTADO Y COMPILADO] (ejecutado en escritorio) |
 | Cambio de escena desde scripts al final del fotograma | [COMPLETADO Y PROBADO] (ida y vuelta en el reproductor) |
-| Cámara ortográfica y en perspectiva, con prioridad | [IMPLEMENTACIÓN PARCIAL] (la ortográfica se ha ejecutado; la perspectiva solo se ha compilado) |
+| Cámara ortográfica y en perspectiva, con prioridad | [COMPLETADO Y PROBADO] |
 | Sprites por lotes con textura, color, pivote, UV y orden | [COMPLETADO Y PROBADO] (captura del reproductor) |
 | Filtro de textura desde el .meta (linear/nearest, mipmaps) | [IMPLEMENTADO Y COMPILADO] |
 | Recuperación del contexto GL en Android | [IMPLEMENTADO, PENDIENTE DE PRUEBA REAL] |
@@ -74,7 +104,7 @@ de escritorio. **Nada se ha probado en un dispositivo Android real**: en este en
 |---|---|
 | `titan` CLI: new, demo, tree, inspect, set, add-entity, add-component, assets, check, package | [COMPLETADO Y PROBADO] (ejecutado; ver TESTS.md) |
 | Reproductor de escritorio con toques simulados y capturas | [COMPLETADO Y PROBADO] |
-| Editor Android (Kotlin + JNI) | [PENDIENTE] — Generación 2 |
+| APK del editor (Kotlin + JNI) | [IMPLEMENTADO Y COMPILADO] (firmado y validado; sin instalar en un teléfono) |
 
 ## Android
 

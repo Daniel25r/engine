@@ -293,7 +293,17 @@ const luaL_Reg kInputGlobals[] = {{"touchCount", i_touchCount}, {"touch", i_touc
 
 int sc_width(lua_State* L) { lua_pushnumber(L, sys(L).host().scriptScreenSize().x); return 1; }
 int sc_height(lua_State* L) { lua_pushnumber(L, sys(L).host().scriptScreenSize().y); return 1; }
-const luaL_Reg kScreenGlobals[] = {{"width", sc_width}, {"height", sc_height}, {nullptr, nullptr}};
+int sc_text(lua_State* L) {
+    const float x = static_cast<float>(luaL_checknumber(L, 1)), y = static_cast<float>(luaL_checknumber(L, 2));
+    const float size = static_cast<float>(luaL_checknumber(L, 3));
+    // El color se lee antes que el texto: luaL_tolstring apila un valor y movería los índices.
+    const Color c{static_cast<float>(luaL_optnumber(L, 5, 1)), static_cast<float>(luaL_optnumber(L, 6, 1)),
+                  static_cast<float>(luaL_optnumber(L, 7, 1)), static_cast<float>(luaL_optnumber(L, 8, 1))};
+    const char* text = luaL_tolstring(L, 4, nullptr);
+    sys(L).host().scriptDrawText(x, y, size, text, c);
+    return 0;
+}
+const luaL_Reg kScreenGlobals[] = {{"width", sc_width}, {"height", sc_height}, {"text", sc_text}, {nullptr, nullptr}};
 
 std::string joinArgs(lua_State* L) {
     std::string out;

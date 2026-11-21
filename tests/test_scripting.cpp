@@ -19,6 +19,8 @@ public:
     Vec2 scriptScreenSize() const override { return {800, 600}; }
     bool scriptScreenToWorld(Vec2 p, Vec3& w) const override { w = {p.x / 100, p.y / 100, 0}; return true; }
     bool scriptLoadScene(const std::string& n) override { requestedScene = n; return true; }
+    void scriptDrawText(float, float, float, const std::string& t, Color) override { lastText = t; }
+    std::string lastText;
 };
 
 struct Fixture {
@@ -178,6 +180,14 @@ TEST("scripts: límite de memoria") {
     CHECK(!f.scripts.runString("local t = {} for i = 1, 1e8 do t[i] = ('x'):rep(100) .. i end"));
     CHECK(f.scripts.errors().back().message.find("memory") != std::string::npos);
     CHECK(f.scripts.runString("collectgarbage() y = 2"));
+}
+
+TEST("scripts: Screen.text con y sin color") {
+    Fixture f;
+    CHECK(f.scripts.runString("Screen.text(10, 20, 24, 'Puntos: ' .. 5)"));
+    CHECK_EQ(f.host.lastText, std::string("Puntos: 5"));
+    CHECK(f.scripts.runString("Screen.text(10, 20, 24, 'Gris', 0.8, 0.8, 0.8)"));
+    CHECK_EQ(f.host.lastText, std::string("Gris"));
 }
 
 TEST("scripts: sin acceso al sistema (io, os, load, require)") {

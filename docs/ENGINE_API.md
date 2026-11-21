@@ -52,7 +52,7 @@ Si un método lanza un error, el error se registra y esa instancia deja de ejecu
 | `getScale()`, `setScale(x,y,z)` o `setScale(s)` | Escala local |
 | `forward()`, `right()`, `up()` | Direcciones en el mundo (delante = −Z) |
 | `getColor()`, `setColor(r,g,b[,a])`, `setSize(w,h)` | Del `SpriteRenderer` |
-| `hasComponent(n)`, `addComponent(n)`, `removeComponent(n)` | Por nombre: `Camera`, `SpriteRenderer`, `Script` |
+| `hasComponent(n)`, `addComponent(n)`, `removeComponent(n)` | Por nombre: `Camera`, `SpriteRenderer`, `MeshRenderer`, `Light`, `Script` |
 | `getScript()` | La instancia del script de esa entidad, para que los scripts se comuniquen |
 
 Las funciones que devuelven vectores devuelven varios valores: `local x, y, z = e:getPosition()`.
@@ -64,8 +64,9 @@ Las funciones que devuelven vectores devuelven varios valores: `local x, y, z = 
 | `Entity.find(nombre)`, `Entity.get(id)`, `Entity.create(nombre [, padre])` | Buscar y crear entidades |
 | `Scene.load(nombre o ruta)`, `Scene.name()` | Cambiar de escena (se aplica al final del fotograma) |
 | `Time.delta()`, `Time.fixedDelta()`, `Time.time()`, `Time.frame()` | Tiempo |
-| `Input.touchCount()`, `Input.touch(i)` → `{id, x, y, phase}`, `Input.touchWorld(i)` → x,y,z, `Input.tapped()` | Táctil; `i` empieza en 1; `phase` es "began" o "held" |
+| `Input.touchCount()`, `Input.touch(i)` → `{id, x, y, phase}`, `Input.touchWorld(i)` → x,y,z (plano z = 0 en 2D; suelo y = 0 con cámara en perspectiva), `Input.tapped()` | Táctil; `i` empieza en 1; `phase` es "began" o "held" |
 | `Screen.width()`, `Screen.height()` | Píxeles |
+| `Screen.text(x, y, tamaño, texto [, r, g, b, a])` | Texto en pantalla durante este fotograma (de momento solo ASCII) |
 | `Debug.log(...)`, `Debug.warn(...)`, `Debug.error(...)`, `print(...)` | Al registro del motor (logcat en Android) |
 
 Bibliotecas de Lua disponibles: base (sin `load`, `loadfile` ni `dofile`), `string` (sin `dump`), `table`, `math`,

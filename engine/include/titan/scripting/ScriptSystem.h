@@ -39,6 +39,8 @@ public:
     virtual Vec2 scriptScreenSize() const = 0;
     virtual bool scriptScreenToWorld(Vec2 pixels, Vec3& world) const = 0;
     virtual bool scriptLoadScene(const std::string& nameOrPath) = 0;
+    // Texto en pantalla durante este fotograma (píxeles, origen arriba a la izquierda).
+    virtual void scriptDrawText(float x, float y, float size, const std::string& text, Color color) = 0;
 };
 
 struct ScriptError {

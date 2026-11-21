@@ -185,6 +185,38 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("visible", sp.visible);
         });
 
+    r.addSimple<MeshRenderer>(
+        "MeshRenderer",
+        [](const MeshRenderer& m) {
+            static const char* names[] = {"cube", "sphere", "plane", "cylinder", "cone", "capsule"};
+            return Json{{"mesh", names[static_cast<int>(m.mesh)]}, {"texture", assetToJson(m.texture)},
+                        {"color", toJson(m.color)}, {"shininess", toJson(m.shininess)}, {"unlit", m.unlit},
+                        {"visible", m.visible}};
+        },
+        [](MeshRenderer& m, FieldReader& rd) {
+            rd.readEnum("mesh", m.mesh,
+                        {{"cube", MeshPrimitive::Cube}, {"sphere", MeshPrimitive::Sphere}, {"plane", MeshPrimitive::Plane},
+                         {"cylinder", MeshPrimitive::Cylinder}, {"cone", MeshPrimitive::Cone}, {"capsule", MeshPrimitive::Capsule}});
+            rd.readAsset("texture", m.texture);
+            rd.read("color", m.color);
+            rd.read("shininess", m.shininess);
+            rd.read("unlit", m.unlit);
+            rd.read("visible", m.visible);
+        });
+
+    r.addSimple<Light>(
+        "Light",
+        [](const Light& l) {
+            return Json{{"type", l.type == Light::Type::Point ? "point" : "directional"}, {"color", toJson(l.color)},
+                        {"intensity", toJson(l.intensity)}, {"range", toJson(l.range)}};
+        },
+        [](Light& l, FieldReader& rd) {
+            rd.readEnum("type", l.type, {{"directional", Light::Type::Directional}, {"point", Light::Type::Point}});
+            rd.read("color", l.color);
+            rd.read("intensity", l.intensity);
+            rd.read("range", l.range);
+        });
+
     r.addSimple<Script>(
         "Script", [](const Script& sc) { return Json{{"script", assetToJson(sc.script)}, {"enabled", sc.enabled}}; },
         [](Script& sc, FieldReader& rd) {

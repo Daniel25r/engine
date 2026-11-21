@@ -154,9 +154,20 @@ Detalles y API en `docs/ENGINE_API.md`. Aislamiento:
 | D5 | UUID de 64 bits en `.meta` | Referencias que sobreviven a renombrar o mover | Rutas como referencia (se rompen al reorganizar) |
 | D6 | Runtime separado del editor | El APK exportado no lleva herramientas | Un único binario con modo editor |
 | D7 | Runtime de Android con NativeActivity | Sin Java en el juego exportado | GameActivity (se evaluará al añadir teclado y mando) |
-| D8 | Editor Android en Kotlin + JNI hacia el Core (Generación 2) | IU nativa de Android; el Core sigue siendo C++ | Dibujar la IU del editor con el propio renderizador |
+| D8 | Editor en C++ con Dear ImGui sobre el renderizador propio; Kotlin solo para la actividad, el teclado y los archivos | Un único editor para Android y escritorio que se puede ejecutar y probar de forma automática; la vista de escena y el modo Play comparten contexto GL con la interfaz | Interfaz Kotlin/Compose + JNI (decisión anterior: duplicaba la interfaz por plataforma y no se podía probar sin dispositivo) |
 
-## 12. Límites actuales
+## 12. Editor
 
-Ver `docs/PROJECT_STATUS.md`. Resumen: sin editor visual todavía (la herramienta `titan` es la interfaz),
-sin física, audio, 3D, animación, prefabs ni UI de juego. Nada se ha probado aún en un dispositivo Android real.
+`titan_editor` (C++, Dear ImGui) depende de runtime, render y core. La plataforma implementa `EditorPlatform`:
+carpeta de proyectos, teclado en pantalla, selector de archivos, portapapeles, fuentes y densidad.
+- Escritorio: `engine/platform/desktop/editor_desktop.cpp` (GLFW), con opciones de automatización para pruebas.
+- Android: `android/editor` (Kotlin: `GLSurfaceView`, `InputConnection`, SAF) + `editor_jni.cpp`.
+
+La escena que se edita es una `titan::Scene`. Jugar serializa la escena en memoria y la ejecuta con un `Runtime`
+aparte; al detener se descarta y la escena de edición queda como estaba. Deshacer y rehacer guardan, de momento,
+instantáneas de la escena serializada (pendiente: comandos por operación).
+
+## 13. Límites actuales
+
+Ver `docs/PROJECT_STATUS.md`. Resumen: sin física, audio, animación, prefabs, importación de modelos ni UI de juego (solo `Screen.text`).
+Nada se ha probado aún en un dispositivo Android real.

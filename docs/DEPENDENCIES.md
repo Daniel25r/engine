@@ -41,6 +41,18 @@ en `third_party/` con su versión fijada, así la compilación no depende de la 
 | Limitaciones | Sin WebP ni compresión de GPU (ETC2/ASTC); con stb_image solo se compilan PNG y JPEG |
 | Alternativas | libpng + libjpeg-turbo (más rápidas, más pesadas), `AImageDecoder` (solo Android 11+) |
 
+### Dear ImGui 1.91.5
+| | |
+|---|---|
+| Función | Interfaz del editor (no se usa en los juegos exportados) |
+| Licencia | MIT (`third_party/imgui/LICENSE.txt`) |
+| Origen | `github.com/ocornut/imgui`, etiqueta `v1.91.5`; backend `imgui_impl_opengl3` en modo ES 3 |
+| Android | Sí (C++ y GLES 3). Desplazamiento táctil, teclado y portapapeles los implementa Titán |
+| Coste | ~1 MB de código máquina por ABI en el APK del editor |
+| Limitaciones | Pensada para ratón: Titán añade desplazamiento por arrastre, escalado por densidad y controles más grandes |
+| Alternativas | Interfaz nativa Kotlin/Compose (no se puede probar sin dispositivo y duplica el editor), Nuklear, RmlUi |
+| Motivo | Un solo editor para todas las plataformas, comprobable automáticamente |
+
 ### Bibliotecas del sistema
 - Android: `libandroid`, `libEGL`, `libGLESv3`, `liblog` (NDK r26.3, API mínima 24) y `native_app_glue` del NDK (Apache 2.0).
 - Escritorio: GLFW 3.3 (zlib) y Mesa `libGLESv2` (MIT). Solo para desarrollo y pruebas; no van en el APK.

@@ -3,16 +3,20 @@
 Motor de videojuegos propio para Android, en C++17 sobre OpenGL ES 3.0, con scripts en Lua.
 "Titán" es un nombre provisional; se cambia en `engine/include/titan/core/Version.h` y en `android/app/build.gradle.kts`.
 
-**Estado: Generación 1 (Fundación), versión 0.2.0.** Funciona la cadena
-proyecto → escena → entidades → componentes → render → scripts → ejecución → guardado,
-probada en escritorio. El APK compila y se valida, pero todavía no se ha probado en un teléfono.
-Detalle honesto en [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
+**Estado: versión 0.3.0.** Titán tiene un **editor de juegos dentro de la app**: creas un proyecto 2D o 3D,
+construyes la escena con el dedo, programas el comportamiento en Lua y pulsas **Jugar** para probarlo ahí mismo.
+El mismo editor funciona en Android (`android/editor`) y en escritorio (`titan_editor`).
+Probado de forma automática en escritorio; **todavía no se ha probado en un teléfono real**.
+Detalle función por función en [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
+
+![Editor](docs/editor-3d.png)
 
 ## En 1 minuto
 
 ```bash
 cmake -S . -B build/desktop -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build/desktop
 ./build/desktop/titan_tests
+./build/desktop/titan_editor --projects mis_proyectos
 ./build/desktop/titan demo mi_demo
 ./build/desktop/titan tree mi_demo
 ./build/desktop/titan set mi_demo Nave Transform.scale 2 2 1
@@ -38,14 +42,15 @@ cmake -S . -B build/desktop -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build
 ## Estructura
 
 ```
-engine/include/titan/{core,render,scripting,runtime}   API pública
-engine/src/{core,render,scripting,runtime}             implementación
+engine/include/titan/{core,render,scripting,runtime,editor}   API pública
+engine/src/{core,render,scripting,runtime,editor}             implementación
 engine/platform/{android,desktop}                      capa de plataforma
 engine/assets/                                         recursos del motor (fuente de depuración)
 third_party/{lua,nlohmann,stb}                         dependencias fijadas
 tools/titan/                                           herramienta de línea de comandos
 tests/                                                 pruebas
-android/                                               plantilla de exportación (Gradle)
+android/editor/                                        app del editor (Kotlin + JNI)
+android/app/                                           plantilla de exportación de juegos (Gradle)
 samples/demo/project/                                  proyecto de demostración
 docs/                                                  documentación técnica
 ```

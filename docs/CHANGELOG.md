@@ -1,5 +1,27 @@
 # Registro de cambios
 
+## 0.3.0 — 2026-11-21 · Editor y 3D
+
+Añadido
+- **Editor de juegos dentro de la app** (Android y escritorio, mismo código): navegador de proyectos con plantillas,
+  vista de escena con gestos táctiles, selección tocando, mover objetos arrastrando (con imán), jerarquía con
+  arrastrar y soltar, inspector de todos los componentes, editor de código Lua con comprobación de sintaxis y
+  atajos táctiles, recursos (importar, asignar, escenas), consola, deshacer/rehacer y botón Jugar/Detener que
+  ejecuta el juego dentro del editor con el mismo Runtime que los juegos exportados.
+- App Android del editor (`android/editor`, Kotlin + JNI): táctil multipunto, teclado en pantalla, teclado físico,
+  portapapeles, importación con el selector del sistema y guardado automático al salir.
+- 3D: `MeshRenderer` (cubo, esfera, plano, cilindro, cono, cápsula), `Light` (direccional y puntual),
+  iluminación Blinn-Phong, búfer de profundidad, back-face culling, transparencias ordenadas.
+- `SceneRenderer`: un único camino de render para el editor y el juego.
+- Plantillas: 2D vacío, 3D vacío, 2D plataformas jugable, 3D exploración jugable.
+- API de Lua: `Screen.text`. `Input.touchWorld` interseca el suelo (y = 0) con cámara en perspectiva.
+
+Corregido
+- `Screen.text` leía mal el color (lo detectó la prueba del editor en modo Play).
+
+Cambiado
+- Decisión D8: la interfaz del editor se dibuja en C++ con Dear ImGui en lugar de Kotlin (ver ARCHITECTURE.md).
+
 ## 0.2.0 — 2026-11-21 · Fundación de Titán
 
 Reestructuración completa del prototipo "Forja 0.1" como motor modular.

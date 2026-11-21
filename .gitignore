@@ -10,3 +10,5 @@ samples/*/package/
 *.jks
 *.keystore
 *.bak
+android/editor/build/
+android/editor/.cxx/

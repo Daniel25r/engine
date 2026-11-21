@@ -65,6 +65,10 @@ Reglas comunes:
 | `Camera` | `projection` ("orthographic"/"perspective"), `orthographicSize` (media altura), `fieldOfView` (grados), `near`, `far`, `priority`, `clearColor` [4] |
 | `SpriteRenderer` | `texture` (recurso), `color` [4], `size` [2], `pivot` [2], `uv` [4], `sortingOrder`, `visible` |
 | `Script` | `script` (recurso .lua), `enabled` |
+| `MeshRenderer` | `mesh` ("cube", "sphere", "plane", "cylinder", "cone", "capsule"), `texture`, `color` [4], `shininess`, `unlit`, `visible` |
+| `Light` | `type` ("directional"/"point"), `color` [4], `intensity`, `range` |
+
+Añadir componentes nuevos no cambia la versión del formato: un motor antiguo los conserva como desconocidos.
 
 ## Metadatos de recurso — `<archivo>.meta`
 

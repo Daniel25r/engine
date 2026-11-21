@@ -11,7 +11,7 @@ fun prop(name: String, default: String) = (project.findProperty(name) as String?
 
 val gamePackage = file(prop("titanPackage", "../../samples/demo/package"))
 if (!gamePackage.resolve("project.titan").exists()) {
-    throw GradleException("No hay un paquete de juego en $gamePackage. Genera uno con: titan package <proyecto> <salida>")
+    logger.warn("Titán: no hay un paquete de juego en $gamePackage. Genera uno con: titan package <proyecto> <salida>")
 }
 
 android {
@@ -33,6 +33,7 @@ android {
             cmake {
                 arguments += listOf("-DANDROID_STL=c++_static", "-DTITAN_BUILD_TESTS=OFF", "-DTITAN_BUILD_TOOLS=OFF")
                 cppFlags += listOf("-fexceptions")
+                targets += listOf("titan_player")
             }
         }
     }
