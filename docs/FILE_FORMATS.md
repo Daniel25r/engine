@@ -92,4 +92,4 @@ paquete/
   assets/...            los recursos, sin .meta
 ```
 
-En el APK, el paquete va en la raíz de `assets/`, junto a `engine/font.png`.
+En el APK, el paquete va en la raíz de `assets/`, junto a los recursos del motor (`engine/fonts/`).

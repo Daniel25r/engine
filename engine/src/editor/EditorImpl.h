@@ -14,6 +14,8 @@
 #include "titan/render/Renderer.h"
 #include "titan/runtime/Runtime.h"
 #include "titan/runtime/SceneRenderer.h"
+#include "titan/runtime/UIRenderer.h"
+#include "titan/ui/UISystem.h"
 
 namespace titan {
 
@@ -52,6 +54,12 @@ struct Editor::Impl {
     ProjectFiles files;
     std::unordered_map<uint64_t, TextureHandle> textureCache;
     std::unordered_map<uint64_t, int> modelCache;
+    std::unordered_map<uint64_t, int> fontCache;
+    UISystem editorUI;          // interfaz de juego dibujada sobre la vista del editor
+    bool showUI = true;
+    bool movingUI = false;
+    Vec2 uiMoveStart;
+    ImVec2 uiGrab;
     std::string status;   // mensaje breve en la barra superior
     float statusTime = 0;
 
@@ -165,6 +173,8 @@ struct Editor::Impl {
     void select(Entity e);
     TextureHandle editorTexture(AssetRef ref);
     int editorModel(AssetRef ref);
+    int editorFont(AssetRef ref);
+    void drawUIOutlines(ImDrawList* dl);
     // Caja local del objeto (cubo unidad para primitivas, límites del modelo si lo tiene).
     bool localBounds(Entity e, Vec3& min, Vec3& max);
     void addModelToScene(const AssetRecord& r);

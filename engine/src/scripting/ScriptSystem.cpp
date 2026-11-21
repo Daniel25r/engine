@@ -1,5 +1,6 @@
 #include "titan/scripting/ScriptSystem.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 
@@ -159,15 +160,74 @@ int e_setScale(lua_State* L) {
 int e_forward(lua_State* L) { return push3(L, scene(L).computeWorldMatrix(live(L, 1)).transformDirection({0, 0, -1}).normalized()); }
 int e_right(lua_State* L) { return push3(L, scene(L).computeWorldMatrix(live(L, 1)).transformDirection({1, 0, 0}).normalized()); }
 int e_up(lua_State* L) { return push3(L, scene(L).computeWorldMatrix(live(L, 1)).transformDirection({0, 1, 0}).normalized()); }
+// Color del componente visible de la entidad: SpriteRenderer, UIImage, UIText o MeshRenderer.
+Color& colorOf(lua_State* L, Entity e) {
+    World& w = scene(L).world();
+    if (auto* c = w.get<SpriteRenderer>(e)) return c->color;
+    if (auto* c = w.get<UIImage>(e)) return c->color;
+    if (auto* c = w.get<UIText>(e)) return c->color;
+    if (auto* c = w.get<MeshRenderer>(e)) return c->color;
+    luaL_error(L, "'%s' no tiene nada con color (SpriteRenderer, UIImage, UIText o MeshRenderer)", scene(L).info(e).name.c_str());
+    static Color dummy;
+    return dummy;
+}
 int e_getColor(lua_State* L) {
-    const Color c = sprite(L, live(L, 1)).color;
+    const Color c = colorOf(L, live(L, 1));
     lua_pushnumber(L, c.r); lua_pushnumber(L, c.g); lua_pushnumber(L, c.b); lua_pushnumber(L, c.a);
     return 4;
 }
 int e_setColor(lua_State* L) {
-    SpriteRenderer& sp = sprite(L, live(L, 1));
-    sp.color = {static_cast<float>(luaL_checknumber(L, 2)), static_cast<float>(luaL_checknumber(L, 3)),
-                static_cast<float>(luaL_checknumber(L, 4)), static_cast<float>(luaL_optnumber(L, 5, sp.color.a))};
+    Color& c = colorOf(L, live(L, 1));
+    c = {static_cast<float>(luaL_checknumber(L, 2)), static_cast<float>(luaL_checknumber(L, 3)),
+         static_cast<float>(luaL_checknumber(L, 4)), static_cast<float>(luaL_optnumber(L, 5, c.a))};
+    return 0;
+}
+
+// ---- Interfaz de juego ----
+template <class T>
+T& uiComp(lua_State* L, Entity e, const char* name) {
+    T* c = scene(L).world().get<T>(e);
+    if (!c) luaL_error(L, "'%s' no tiene %s", scene(L).info(e).name.c_str(), name);
+    return *c;
+}
+int e_setText(lua_State* L) {
+    UIText& t = uiComp<UIText>(L, live(L, 1), "UIText");
+    t.text = luaL_tolstring(L, 2, nullptr); // acepta números: e:setText(puntos)
+    return 0;
+}
+int e_getText(lua_State* L) { lua_pushstring(L, uiComp<UIText>(L, live(L, 1), "UIText").text.c_str()); return 1; }
+int e_setFill(lua_State* L) {
+    UIImage& i = uiComp<UIImage>(L, live(L, 1), "UIImage");
+    i.fill = std::clamp(static_cast<float>(luaL_checknumber(L, 2)), 0.0f, 1.0f);
+    return 0;
+}
+int e_getFill(lua_State* L) { lua_pushnumber(L, uiComp<UIImage>(L, live(L, 1), "UIImage").fill); return 1; }
+int e_isPressed(lua_State* L) { lua_pushboolean(L, uiComp<UIButton>(L, live(L, 1), "UIButton").pressed); return 1; }
+int e_wasClicked(lua_State* L) { lua_pushboolean(L, uiComp<UIButton>(L, live(L, 1), "UIButton").clicked); return 1; }
+int e_setInteractable(lua_State* L) {
+    uiComp<UIButton>(L, live(L, 1), "UIButton").interactable = lua_toboolean(L, 2);
+    return 0;
+}
+int e_getJoystick(lua_State* L) {
+    const UIJoystick& j = uiComp<UIJoystick>(L, live(L, 1), "UIJoystick");
+    lua_pushnumber(L, j.value.x);
+    lua_pushnumber(L, j.value.y);
+    return 2;
+}
+int e_getUIPosition(lua_State* L) {
+    const UIRect& r = uiComp<UIRect>(L, live(L, 1), "UIRect");
+    lua_pushnumber(L, r.position.x);
+    lua_pushnumber(L, r.position.y);
+    return 2;
+}
+int e_setUIPosition(lua_State* L) {
+    UIRect& r = uiComp<UIRect>(L, live(L, 1), "UIRect");
+    r.position = {static_cast<float>(luaL_checknumber(L, 2)), static_cast<float>(luaL_checknumber(L, 3))};
+    return 0;
+}
+int e_setUISize(lua_State* L) {
+    UIRect& r = uiComp<UIRect>(L, live(L, 1), "UIRect");
+    r.size = {static_cast<float>(luaL_checknumber(L, 2)), static_cast<float>(luaL_checknumber(L, 3))};
     return 0;
 }
 int e_setSize(lua_State* L) {
@@ -286,7 +346,11 @@ const luaL_Reg kEntityMethods[] = {
     {"getScript", e_getScript}, {"addForce", e_addForce}, {"addImpulse", e_addImpulse}, {"addTorque", e_addTorque},
     {"setVelocity", e_setVelocity}, {"getVelocity", e_getVelocity}, {"teleport", e_teleport},
     {"playAnimation", e_playAnimation}, {"stopAnimation", e_stopAnimation}, {"getAnimation", e_getAnimation},
-    {"setAnimationSpeed", e_setAnimationSpeed}, {"playSound", e_playSound}, {"stopSound", e_stopSound}, {nullptr, nullptr}};
+    {"setAnimationSpeed", e_setAnimationSpeed}, {"playSound", e_playSound}, {"stopSound", e_stopSound},
+    {"setText", e_setText}, {"getText", e_getText}, {"setFill", e_setFill}, {"getFill", e_getFill},
+    {"isPressed", e_isPressed}, {"wasClicked", e_wasClicked}, {"setInteractable", e_setInteractable},
+    {"getJoystick", e_getJoystick}, {"getUIPosition", e_getUIPosition}, {"setUIPosition", e_setUIPosition},
+    {"setUISize", e_setUISize}, {nullptr, nullptr}};
 
 // ---------------------------------------------------------------- Tablas globales
 
@@ -320,13 +384,20 @@ int t_time(lua_State* L) { lua_pushnumber(L, sys(L).host().scriptTime()); return
 int t_frame(lua_State* L) { lua_pushinteger(L, static_cast<lua_Integer>(sys(L).host().scriptFrame())); return 1; }
 const luaL_Reg kTimeGlobals[] = {{"delta", t_delta}, {"fixedDelta", t_fixed}, {"time", t_time}, {"frame", t_frame}, {nullptr, nullptr}};
 
+// Los dedos que está usando la interfaz (botones, joystick) no cuentan como toques del juego.
+std::vector<const Pointer*> gamePointers(lua_State* L) {
+    std::vector<const Pointer*> out;
+    for (const Pointer& p : sys(L).host().scriptInput().pointers())
+        if (!p.ui) out.push_back(&p);
+    return out;
+}
 const Pointer& pointerArg(lua_State* L) {
-    const auto& ptrs = sys(L).host().scriptInput().pointers();
+    const auto ptrs = gamePointers(L);
     const lua_Integer i = luaL_checkinteger(L, 1);
     if (i < 1 || i > static_cast<lua_Integer>(ptrs.size())) luaL_error(L, "no hay toque número %d", static_cast<int>(i));
-    return ptrs[static_cast<size_t>(i - 1)];
+    return *ptrs[static_cast<size_t>(i - 1)];
 }
-int i_touchCount(lua_State* L) { lua_pushinteger(L, static_cast<lua_Integer>(sys(L).host().scriptInput().pointers().size())); return 1; }
+int i_touchCount(lua_State* L) { lua_pushinteger(L, static_cast<lua_Integer>(gamePointers(L).size())); return 1; }
 int i_touch(lua_State* L) {
     const Pointer& p = pointerArg(L);
     lua_createtable(L, 0, 4);
@@ -344,7 +415,7 @@ int i_touchWorld(lua_State* L) {
 }
 int i_tapped(lua_State* L) {
     bool tapped = false;
-    for (const auto& ev : sys(L).host().scriptInput().events()) tapped = tapped || ev.phase == TouchPhase::Began;
+    for (const auto& ev : sys(L).host().scriptInput().events()) tapped = tapped || (ev.phase == TouchPhase::Began && !ev.ui);
     lua_pushboolean(L, tapped);
     return 1;
 }
@@ -694,6 +765,14 @@ void ScriptSystem::dispatchContact(Entity self, Entity other, bool begin, bool t
         Instance& inst = instances_[i];
         if (!inst.alive || inst.failed || inst.entity != self) continue;
         call(inst, method, 1, nullptr, &other);
+    }
+}
+void ScriptSystem::dispatchEvent(Entity self, const char* method) {
+    if (!scene_ || !scene_->isValid(self)) return;
+    for (size_t i = 0; i < instances_.size(); ++i) {
+        Instance& inst = instances_[i];
+        if (!inst.alive || inst.failed || inst.entity != self) continue;
+        call(inst, method, 0, nullptr);
     }
 }
 void ScriptSystem::update(float dt) { callAll("onUpdate", dt); }

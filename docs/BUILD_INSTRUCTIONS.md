@@ -93,10 +93,8 @@ adb install -r android/app/build/outputs/apk/release/app-release.apk
 adb logcat -s Titan
 ```
 
-## Regenerar la fuente de depuración
+## Fuentes del motor
 
-```bash
-python3 tools/make_assets.py
-```
-
-Necesita Pillow y la fuente DejaVu Sans Mono.
+`engine/assets/engine/fonts/` contiene Outfit (normal y negrita, licencia SIL OFL 1.1). El atlas de letras se
+genera al arrancar a partir del .ttf; no hay que preparar nada. Para cambiar la fuente por defecto basta con
+sustituir esos archivos por otra fuente con letras latinas.

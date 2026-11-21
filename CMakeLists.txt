@@ -77,13 +77,20 @@ endif()
 
 # ------------------------------------------------------------------ titan_render (OpenGL ES 3.0)
 
+# ------------------------------------------------------------------ titan_ui (fuentes SDF, diseño y toques; sin OpenGL)
+
+add_library(titan_ui STATIC engine/src/ui/Font.cpp engine/src/ui/UISystem.cpp)
+target_include_directories(titan_ui PRIVATE third_party/stb)
+target_link_libraries(titan_ui PUBLIC titan_core)
+target_compile_options(titan_ui PRIVATE ${TITAN_WARNINGS})
+
 add_library(titan_render STATIC
     engine/src/render/Renderer.cpp
     engine/src/render/stb_impl.cpp
     engine/src/render/Model.cpp
 )
 target_include_directories(titan_render PRIVATE third_party/stb)
-target_link_libraries(titan_render PUBLIC titan_core)
+target_link_libraries(titan_render PUBLIC titan_core titan_ui)
 target_compile_options(titan_render PRIVATE ${TITAN_WARNINGS})
 if(ANDROID)
     target_link_libraries(titan_render PUBLIC GLESv3)
@@ -93,7 +100,8 @@ endif()
 
 # ------------------------------------------------------------------ titan_runtime (bucle + sistemas)
 
-add_library(titan_runtime STATIC engine/src/runtime/Runtime.cpp engine/src/runtime/SceneRenderer.cpp)
+add_library(titan_runtime STATIC engine/src/runtime/Runtime.cpp engine/src/runtime/SceneRenderer.cpp
+    engine/src/runtime/UIRenderer.cpp)
 target_link_libraries(titan_runtime PUBLIC titan_core titan_render titan_scripting titan_physics titan_audio)
 target_compile_options(titan_runtime PRIVATE ${TITAN_WARNINGS})
 
@@ -171,8 +179,10 @@ else()
             tests/test_geometry.cpp
             tests/test_physics.cpp
             tests/test_audio.cpp
+            tests/test_ui.cpp
         )
-        target_link_libraries(titan_tests PRIVATE titan_core titan_scripting titan_physics titan_audio)
+        target_compile_definitions(titan_tests PRIVATE TITAN_ENGINE_ASSETS_DIR="${CMAKE_SOURCE_DIR}/engine/assets")
+        target_link_libraries(titan_tests PRIVATE titan_core titan_scripting titan_physics titan_audio titan_ui)
         add_test(NAME titan_tests COMMAND titan_tests)
     endif()
 endif()

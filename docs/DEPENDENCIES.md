@@ -41,6 +41,23 @@ en `third_party/` con su versión fijada, así la compilación no depende de la 
 | Limitaciones | Sin WebP ni compresión de GPU (ETC2/ASTC); con stb_image solo se compilan PNG y JPEG |
 | Alternativas | libpng + libjpeg-turbo (más rápidas, más pesadas), `AImageDecoder` (solo Android 11+) |
 
+### stb_truetype 1.28
+| | |
+|---|---|
+| Función | Leer fuentes TTF/OTF y generar los campos de distancia (SDF) de cada letra para el texto de los juegos |
+| Licencia | Dominio público o MIT, a elegir |
+| Origen | `github.com/nothings/stb`, rama `master` (2026-11). SHA-256 de stb_truetype.h `428cfe93520f2aed5e413a220b0db5bba5b17e2ebe5a64e4a8efa9eeeb67ec5f` |
+| Android | Sí |
+| Limitaciones | Sin "shaping" (no sirve para árabe, hindi...); el interletraje solo usa la tabla `kern` clásica |
+| Alternativas | FreeType + HarfBuzz (completos, mucho más pesados), msdfgen (bordes aún más nítidos) |
+
+### Fuente Outfit (normal y negrita)
+| | |
+|---|---|
+| Función | Fuente por defecto del texto de los juegos (`engine/assets/engine/fonts/`) |
+| Licencia | SIL Open Font License 1.1 (`engine/assets/engine/fonts/OFL.txt`): se puede incluir en juegos comerciales |
+| Origen | Proyecto Outfit (github.com/Outfitio/Outfit-Fonts), 55 KB cada archivo |
+
 ### Dear ImGui 1.91.5
 | | |
 |---|---|
@@ -99,6 +116,5 @@ en `third_party/` con su versión fijada, así la compilación no depende de la 
 | Jolt Physics | Física 3D | MIT | Moderna, multihilo, usada en producción, compila para ARM64 |
 | miniaudio | Audio | MIT-0 o dominio público | Un archivo; usa AAudio y OpenSL ES en Android; decodifica WAV, MP3 y FLAC. OGG mediante stb_vorbis |
 | cgltf | glTF/GLB | MIT | Parser en C de un archivo; no impone estructuras de motor |
-| stb_truetype | Fuentes TTF | Dominio público/MIT | Rasteriza glifos a un atlas propio |
 
 Cada una se integrará detrás de una interfaz de Titán (`PhysicsWorld2D`, `AudioDevice`...) para poder cambiarla sin tocar los juegos.

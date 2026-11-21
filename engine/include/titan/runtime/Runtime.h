@@ -25,6 +25,7 @@
 #include "titan/render/Renderer.h"
 #include "titan/runtime/SceneRenderer.h"
 #include "titan/scripting/ScriptSystem.h"
+#include "titan/ui/UISystem.h"
 
 namespace titan {
 
@@ -84,6 +85,7 @@ public:
     void scriptSetVolume(float v) override { audio_.setMasterVolume(v); }
     AudioEngine& audio() { return audio_; }
     PhysicsWorld& physics() { return physics_; }
+    const UISystem& ui() const { return ui_; }
 
 private:
     bool initSystems(FileSource& files);
@@ -93,6 +95,7 @@ private:
     void render(const Viewport& viewport);
     TextureHandle textureFor(AssetRef ref);
     int modelFor(AssetRef ref);
+    int fontFor(AssetRef ref);
 
     using Clock = std::chrono::steady_clock;
 
@@ -109,6 +112,9 @@ private:
     std::unique_ptr<ScriptSystem> scripts_;
     std::unordered_map<uint64_t, TextureHandle> textures_;
     std::unordered_map<uint64_t, int> models_;
+    std::unordered_map<uint64_t, int> fonts_;
+    UISystem ui_;
+    std::vector<Entity> clicked_;
     std::string projectName_;
     UUID pendingScene_;
 

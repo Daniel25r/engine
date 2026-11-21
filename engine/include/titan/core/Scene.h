@@ -22,6 +22,7 @@ public:
     const std::string& name() const { return name_; }
     void setName(std::string name) { name_ = std::move(name); }
     World& world() { return world_; }
+    const World& world() const { return world_; }
     EventBus* events() const { return events_; }
 
     // Crea una entidad con EntityInfo, Hierarchy y Transform. Si id es nulo se genera uno.

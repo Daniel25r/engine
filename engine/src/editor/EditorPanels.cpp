@@ -283,6 +283,7 @@ void Editor::Impl::drawUI() {
         drawViewportBar();
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
         if (!runtime) {
+            drawUIOutlines(dl);
             if (showGizmos) drawGizmo(dl);
             drawAxisIndicator(dl);
         } else {
@@ -313,6 +314,11 @@ void Editor::Impl::drawCreateMenu() {
         if (ImGui::MenuItem("Cubo con física")) createEntityOfKind("Cubo con física");
         if (ImGui::MenuItem("Esfera con física")) createEntityOfKind("Esfera con física");
         if (ImGui::MenuItem("Zona trigger")) createEntityOfKind("Zona trigger");
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Interfaz")) {
+        for (const char* k : {"Texto", "Imagen", "Panel", "Botón", "Barra de vida", "Joystick"})
+            if (ImGui::MenuItem(k)) createEntityOfKind(k);
         ImGui::EndMenu();
     }
     if (ImGui::MenuItem("Cielo y niebla")) createEntityOfKind("Cielo y niebla");
@@ -347,6 +353,7 @@ void Editor::Impl::drawMenuBar() {
         ImGui::MenuItem("Panel inferior", nullptr, &showBottom);
         ImGui::MenuItem("Rejilla", nullptr, &showGrid);
         ImGui::MenuItem("Gizmos", nullptr, &showGizmos);
+        ImGui::MenuItem("Interfaz del juego", nullptr, &showUI);
         ImGui::MenuItem("Estadísticas de render", nullptr, &showStats);
         ImGui::EndMenu();
     }
@@ -673,6 +680,11 @@ void Editor::Impl::drawBrowser() {
 const char* Editor::Impl::typeLabel(Entity e) {
     World& w = scene.world();
     if (w.has<Camera>(e)) return "Cámara";
+    if (w.has<UIJoystick>(e)) return "Joystick";
+    if (w.has<UIButton>(e)) return "Botón";
+    if (w.has<UIText>(e)) return "Texto UI";
+    if (w.has<UIImage>(e)) return "Imagen UI";
+    if (w.has<UIRect>(e)) return "UI";
     if (const Light* l = w.get<Light>(e)) return l->type == Light::Type::Directional ? "Luz direccional" : "Luz puntual";
     if (w.has<Environment>(e)) return "Cielo y niebla";
     if (const MeshRenderer* m = w.get<MeshRenderer>(e)) return m->model.isNull() ? "Malla" : "Modelo";
@@ -916,7 +928,7 @@ void Editor::Impl::drawDetails() {
     }
     ImGui::TextDisabled("%s  ·  id %s", typeLabel(e), info.id.toString().c_str());
 
-    if (ImGui::CollapsingHeader("Transformación", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (!scene.world().has<UIRect>(e) && ImGui::CollapsingHeader("Transformación", ImGuiTreeNodeFlags_DefaultOpen)) {
         Transform& t = scene.transform(e);
         Vec3 p = t.position(), s = t.scale();
         if (inspectorEulerFor != info.id || !ImGui::IsAnyItemActive()) {
@@ -1105,6 +1117,88 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
             dragF("Distancia mín.", a.minDistance, 0.05f, 0.01f, 1000, "%.1f m");
             dragF("Distancia máx.", a.maxDistance, 0.1f, 0.1f, 10000, "%.1f m");
         }
+    } else if (name == "UIRect") {
+        UIRect& r = *w.get<UIRect>(e);
+        auto drag2 = [&](const char* label, Vec2& v, float speed, float lo, float hi, const char* fmt) {
+            propLabel(label);
+            ImGui::DragFloat2((std::string("##") + label).c_str(), &v.x, speed, lo, hi, fmt);
+            track();
+        };
+        // Anclaje rápido: 9 posiciones de la pantalla (o del padre) y "estirar".
+        propLabel("Anclaje");
+        const float cell = ImGui::GetFrameHeight();
+        ImGui::BeginGroup();
+        for (int j = 0; j < 3; ++j) {
+            for (int i = 0; i < 3; ++i) {
+                const Vec2 a{i * 0.5f, j * 0.5f};
+                const bool on = r.anchorMin == a && r.anchorMax == a;
+                ImGui::PushID(j * 3 + i);
+                ImGui::PushStyleColor(ImGuiCol_Button, on ? kBlue : ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+                if (ImGui::Button(on ? "o" : "", ImVec2(cell, cell * 0.8f))) {
+                    pushUndo();
+                    r.anchorMin = r.anchorMax = r.pivot = a;
+                    const float m = 24; // margen al borde
+                    r.position = {(0.5f - a.x) * 2 * m, (0.5f - a.y) * 2 * m};
+                    if (r.size.x <= 0 || r.size.y <= 0) r.size = {240, 80};
+                }
+                ImGui::PopStyleColor();
+                ImGui::PopID();
+                if (i < 2) ImGui::SameLine(0, 2 * scale);
+            }
+        }
+        ImGui::EndGroup();
+        ImGui::SameLine();
+        if (ImGui::Button("Estirar", ImVec2(0, cell * 2.4f + 4 * scale))) {
+            pushUndo();
+            r.anchorMin = {0, 0};
+            r.anchorMax = {1, 1};
+            r.pivot = {0.5f, 0.5f};
+            r.position = {};
+            r.size = {};
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("Ocupa todo el padre (o la pantalla)");
+        drag2("Posición", r.position, 1, -10000, 10000, "%.0f");
+        const bool stretchX = r.anchorMin.x != r.anchorMax.x, stretchY = r.anchorMin.y != r.anchorMax.y;
+        drag2(stretchX || stretchY ? "Tamaño (+/-)" : "Tamaño", r.size, 1, -10000, 10000, "%.0f");
+        drag2("Pivote", r.pivot, 0.01f, 0, 1, "%.2f");
+        drag2("Anclaje mín.", r.anchorMin, 0.01f, 0, 1, "%.2f");
+        drag2("Anclaje máx.", r.anchorMax, 0.01f, 0, 1, "%.2f");
+    } else if (name == "UIImage") {
+        UIImage& img = *w.get<UIImage>(e);
+        propLabel("Imagen");
+        assetCombo("##uitex", AssetType::Texture, img.texture);
+        color("Color", img.color);
+        if (img.texture.isNull()) dragF("Esquinas", img.cornerRadius, 0.5f, 0, 1000, "%.0f px");
+        propLabel("Relleno");
+        ImGui::SliderFloat("##fill", &img.fill, 0, 1, "%.2f");
+        track();
+    } else if (name == "UIText") {
+        UIText& t = *w.get<UIText>(e);
+        propLabel("Texto");
+        ImGui::InputTextMultiline("##uitext", &t.text, ImVec2(-1, ImGui::GetTextLineHeight() * 3.2f));
+        track();
+        propLabel("Fuente");
+        assetCombo("##uifont", AssetType::Font, t.font);
+        if (t.font.isNull()) check("Negrita", t.bold);
+        dragF("Tamaño", t.size, 0.25f, 4, 400, "%.0f px");
+        color("Color", t.color);
+        combo("Alineación", t.align, "Izquierda\0Centro\0Derecha\0");
+        combo("Vertical", t.verticalAlign, "Arriba\0Centro\0Abajo\0");
+        check("Sombra", t.shadow);
+    } else if (name == "UIButton") {
+        UIButton& b = *w.get<UIButton>(e);
+        check("Interactivo", b.interactable);
+        color("Tinte al pulsar", b.pressedTint);
+        propLabel("");
+        ImGui::TextDisabled("Al pulsarlo llama a onClick() de su script");
+    } else if (name == "UIJoystick") {
+        UIJoystick& j = *w.get<UIJoystick>(e);
+        color("Base", j.baseColor);
+        color("Mango", j.handleColor);
+        dragF("Tamaño mango", j.handleSize, 0.005f, 0.1f, 1, "%.2f");
+        dragF("Zona muerta", j.deadZone, 0.005f, 0, 0.9f, "%.2f");
+        propLabel("");
+        ImGui::TextDisabled("En un script: local x, y = e:getJoystick()");
     } else if (name == "Rigidbody") {
         Rigidbody& b = *w.get<Rigidbody>(e);
         int type = static_cast<int>(b.type);

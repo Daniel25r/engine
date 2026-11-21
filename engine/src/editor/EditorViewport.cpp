@@ -103,7 +103,34 @@ void Editor::Impl::renderViewport() {
     sceneRenderer.render(scene, renderer, vp, view, [this](AssetRef r) { return editorTexture(r); },
                          [this](AssetRef r) { return editorModel(r); });
     drawGizmos();
+    if (showUI) {
+        editorUI.layout(scene, {float(vp.width), float(vp.height)});
+        titan::drawUI(renderer, scene, editorUI, [this](AssetRef r) { return editorTexture(r); },
+               [this](AssetRef r) { return editorFont(r); });
+    }
     renderer.endFrame();
+}
+
+void Editor::Impl::drawUIOutlines(ImDrawList* dl) {
+    if (!showUI) return;
+    const Entity sel = selectedEntity();
+    for (const UIItem& it : editorUI.items()) {
+        const ImVec2 a(vpMin.x + it.rect.x, vpMin.y + it.rect.y), b(a.x + it.rect.w, a.y + it.rect.h);
+        if (it.entity == sel) {
+            dl->AddRect(a, b, IM_COL32(255, 170, 40, 255), 0, 0, 2 * scale);
+            // Punto de anclaje (como los "pétalos" de Unity): dónde se sujeta al padre o a la pantalla.
+            const UIRect& r = *scene.world().get<UIRect>(it.entity);
+            Rect parent{0, 0, vpMax.x - vpMin.x, vpMax.y - vpMin.y};
+            for (Entity p = scene.parent(it.entity); !p.isNull(); p = scene.parent(p))
+                if (editorUI.rectOf(p, parent)) break;
+            const ImVec2 anchor(vpMin.x + parent.x + parent.w * (r.anchorMin.x + r.anchorMax.x) * 0.5f,
+                                vpMin.y + parent.y + parent.h * (r.anchorMin.y + r.anchorMax.y) * 0.5f);
+            dl->AddCircleFilled(anchor, 5 * scale, IM_COL32(255, 170, 40, 255));
+            dl->AddLine(anchor, ImVec2((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f), IM_COL32(255, 170, 40, 120), scale);
+        } else {
+            dl->AddRect(a, b, IM_COL32(255, 255, 255, 40), 0, 0, scale);
+        }
+    }
 }
 
 void Editor::Impl::drawGizmos() {
@@ -231,6 +258,10 @@ bool Editor::Impl::screenRay(ImVec2 p, Vec3& origin, Vec3& dir) const {
 }
 
 Entity Editor::Impl::pick(ImVec2 p) {
+    if (showUI) { // la interfaz está delante de todo
+        const Entity ui = editorUI.pick(scene, {p.x - vpMin.x, p.y - vpMin.y}, false);
+        if (!ui.isNull()) return ui;
+    }
     Vec3 o, d;
     if (!screenRay(p, o, d)) return {};
     Entity best;
@@ -291,6 +322,7 @@ void Editor::Impl::viewportPointerDown(int id, ImVec2 p) {
     touches.push_back({id, p, p, p});
     gestureMoved = false;
     movingEntity = false;
+    movingUI = false;
     if (touches.size() == 2) {
         pinchStart = pdist(touches[0].pos, touches[1].pos);
         if (gizmoDragging) {
@@ -300,6 +332,14 @@ void Editor::Impl::viewportPointerDown(int id, ImVec2 p) {
     }
     if (touches.size() != 1) return;
 
+    // 0) Un elemento de la interfaz ya seleccionado se arrastra con el dedo (con cualquier herramienta).
+    if (Entity sel = selectedEntity(); !sel.isNull() && scene.world().has<UIRect>(sel) && pick(p) == sel) {
+        movingUI = true;
+        uiGrab = p;
+        uiMoveStart = scene.world().get<UIRect>(sel)->position;
+        beginEdit();
+        return;
+    }
     // 1) Las asas del gizmo tienen prioridad.
     if (showGizmos && tool != Tool::Select && !selectedEntity().isNull()) {
         const int axis = gizmoHitTest(p);
@@ -345,6 +385,16 @@ void Editor::Impl::viewportPointerMove(int id, ImVec2 p) {
     if (!gestureMoved) return;
     if (gizmoDragging && touches.size() == 1) {
         gizmoDrag(p);
+        return;
+    }
+    if (movingUI && touches.size() == 1) {
+        Entity e = selectedEntity();
+        UIRect* r = e.isNull() ? nullptr : scene.world().get<UIRect>(e);
+        if (!r) return;
+        const float k = 1.0f / std::max(editorUI.scale(), 1e-3f);
+        Vec2 pos{uiMoveStart.x + (p.x - uiGrab.x) * k, uiMoveStart.y + (p.y - uiGrab.y) * k};
+        if (snap) pos = {std::round(pos.x / 8) * 8, std::round(pos.y / 8) * 8};
+        r->position = pos;
         return;
     }
     const float vh = std::max(1.0f, vpMax.y - vpMin.y);
@@ -408,6 +458,12 @@ void Editor::Impl::viewportPointerUp(int id, ImVec2 p) {
     if (gizmoDragging && touches.empty()) {
         gizmoDragging = false;
         gizmoAxis = -1;
+        if (gestureMoved) commitEdit();
+        else pendingEdit.clear();
+        return;
+    }
+    if (movingUI && touches.empty()) {
+        movingUI = false;
         if (gestureMoved) commitEdit();
         else pendingEdit.clear();
         return;
@@ -477,7 +533,7 @@ void ringPoints(const Vec3& o, const Vec3& axis, float r, Vec3* out, int n) {
 
 int Editor::Impl::gizmoHitTest(ImVec2 p) {
     Entity e = selectedEntity();
-    if (e.isNull()) return -1;
+    if (e.isNull() || scene.world().has<UIRect>(e)) return -1;
     const Vec3 o = scene.computeWorldMatrix(e).translation();
     const float L = gizmoLength(), tol = 14 * scale;
     ImVec2 so;
@@ -575,7 +631,7 @@ void Editor::Impl::gizmoDrag(ImVec2 p) {
 
 void Editor::Impl::drawGizmo(ImDrawList* dl) {
     Entity e = selectedEntity();
-    if (e.isNull() || tool == Tool::Select) return;
+    if (e.isNull() || tool == Tool::Select || scene.world().has<UIRect>(e)) return;
     const Vec3 o = scene.computeWorldMatrix(e).translation();
     ImVec2 so;
     if (!worldToScreen(o, so)) return;

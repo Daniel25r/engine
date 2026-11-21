@@ -1,4 +1,5 @@
 #include "titan/runtime/Runtime.h"
+#include "titan/runtime/UIRenderer.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -201,6 +202,15 @@ void Runtime::frame(const Viewport& viewport) {
     const bool simulate = !paused;
     delta_ = dt;
 
+    // 0. Interfaz: botones y joysticks leen los toques antes que los scripts.
+    ui_.layout(*scene_, screen_);
+    clicked_.clear();
+    if (simulate) {
+        ui_.update(*scene_, input_, &clicked_);
+        for (Entity e : clicked_) scripts_->dispatchEvent(e, "onClick");
+        scene_->flushDestroyed();
+    }
+
     // 1. Paso fijo con límite: tras un parón no se intenta "recuperar" todo el tiempo perdido.
     auto t = Clock::now();
     accumulator_ += dt;
@@ -288,6 +298,15 @@ TextureHandle Runtime::textureFor(AssetRef ref) {
     return h;
 }
 
+int Runtime::fontFor(AssetRef ref) {
+    auto it = fonts_.find(ref.value);
+    if (it != fonts_.end()) return it->second;
+    const AssetRecord* r = assets_.find(ref);
+    const int f = r ? renderer_.loadFont("assets/" + r->path) : -1;
+    fonts_[ref.value] = f;
+    return f;
+}
+
 int Runtime::modelFor(AssetRef ref) {
     auto it = models_.find(ref.value);
     if (it != models_.end()) return it->second;
@@ -312,6 +331,9 @@ void Runtime::render(const Viewport& viewport) {
     sceneRenderer_.render(*scene_, renderer_, viewport, view, [this](AssetRef r) { return textureFor(r); },
                           [this](AssetRef r) { return modelFor(r); });
 
+    ui_.layout(*scene_, screen_); // los scripts pueden haber cambiado textos, tamaños o posiciones
+    drawUI(renderer_, *scene_, ui_, [this](AssetRef r) { return textureFor(r); }, [this](AssetRef r) { return fontFor(r); });
+
     for (const auto& t : scriptTexts_) renderer_.drawText({t.x, t.y}, t.size, t.text, t.color);
     scriptTexts_.clear();
     if (showStats) {
@@ -325,12 +347,9 @@ void Runtime::render(const Viewport& viewport) {
                       scene_->entityCount(), rs.drawCalls, rs.meshes, rs.sprites, rs.triangles,
                       scripts_->instanceCount(), scripts_->memoryUsed() / 1024.0, scripts_->errors().size(), physics_.bodyCount());
         // Arriba a la derecha: a la izquierda y abajo suele ir la interfaz del propio juego.
-        const float h = std::max(12.0f, std::min(screen_.x, screen_.y) * 0.02f);
-        size_t longest = 0, cur = 0;
-        for (const char* c = text; *c; ++c) cur = (*c == '\n') ? (longest = std::max(longest, cur), 0) : cur + 1;
-        longest = std::max(longest, cur);
-        renderer_.drawText({std::max(h * 0.5f, screen_.x - longest * h * 0.5f - h * 0.6f), h * 0.6f}, h, text,
-                           Color{1, 1, 1, 0.7f});
+        const float h = std::max(12.0f, std::min(screen_.x, screen_.y) * 0.022f);
+        const float width = renderer_.measureText(0, h, text).x;
+        renderer_.drawText({std::max(h * 0.5f, screen_.x - width - h * 0.6f), h * 0.6f}, h, text, Color{1, 1, 1, 0.75f});
     }
     renderer_.endFrame();
 }
@@ -389,6 +408,7 @@ void Runtime::shutdown() {
     scripts_.reset();
     textures_.clear();
     models_.clear();
+    fonts_.clear();
     renderer_.shutdown();
     TITAN_INFO("runtime", "Runtime detenido");
 }

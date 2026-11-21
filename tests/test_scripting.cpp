@@ -245,3 +245,54 @@ TEST("scripts: props del script con valores cambiados en el editor") {
     f.scripts.attach(f.scene, f.bus);
     CHECK(f.scripts.runString("assert(resultado == '12.0/editado/true' or resultado == '12/editado/true', resultado)"));
 }
+
+TEST("scripts: interfaz de juego (texto, barra, botón, joystick, color) y onClick") {
+    Fixture f;
+    const AssetRef s = f.addScript("hud.lua", R"(
+        local H = {}
+        clics = 0
+        function H:onStart()
+            local vida = Entity.find("Vida")
+            vida:setFill(1.5)
+            assert(vida:getFill() == 1)
+            vida:setFill(0.25)
+            vida:setColor(1, 0, 0)
+            self.entity:setText(42)
+            assert(self.entity:getText() == "42")
+            assert(not self.entity:isPressed() and not self.entity:wasClicked())
+            local x, y = Entity.find("Joy"):getJoystick()
+            assert(x == 0 and y == 0)
+            self.entity:setUIPosition(10, 20)
+            local px, py = self.entity:getUIPosition()
+            assert(px == 10 and py == 20)
+        end
+        function H:onClick() clics = clics + 1 end
+        return H)");
+    Entity hud = f.entityWith("Boton", s);
+    f.scene.world().add<UIRect>(hud, {});
+    f.scene.world().add<UIText>(hud, {});
+    f.scene.world().add<UIButton>(hud, {});
+    Entity bar = f.scene.createEntity("Vida");
+    f.scene.world().add<UIImage>(bar, {});
+    Entity joy = f.scene.createEntity("Joy");
+    f.scene.world().add<UIJoystick>(joy, {});
+    f.scripts.attach(f.scene, f.bus);
+    for (auto& err : f.scripts.errors()) std::printf("      %s\n", err.message.c_str());
+    CHECK(f.scripts.errors().empty());
+    CHECK_EQ(f.scene.world().get<UIText>(hud)->text, std::string("42"));
+    CHECK_NEAR(f.scene.world().get<UIImage>(bar)->fill, 0.25, 1e-6);
+    CHECK_NEAR(f.scene.world().get<UIImage>(bar)->color.g, 0, 1e-6);
+    f.scripts.dispatchEvent(hud, "onClick");
+    CHECK(f.scripts.runString("assert(clics == 1)"));
+    CHECK(!f.scripts.runString("Entity.find('Vida'):getJoystick()")); // error claro: no tiene UIJoystick
+}
+
+TEST("scripts: los toques sobre la interfaz no cuentan como toques del juego") {
+    Fixture f;
+    f.host.input.touchBegan(1, {10, 10});
+    f.host.input.touchBegan(2, {500, 300});
+    f.host.input.captureForUI(1);
+    CHECK(f.scripts.runString("assert(Input.touchCount() == 1 and Input.touch(1).id == 2 and Input.tapped())"));
+    f.host.input.captureForUI(2);
+    CHECK(f.scripts.runString("assert(Input.touchCount() == 0 and not Input.tapped())"));
+}

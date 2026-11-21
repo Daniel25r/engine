@@ -19,7 +19,7 @@ public:
     virtual ~EditorPlatform() = default;
     // Carpeta donde viven los proyectos (en Android: almacenamiento privado de la app).
     virtual std::string projectsDirectory() = 0;
-    // Recursos del propio motor (engine/font.png...).
+    // Recursos del propio motor (engine/fonts/...).
     virtual FileSource& engineFiles() = 0;
     // Mostrar u ocultar el teclado en pantalla (Android). En escritorio no hace nada.
     virtual void setTextInputActive(bool active) = 0;
@@ -78,6 +78,8 @@ public:
     void stop();
     bool isPlaying() const;
     void selectEntity(const std::string& name);
+    // Crea un objeto como el menú Crear ("Cubo", "Botón", "Joystick"...).
+    void createEntity(const std::string& kind);
     void showPanel(const std::string& name); // "escena", "jerarquia", "inspector", "codigo", "recursos", "consola"
     void openScript(const std::string& relativePath);
     size_t scriptErrorCount() const;

@@ -41,6 +41,7 @@ Arnés propio y mínimo (`tests/Test.h`), sin dependencias. Las pruebas que toca
 [ OK ] serialización: datos incorrectos dan avisos, no se cuelga ni inventa
 [ OK ] serialización: se rechazan archivos ajenos, rotos y de versiones futuras
 [ OK ] archivos: guardado atómico con copia de seguridad y recuperación
+[ OK ] prefabs: guardar un subárbol e instanciarlo con ids nuevos
 [ OK ] proyecto: crear, guardar escena, cerrar y volver a abrir (demostración técnica)
 [ OK ] recursos: los ids sobreviven a mover un archivo con su .meta
 [ OK ] recursos: un archivo copiado con su .meta recibe un id nuevo
@@ -57,9 +58,24 @@ Arnés propio y mínimo (`tests/Test.h`), sin dependencias. Las pruebas que toca
 [ OK ] scripts: sin acceso al sistema (io, os, load, require)
 [ OK ] scripts: usar una entidad destruida da un error claro
 [ OK ] scripts: setActive llama onDisable/onEnable y detiene onUpdate
+[ OK ] scripts: props del script con valores cambiados en el editor
+[ OK ] scripts: interfaz de juego (texto, barra, botón, joystick, color) y onClick
+[ OK ] scripts: los toques sobre la interfaz no cuentan como toques del juego
 [ OK ] geometría: primitivas cerradas, antihorarias y con normales hacia fuera
+[ OK ] física: un cubo cae por gravedad y se apoya en el suelo
+[ OK ] física: eventos de colisión al empezar y terminar
+[ OK ] física: sensores (triggers) detectan sin frenar
+[ OK ] física: raycast, impulsos y gravedad
+[ OK ] audio: decodifica un WAV, lo mezcla y termina solo
+[ OK ] audio: bucle, volumen y voces que siguen a su entidad
+[ OK ] ui: anclajes, pivote, estirado y escala con la altura de pantalla
+[ OK ] ui: los hijos se colocan dentro del padre y las entidades inactivas no aparecen
+[ OK ] ui: un botón cuenta el clic solo si se suelta encima, y se queda con el dedo
+[ OK ] ui: joystick virtual con dirección, límite y zona muerta
+[ OK ] ui: UTF-8
+[ OK ] ui: fuente TTF del motor con acentos, eñe y signos de apertura
 
-45 pruebas, 0 fallidas (137.7 ms)
+61 pruebas, 0 fallidas (319.0 ms)
 ```
 
 ## Pruebas de integración ejecutadas a mano en esta sesión
@@ -83,6 +99,13 @@ Arnés propio y mínimo (`tests/Test.h`), sin dependencias. Las pruebas que toca
 | Arrastrar la Caja en la vista 3D, cerrar el editor y leerla con `titan inspect` | Posición de (3.5, 0.5, -1) a (3.40, 0.5, 4.10): se mueve sobre el suelo y queda guardada |
 | Editor a 1080×2280, densidad 2,75, modo táctil | Distribución de teléfono legible (vista arriba y panel abajo, pestañas) |
 | APK del editor | Firmado, 3 ABI, 11 funciones JNI exportadas, clases Kotlin en el dex |
+
+## Interfaz de juego (sesión 0.10.0, editor de escritorio con toques simulados)
+
+| Prueba | Resultado |
+|---|---|
+| Crear › Interfaz: Barra de vida, Texto, Joystick y Botón en un proyecto 3D | Se dibujan en la vista con su sitio por defecto; el botón seleccionado muestra su rectángulo y su ancla |
+| Jugar con un script que lee el joystick y el botón | Arrastrar el joystick mueve el cubo; dos toques en "Saltar" dan "Saltos: 2" y el cubo salta; la barra baja con el tiempo; "¡Ñandú!" se ve con sus tildes |
 
 ## Mediciones
 

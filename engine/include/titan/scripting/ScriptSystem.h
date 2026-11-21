@@ -80,6 +80,8 @@ public:
     void fixedUpdate(float dt);
     // Llama onCollisionEnter/Exit u onTriggerEnter/Exit(other) en los scripts de "self".
     void dispatchContact(Entity self, Entity other, bool begin, bool trigger);
+    // Llama a un método sin argumentos (p. ej. "onClick") en los scripts de esa entidad.
+    void dispatchEvent(Entity self, const char* method);
     // Crea los scripts de una entidad nueva y de sus hijos (prefabs instanciados durante el juego).
     void attachSubtree(Entity root);
     void update(float dt);

@@ -283,6 +283,72 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("maxDistance", a.maxDistance);
         });
 
+    r.addSimple<UIRect>(
+        "UIRect",
+        [](const UIRect& u) {
+            return Json{{"anchorMin", toJson(u.anchorMin)}, {"anchorMax", toJson(u.anchorMax)}, {"pivot", toJson(u.pivot)},
+                        {"position", toJson(u.position)}, {"size", toJson(u.size)}};
+        },
+        [](UIRect& u, FieldReader& rd) {
+            rd.read("anchorMin", u.anchorMin);
+            rd.read("anchorMax", u.anchorMax);
+            rd.read("pivot", u.pivot);
+            rd.read("position", u.position);
+            rd.read("size", u.size);
+        });
+
+    r.addSimple<UIImage>(
+        "UIImage",
+        [](const UIImage& u) {
+            return Json{{"texture", assetToJson(u.texture)}, {"color", toJson(u.color)},
+                        {"cornerRadius", toJson(u.cornerRadius)}, {"fill", toJson(u.fill)}};
+        },
+        [](UIImage& u, FieldReader& rd) {
+            rd.readAsset("texture", u.texture);
+            rd.read("color", u.color);
+            rd.read("cornerRadius", u.cornerRadius);
+            rd.read("fill", u.fill);
+        });
+
+    r.addSimple<UIText>(
+        "UIText",
+        [](const UIText& u) {
+            return Json{{"text", u.text}, {"font", assetToJson(u.font)}, {"bold", u.bold}, {"size", toJson(u.size)},
+                        {"color", toJson(u.color)}, {"align", u.align}, {"verticalAlign", u.verticalAlign},
+                        {"shadow", u.shadow}};
+        },
+        [](UIText& u, FieldReader& rd) {
+            rd.read("text", u.text);
+            rd.readAsset("font", u.font);
+            rd.read("bold", u.bold);
+            rd.read("size", u.size);
+            rd.read("color", u.color);
+            rd.read("align", u.align);
+            rd.read("verticalAlign", u.verticalAlign);
+            rd.read("shadow", u.shadow);
+        });
+
+    r.addSimple<UIButton>(
+        "UIButton",
+        [](const UIButton& u) { return Json{{"interactable", u.interactable}, {"pressedTint", toJson(u.pressedTint)}}; },
+        [](UIButton& u, FieldReader& rd) {
+            rd.read("interactable", u.interactable);
+            rd.read("pressedTint", u.pressedTint);
+        });
+
+    r.addSimple<UIJoystick>(
+        "UIJoystick",
+        [](const UIJoystick& u) {
+            return Json{{"baseColor", toJson(u.baseColor)}, {"handleColor", toJson(u.handleColor)},
+                        {"handleSize", toJson(u.handleSize)}, {"deadZone", toJson(u.deadZone)}};
+        },
+        [](UIJoystick& u, FieldReader& rd) {
+            rd.read("baseColor", u.baseColor);
+            rd.read("handleColor", u.handleColor);
+            rd.read("handleSize", u.handleSize);
+            rd.read("deadZone", u.deadZone);
+        });
+
     r.addSimple<Rigidbody>(
         "Rigidbody",
         [](const Rigidbody& b) {

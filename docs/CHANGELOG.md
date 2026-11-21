@@ -1,5 +1,28 @@
 # Registro de cambios
 
+## 0.10.0 — 2026-11-21 · Interfaz de juego
+
+Añadido
+- Módulo `titan_ui` (sin OpenGL): fuentes TrueType/OpenType convertidas en atlas de campo de distancia (SDF) con
+  stb_truetype 1.28 (texto nítido a cualquier tamaño; ASCII, Latin-1 y Latin Extended-A: á é ñ ¿ ¡ ü ç €...),
+  diseño de la interfaz con anclajes, pivote y estirado (como el RectTransform de Unity) escalado a una pantalla
+  de referencia de 720 px de alto, y botones y joysticks virtuales con multitáctil.
+- Componentes `UIRect`, `UIImage` (color o textura, esquinas redondeadas, relleno para barras), `UIText` (fuente del
+  motor normal/negrita o una .ttf/.otf del proyecto, tamaño, alineación, sombra), `UIButton` y `UIJoystick`.
+- Fuente del motor: Outfit (SIL OFL 1.1), normal y negrita. Sustituye a la fuente de mapa de bits solo ASCII:
+  `Screen.text` y las estadísticas ya admiten acentos y eñe.
+- Editor: menú Crear › Interfaz (Texto, Imagen, Panel, Botón, Barra de vida, Joystick); la interfaz se ve en la vista
+  y se selecciona y arrastra con el dedo; Detalles con rejilla de anclajes de 9 posiciones y "Estirar";
+  Ventana › Interfaz del juego para ocultarla.
+- Lua: `onClick()`, `e:setText/getText`, `e:setFill/getFill`, `e:isPressed/wasClicked/setInteractable`,
+  `e:getJoystick()`, `e:getUIPosition/setUIPosition/setUISize`; `setColor/getColor` sirven también para UIImage, UIText
+  y MeshRenderer.
+- Los dedos que empiezan sobre un botón o joystick no cuentan como toques del juego (`Input.touchCount`,
+  `Input.touch`, `Input.tapped`).
+- 8 pruebas nuevas (anclajes, jerarquía, botones, joystick, UTF-8, fuente, API Lua, toques de la UI): 61 en total.
+
+Pendiente de comprobar: la interfaz en un teléfono real (probada en el editor de escritorio con toques simulados).
+
 ## 0.9.0 — 2026-11-21 · Sonido y animación mejorada
 
 Añadido

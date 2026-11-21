@@ -211,4 +211,54 @@ struct Script {
     std::string props = "{}";
 };
 
+// ---- Interfaz de juego (UI) ----
+// Las entidades con UIRect se dibujan encima del juego, en píxeles de pantalla, y no usan su Transform.
+// Coordenadas: origen arriba a la izquierda, Y hacia abajo. Las medidas están en "píxeles de referencia"
+// de una pantalla de 720 de alto; se escalan con la altura real (ver UISystem::scaleFor).
+// Un UIRect hijo de otro UIRect se coloca dentro del rectángulo del padre.
+struct UIRect {
+    Vec2 anchorMin{0.5f, 0.5f}; // punto del padre (0..1) al que se ancla; min != max estira
+    Vec2 anchorMax{0.5f, 0.5f};
+    Vec2 pivot{0.5f, 0.5f};     // punto propio que se coloca en el ancla
+    Vec2 position;              // desplazamiento desde el ancla
+    Vec2 size{240, 80};         // tamaño (si se estira: lo que se suma al área de los anclajes)
+};
+
+struct UIImage {
+    AssetRef texture;           // vacío = color liso
+    Color color{1, 1, 1, 1};
+    float cornerRadius = 0;     // esquinas redondeadas (px de referencia); muy grande = cápsula o círculo
+    float fill = 1;             // 0..1: parte visible de izquierda a derecha (barras de vida)
+};
+
+struct UIText {
+    std::string text = "Texto";
+    AssetRef font;              // vacío = fuente del motor
+    bool bold = false;          // solo con la fuente del motor
+    float size = 36;            // px de referencia
+    Color color{1, 1, 1, 1};
+    int align = 1;              // 0 izquierda, 1 centro, 2 derecha
+    int verticalAlign = 1;      // 0 arriba, 1 centro, 2 abajo
+    bool shadow = true;         // sombra suave detrás del texto
+};
+
+struct UIButton {
+    bool interactable = true;
+    Color pressedTint{0.75f, 0.75f, 0.75f, 1}; // multiplica el color de su UIImage mientras se pulsa
+    // Estado en ejecución (no se guarda)
+    bool pressed = false;
+    bool clicked = false;       // se soltó encima en este fotograma
+    int pointer = -1;
+};
+
+struct UIJoystick {
+    Color baseColor{1, 1, 1, 0.18f};
+    Color handleColor{1, 1, 1, 0.65f};
+    float handleSize = 0.45f;   // fracción del tamaño del rectángulo
+    float deadZone = 0.1f;
+    // Estado en ejecución (no se guarda)
+    Vec2 value;                 // -1..1; Y positiva = arriba
+    int pointer = -1;
+};
+
 } // namespace titan

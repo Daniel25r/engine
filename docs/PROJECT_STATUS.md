@@ -1,4 +1,4 @@
-# Estado del proyecto — Titán 0.9.0
+# Estado del proyecto — Titán 0.10.0
 
 Fecha: 2026-11-21 · Generaciones 1 (Fundación) y 2 (Editor) en curso; primeros pasos de la 5 (3D)
 
@@ -92,6 +92,8 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 | Recuperación del contexto GL en Android | [IMPLEMENTADO, PENDIENTE DE PRUEBA REAL] |
 | Perfilador en pantalla (FPS, ms por fase, entidades, componentes, draw calls, memoria de Lua) | [IMPLEMENTADO Y COMPILADO] |
 | Interfaz de backend gráfico (RHI), mallas, 3D, luces, materiales | [PENDIENTE] |
+| Interfaz de juego: anclajes, imágenes, texto TTF, botones, joystick virtual | [COMPLETADO Y PROBADO] (pruebas automáticas y editor de escritorio con toques simulados); [PENDIENTE DE PRUEBA REAL] en teléfono |
+| Texto con acentos y eñe (fuentes SDF) | [COMPLETADO Y PROBADO] |
 | Interpolación de render entre pasos fijos | [PENDIENTE] (cuando haya física) |
 | Culling | [PENDIENTE] (antes hay que medir) |
 
@@ -128,5 +130,5 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 
 ## Sistemas no iniciados
 
-Física 2D, partículas, UI de juego, tilemaps, importación de modelos, terrenos, navegación,
+Física 2D, partículas, tilemaps, importación de modelos, terrenos, navegación,
 guardado de partidas, red, plugins: [PENDIENTE]. El orden está en ROADMAP.md.

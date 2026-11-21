@@ -7,12 +7,14 @@
 //   beginFrame(viewport) → setCamera → setLights → drawMesh... → drawSprite... → drawLine... → drawText... → endFrame
 // Las mallas se dibujan al llamar; sprites, líneas y texto se acumulan y se vuelcan en endFrame.
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "titan/core/Components.h"
 #include "titan/core/Math.h"
+#include "titan/ui/Font.h"
 
 namespace titan {
 
@@ -111,8 +113,28 @@ public:
     // Sprite con su matriz de mundo completa: respeta posición, rotación, escala y jerarquía.
     void drawSprite(TextureHandle tex, const Mat4& world, Vec2 size, Vec2 pivot, Rect uv, Color color);
     void drawLine(const Vec3& a, const Vec3& b, Color color);
-    // Texto de depuración en píxeles del viewport (origen arriba a la izquierda).
-    void drawText(Vec2 pos, float height, std::string_view text, Color color);
+    // Texto en píxeles del viewport (origen arriba a la izquierda), encima de todo, al final del fotograma.
+    void drawText(Vec2 pos, float size, std::string_view text, Color color);
+
+    // ---- Interfaz 2D en píxeles del viewport (origen arriba a la izquierda) ----
+    // Entre beginOverlay y endOverlay todo se dibuja encima de la escena, sin profundidad.
+    void beginOverlay();
+    void endOverlay();
+    void drawRect(TextureHandle tex, const Rect& px, const Rect& uv, Color color);
+    // Rectángulo de esquinas redondeadas (radio en píxeles; se limita a la mitad del lado menor).
+    void drawRoundedRect(const Rect& px, float radius, Color color);
+    // Fuentes: 0 = Outfit normal, 1 = Outfit negrita (las del motor). loadFont devuelve -1 si falla.
+    int loadFont(const std::string& path);
+    const FontAtlas* font(int f);
+    Vec2 measureText(int font, float size, std::string_view text);
+    // align: 0 izquierda, 1 centro, 2 derecha dentro de boxWidth.
+    void drawTextNow(int font, Vec2 pos, float size, std::string_view text, Color color, int align = 0,
+                     float boxWidth = 0);
+    // Textura creada desde memoria (se conserva una copia para recrearla si Android pierde el contexto).
+    // channels: 1 (se usa como alfa/distancia) o 4. sdf: el canal es un campo de distancia (texto).
+    TextureHandle createTexture(int width, int height, int channels, const uint8_t* pixels, bool sdf = false);
+    TextureHandle discTexture() const { return disc_; }
+
     void endFrame();
 
     const RenderStats& stats() const { return lastStats_; }
@@ -129,6 +151,14 @@ private:
         int width = 0, height = 0;
         std::string path;          // vacío: textura incrustada en un modelo (se recrea con el modelo)
         TextureOptions options;
+        std::vector<uint8_t> memory; // texturas creadas desde memoria (createTexture)
+        int channels = 4;
+        bool sdf = false;
+    };
+    struct LoadedFont {
+        std::string path;
+        std::unique_ptr<FontAtlas> atlas;
+        TextureHandle texture = 0;
     };
     struct TextCmd {
         Vec2 pos;
@@ -190,6 +220,7 @@ private:
     bool createGpuObjects();
     void createMeshes();
     bool uploadTexture(Texture& t);
+    bool uploadMemoryTexture(Texture& t);
     void pushQuad(TextureHandle tex, const Vec3 corners[4], Rect uv, Color color);
     void flushSprites();
     void flushLines();
@@ -200,7 +231,7 @@ private:
     FileSource* files_ = nullptr;
     // Programa de sprites/líneas/texto
     uint32_t spriteProgram_ = 0, spriteVao_ = 0, spriteVbo_ = 0, spriteIbo_ = 0, lineVao_ = 0, lineVbo_ = 0;
-    int uSpriteViewProj_ = -1, uSpriteTex_ = -1;
+    int uSpriteViewProj_ = -1, uSpriteTex_ = -1, uSpriteSdf_ = -1;
     // Programa de mallas iluminadas
     uint32_t meshProgram_ = 0;
     int uViewProj_ = -1, uModel_ = -1, uNormalMat_ = -1, uColor_ = -1, uTex_ = -1, uDirDir_ = -1, uDirColor_ = -1,
@@ -230,7 +261,11 @@ private:
     Viewport viewport_;
     Mat4 viewProj_;
     Vec3 cameraPos_;
-    TextureHandle font_ = kWhiteTexture;
+    std::vector<LoadedFont> fonts_;
+    std::vector<GlyphQuad> glyphScratch_;
+    TextureHandle disc_ = kWhiteTexture;
+    Mat4 overlaySavedViewProj_;
+    bool inOverlay_ = false;
     RenderStats stats_, lastStats_;
 };
 

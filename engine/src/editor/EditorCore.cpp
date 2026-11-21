@@ -231,6 +231,7 @@ bool Editor::Impl::openProject(const std::string& path) {
     files.root = project->root();
     textureCache.clear();
     modelCache.clear();
+    fontCache.clear();
     undoStack.clear();
     redoStack.clear();
     codePath.clear();
@@ -355,6 +356,16 @@ int Editor::Impl::editorModel(AssetRef ref) {
     const int m = r ? renderer.loadModel("assets/" + r->path) : -1;
     modelCache[ref.value] = m;
     return m;
+}
+
+int Editor::Impl::editorFont(AssetRef ref) {
+    if (ref.isNull() || !project) return -1;
+    auto it = fontCache.find(ref.value);
+    if (it != fontCache.end()) return it->second;
+    const AssetRecord* r = project->assets().find(ref);
+    const int f = r ? renderer.loadFont("assets/" + r->path) : -1;
+    fontCache[ref.value] = f;
+    return f;
 }
 
 bool Editor::Impl::localBounds(Entity e, Vec3& min, Vec3& max) {
@@ -594,6 +605,70 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
         scene.world().add<Collider>(e, c);
     } else if (kind == "Cielo y niebla") {
         scene.world().add<Environment>(e);
+    } else if (kind == "Texto" || kind == "Imagen" || kind == "Panel" || kind == "Botón" || kind == "Barra de vida" ||
+               kind == "Joystick") {
+        // Interfaz de juego. Medidas en píxeles de una pantalla de 720 de alto.
+        World& w = scene.world();
+        auto rect = [](Vec2 anchor, Vec2 pos, Vec2 size) {
+            UIRect r;
+            r.anchorMin = r.anchorMax = r.pivot = anchor;
+            r.position = pos;
+            r.size = size;
+            return r;
+        };
+        auto stretch = [](Vec2 inset) {
+            UIRect r;
+            r.anchorMin = {0, 0};
+            r.anchorMax = {1, 1};
+            r.size = {-inset.x * 2, -inset.y * 2};
+            return r;
+        };
+        if (kind == "Texto") {
+            w.add<UIRect>(e, rect({0.5f, 0}, {0, 24}, {600, 60}));
+            UIText t;
+            t.text = "Puntos: 0";
+            t.size = 40;
+            t.bold = true;
+            w.add<UIText>(e, t);
+        } else if (kind == "Imagen") {
+            w.add<UIRect>(e, rect({0.5f, 0.5f}, {0, 0}, {200, 200}));
+            w.add<UIImage>(e);
+        } else if (kind == "Panel") {
+            w.add<UIRect>(e, rect({0.5f, 0.5f}, {0, 0}, {560, 360}));
+            UIImage img;
+            img.color = {0.07f, 0.09f, 0.13f, 0.88f};
+            img.cornerRadius = 24;
+            w.add<UIImage>(e, img);
+        } else if (kind == "Botón") {
+            w.add<UIRect>(e, rect({1, 1}, {-40, -40}, {220, 84}));
+            UIImage img;
+            img.color = Color::hex(0x2F7DF6);
+            img.cornerRadius = 20;
+            w.add<UIImage>(e, img);
+            w.add<UIButton>(e);
+            Entity label = scene.createEntity("Texto", e);
+            w.add<UIRect>(label, stretch({0, 0}));
+            UIText t;
+            t.text = "Botón";
+            t.size = 34;
+            t.bold = true;
+            w.add<UIText>(label, t);
+        } else if (kind == "Barra de vida") {
+            w.add<UIRect>(e, rect({0, 0}, {28, 28}, {340, 30}));
+            UIImage back;
+            back.color = {0, 0, 0, 0.55f};
+            back.cornerRadius = 15;
+            w.add<UIImage>(e, back);
+            Entity fill = scene.createEntity("Relleno", e);
+            w.add<UIRect>(fill, stretch({4, 4}));
+            UIImage front;
+            front.color = Color::hex(0x3DDC84);
+            front.cornerRadius = 11;
+            w.add<UIImage>(fill, front);
+        } else {
+            w.add<UIRect>(e, rect({0, 1}, {48, -48}, {230, 230}));
+            w.add<UIJoystick>(e);
+        }
     } else if (kind == "Luz puntual") {
         Light l;
         l.type = Light::Type::Point;
@@ -893,6 +968,8 @@ bool Editor::createProject(const std::string& name, bool threeD, bool) {
 void Editor::play() { impl_->play(); }
 void Editor::stop() { impl_->stop(); }
 bool Editor::isPlaying() const { return impl_->runtime != nullptr; }
+
+void Editor::createEntity(const std::string& kind) { impl_->createEntityOfKind(kind); }
 
 void Editor::selectEntity(const std::string& name) { impl_->select(impl_->scene.findByName(name)); }
 

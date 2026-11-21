@@ -35,9 +35,17 @@ precision mediump float;
 in vec2 vUV;
 in vec4 vColor;
 uniform sampler2D uTex;
+uniform int uSdf;
 out vec4 outColor;
 void main() {
-    outColor = texture(uTex, vUV) * vColor;
+    if (uSdf == 1) {
+        // Texto: el canal rojo es la distancia al borde de la letra (0,5 = borde).
+        float d = texture(uTex, vUV).r;
+        float w = max(fwidth(d) * 0.7, 0.002);
+        outColor = vec4(vColor.rgb, vColor.a * smoothstep(0.5 - w, 0.5 + w, d));
+    } else {
+        outColor = texture(uTex, vUV) * vColor;
+    }
 }
 )";
 
@@ -253,7 +261,6 @@ void main() {
 }
 )";
 
-constexpr int kFontCols = 16, kFontRows = 6;
 
 GLuint compileShader(GLenum type, const char* src) {
     GLuint s = glCreateShader(type);
@@ -305,7 +312,21 @@ bool Renderer::init(FileSource& files) {
     textures_.push_back({}); // textura blanca
     vertices_.resize(kMaxQuads * 4);
     if (!createGpuObjects()) return false;
-    font_ = loadTexture("engine/font.png", {false, true});
+    fonts_.clear();
+    if (loadFont("engine/fonts/Outfit-Regular.ttf") != 0) TITAN_ERROR("render", "No se pudo cargar la fuente del motor");
+    // La negrita se prepara la primera vez que se usa (crear el atlas cuesta unas décimas de segundo).
+    // Disco blanco con borde suavizado: círculos y esquinas redondeadas de la interfaz.
+    {
+        constexpr int N = 128;
+        std::vector<uint8_t> px(N * N * 4, 255);
+        for (int y = 0; y < N; ++y)
+            for (int x = 0; x < N; ++x) {
+                const float dx = x + 0.5f - N * 0.5f, dy = y + 0.5f - N * 0.5f;
+                const float a = std::fmin(std::fmax(N * 0.5f - std::sqrt(dx * dx + dy * dy), 0.0f), 1.0f);
+                px[(y * N + x) * 4 + 3] = static_cast<uint8_t>(a * 255.0f + 0.5f);
+            }
+        disc_ = createTexture(N, N, 4, px.data());
+    }
     TITAN_INFO("render", "OpenGL listo: %s | %s", glGetString(GL_RENDERER), glGetString(GL_VERSION));
     return true;
 }
@@ -316,6 +337,7 @@ bool Renderer::createGpuObjects() {
     if (!spriteProgram_ || !meshProgram_) return false;
     uSpriteViewProj_ = glGetUniformLocation(spriteProgram_, "uViewProj");
     uSpriteTex_ = glGetUniformLocation(spriteProgram_, "uTex");
+    uSpriteSdf_ = glGetUniformLocation(spriteProgram_, "uSdf");
     shadowProgram_ = linkProgram(kShadowVS, kShadowFS);
     skyProgram_ = linkProgram(kSkyVS, kSkyFS);
     if (!shadowProgram_ || !skyProgram_) return false;
@@ -478,6 +500,118 @@ bool Renderer::uploadTexture(Texture& t) {
     return true;
 }
 
+bool Renderer::uploadMemoryTexture(Texture& t) {
+    if (t.memory.empty()) return false;
+    glGenTextures(1, &t.gl);
+    glBindTexture(GL_TEXTURE_2D, t.gl);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    if (t.channels == 1)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, t.width, t.height, 0, GL_RED, GL_UNSIGNED_BYTE, t.memory.data());
+    else
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, t.width, t.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, t.memory.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return true;
+}
+
+TextureHandle Renderer::createTexture(int width, int height, int channels, const uint8_t* pixels, bool sdf) {
+    Texture t;
+    t.width = width;
+    t.height = height;
+    t.channels = channels == 1 ? 1 : 4;
+    t.sdf = sdf;
+    t.options.mipmaps = false;
+    t.memory.assign(pixels, pixels + static_cast<size_t>(width) * height * t.channels);
+    if (!uploadMemoryTexture(t)) return kWhiteTexture;
+    textures_.push_back(std::move(t));
+    return static_cast<TextureHandle>(textures_.size() - 1);
+}
+
+int Renderer::loadFont(const std::string& path) {
+    for (size_t i = 0; i < fonts_.size(); ++i)
+        if (fonts_[i].path == path) return fonts_[i].atlas ? static_cast<int>(i) : -1;
+    LoadedFont f;
+    f.path = path;
+    std::vector<uint8_t> bytes;
+    std::string error;
+    auto atlas = std::make_unique<FontAtlas>();
+    if (!files_->read(path, bytes)) {
+        TITAN_ERROR("render", "No se encontró la fuente '%s'", path.c_str());
+    } else if (!atlas->build(std::move(bytes), &error)) {
+        TITAN_ERROR("render", "Fuente '%s': %s", path.c_str(), error.c_str());
+    } else {
+        f.texture = createTexture(atlas->width(), atlas->height(), 1, atlas->pixels().data(), true);
+        TITAN_INFO("render", "Fuente '%s' cargada (%zu caracteres, atlas %dx%d)", path.c_str(), atlas->glyphCount(),
+                   atlas->width(), atlas->height());
+        f.atlas = std::move(atlas);
+    }
+    fonts_.push_back(std::move(f));
+    return fonts_.back().atlas ? static_cast<int>(fonts_.size() - 1) : -1;
+}
+
+const FontAtlas* Renderer::font(int f) {
+    if (f == 1 && fonts_.size() == 1) loadFont("engine/fonts/Outfit-Bold.ttf");
+    if (f < 0 || f >= static_cast<int>(fonts_.size()) || !fonts_[f].atlas) f = 0;
+    return f < static_cast<int>(fonts_.size()) ? fonts_[f].atlas.get() : nullptr;
+}
+
+Vec2 Renderer::measureText(int f, float size, std::string_view text) {
+    const FontAtlas* a = font(f);
+    return a ? a->measure(text, size) : Vec2{};
+}
+
+void Renderer::beginOverlay() {
+    if (inOverlay_) return;
+    flushSprites();
+    flushLines();
+    overlaySavedViewProj_ = viewProj_;
+    viewProj_ = Mat4::ortho(0.0f, float(viewport_.width), float(viewport_.height), 0.0f, -1.0f, 1.0f);
+    glDisable(GL_DEPTH_TEST);
+    inOverlay_ = true;
+}
+
+void Renderer::endOverlay() {
+    if (!inOverlay_) return;
+    flushSprites();
+    viewProj_ = overlaySavedViewProj_;
+    glEnable(GL_DEPTH_TEST);
+    inOverlay_ = false;
+}
+
+void Renderer::drawRect(TextureHandle tex, const Rect& r, const Rect& uv, Color color) {
+    const Vec3 c[4] = {{r.x, r.y, 0}, {r.x + r.w, r.y, 0}, {r.x + r.w, r.y + r.h, 0}, {r.x, r.y + r.h, 0}};
+    pushQuad(tex, c, uv, color);
+}
+
+void Renderer::drawRoundedRect(const Rect& r, float radius, Color color) {
+    radius = std::fmin(radius, std::fmin(r.w, r.h) * 0.5f);
+    if (radius < 0.5f) {
+        drawRect(kWhiteTexture, r, {0, 0, 1, 1}, color);
+        return;
+    }
+    // Nueve partes: las esquinas son cuartos del disco; los bordes y el centro, su parte central.
+    const float xs[4] = {r.x, r.x + radius, r.x + r.w - radius, r.x + r.w};
+    const float ys[4] = {r.y, r.y + radius, r.y + r.h - radius, r.y + r.h};
+    const float us[4] = {0.0f, 0.5f, 0.5f, 1.0f};
+    for (int j = 0; j < 3; ++j)
+        for (int i = 0; i < 3; ++i) {
+            const Rect part{xs[i], ys[j], xs[i + 1] - xs[i], ys[j + 1] - ys[j]};
+            if (part.w <= 0 || part.h <= 0) continue;
+            drawRect(disc_, part, {us[i], us[j], us[i + 1] - us[i], us[j + 1] - us[j]}, color);
+        }
+}
+
+void Renderer::drawTextNow(int f, Vec2 pos, float size, std::string_view text, Color color, int align, float boxWidth) {
+    if (f == 1 && fonts_.size() == 1) loadFont("engine/fonts/Outfit-Bold.ttf");
+    if (f < 0 || f >= static_cast<int>(fonts_.size()) || !fonts_[f].atlas) f = 0;
+    if (fonts_.empty() || !fonts_[f].atlas) return;
+    glyphScratch_.clear();
+    fonts_[f].atlas->layout(text, size, pos, glyphScratch_, align, boxWidth);
+    for (const GlyphQuad& q : glyphScratch_) drawRect(fonts_[f].texture, q.rect, q.uv, color);
+}
+
 TextureHandle Renderer::loadTexture(const std::string& path, TextureOptions options) {
     for (TextureHandle i = 1; i < textures_.size(); ++i)
         if (textures_[i].path == path && textures_[i].options.nearest == options.nearest &&
@@ -509,14 +643,17 @@ void Renderer::onContextLost() {
 
 bool Renderer::onContextRestored() {
     if (!createGpuObjects()) return false;
-    for (size_t i = 1; i < textures_.size(); ++i)
+    for (size_t i = 1; i < textures_.size(); ++i) {
         if (!textures_[i].path.empty()) uploadTexture(textures_[i]);
+        else if (!textures_[i].memory.empty()) uploadMemoryTexture(textures_[i]);
+    }
     for (Model& m : models_) buildModel(m); // las texturas incrustadas se vuelven a crear con su modelo
     TITAN_INFO("render", "Contexto de OpenGL restaurado (%zu texturas recargadas)", textures_.size() - 1);
     return true;
 }
 
 void Renderer::shutdown() {
+    fonts_.clear();
     for (auto& t : textures_)
         if (t.gl) glDeleteTextures(1, &t.gl);
     textures_.clear();
@@ -762,6 +899,7 @@ void Renderer::flushSprites() {
     glUseProgram(spriteProgram_);
     glUniformMatrix4fv(uSpriteViewProj_, 1, GL_FALSE, viewProj_.m);
     glUniform1i(uSpriteTex_, 0);
+    glUniform1i(uSpriteSdf_, textures_[batchTexture_].sdf ? 1 : 0);
     // Los sprites se ocultan detrás de las mallas, pero no se ocultan entre sí (se ordenan por sortingOrder).
     glDisable(GL_CULL_FACE);
     glEnable(GL_BLEND);
@@ -795,6 +933,7 @@ void Renderer::flushLines() {
     glUseProgram(spriteProgram_);
     glUniformMatrix4fv(uSpriteViewProj_, 1, GL_FALSE, viewProj_.m);
     glUniform1i(uSpriteTex_, 0);
+    glUniform1i(uSpriteSdf_, 0);
     glBindTexture(GL_TEXTURE_2D, textures_[kWhiteTexture].gl);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -818,28 +957,16 @@ void Renderer::drawText(Vec2 pos, float height, std::string_view text, Color col
 void Renderer::endFrame() {
     flushSprites();
     flushLines();
-    if (!text_.empty() && font_ != kWhiteTexture) {
-        const Mat4 saved = viewProj_;
-        viewProj_ = Mat4::ortho(0.0f, float(viewport_.width), float(viewport_.height), 0.0f, -1.0f, 1.0f);
-        glDisable(GL_DEPTH_TEST);
-        const float cw = 1.0f / kFontCols, ch = 1.0f / kFontRows;
+    endOverlay();
+    if (!text_.empty()) {
+        beginOverlay();
         for (const auto& cmd : text_) {
-            const float cellW = cmd.height * 0.5f;
-            float x = cmd.pos.x, y = cmd.pos.y;
-            for (unsigned char chr : cmd.text) {
-                if (chr == '\n') { x = cmd.pos.x; y += cmd.height; continue; }
-                if (chr < 32 || chr > 126) chr = '?';
-                const int i = chr - 32;
-                if (chr != ' ') {
-                    const Rect uv{(i % kFontCols) * cw, (i / kFontCols) * ch, cw, ch};
-                    const Vec3 c[4] = {{x, y, 0}, {x + cellW, y, 0}, {x + cellW, y + cmd.height, 0}, {x, y + cmd.height, 0}};
-                    pushQuad(font_, c, uv, cmd.color);
-                }
-                x += cellW;
-            }
+            // Sombra de 1 px para que se lea sobre cualquier fondo.
+            const float off = std::fmax(1.0f, cmd.height * 0.06f);
+            drawTextNow(0, {cmd.pos.x + off, cmd.pos.y + off}, cmd.height, cmd.text, Color{0, 0, 0, cmd.color.a * 0.6f});
+            drawTextNow(0, cmd.pos, cmd.height, cmd.text, cmd.color);
         }
-        flushSprites();
-        viewProj_ = saved;
+        endOverlay();
     }
     text_.clear();
     glDisable(GL_SCISSOR_TEST);

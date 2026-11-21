@@ -2,7 +2,7 @@
 
 Este documento recorre los sistemas de Unity 6 (el editor, el runtime y los paquetes oficiales más usados),
 explica brevemente cómo funcionan y dice dónde está Titán. Es la hoja de ruta para llegar a su nivel.
-Estado de Titán a fecha de la versión 0.9.0.
+Estado de Titán a fecha de la versión 0.10.0.
 
 Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 
@@ -63,8 +63,8 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 | Animator (máquinas de estados, blend trees), Timeline | 🟡 Esqueletos glTF, clips, Animator con velocidad y bucle, control desde scripts, transiciones suaves, hasta 256 huesos; ❌ máquinas de estados, Timeline |
 | Importación de modelos FBX/glTF/OBJ con animaciones | 🟡 glTF/GLB con mallas, materiales, texturas, esqueletos y animaciones; ❌ FBX |
 | Audio: AudioSource 2D/3D, mezclador | 🟡 AudioSource 2D/3D, bucles, volumen, tono, oyente en la cámara; ❌ mezclador con grupos y efectos |
-| UI (uGUI / UI Toolkit): Canvas, botones, texto, layouts, anclajes | 🟡 Solo `Screen.text` |
-| Input System: acciones, mandos, táctil | 🟡 Táctil multipunto; ❌ acciones, mandos, joystick virtual |
+| UI (uGUI / UI Toolkit): Canvas, botones, texto, layouts, anclajes | 🟡 Anclajes y estirado, imágenes, barras, texto TTF, botones, joystick; ❌ layouts automáticos, deslizadores, campos de texto, máscaras |
+| Input System: acciones, mandos, táctil | 🟡 Táctil multipunto y joystick virtual; ❌ acciones, mandos |
 | Navegación (NavMesh) | ❌ |
 | Red (Netcode) | ❌ |
 
@@ -87,7 +87,7 @@ En este orden, porque cada paso hace posibles juegos que antes no lo eran:
 3. **Prefabs** ✅ básicos (v0.7); faltan variantes y propagación
 4. **Animación esquelética** ✅ (v0.8, transiciones y 256 huesos en v0.9); faltan máquinas de estados
 5. **Audio** ✅ (v0.9)
-6. **UI de juego**: botones, imágenes, texto con fuentes TTF, joystick virtual.
+6. **UI de juego** ✅ (v0.10): botones, imágenes, barras, texto TTF, joystick virtual
 7. **Terreno** con pintura de capas y vegetación instanciada.
 8. **Post-procesado** con HDR: bloom, SSAO, color grading.
 9. **Partículas**.
