@@ -460,13 +460,16 @@ void Renderer::onContextLost() {
     shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = 0;
     for (auto& m : meshes_) m = {};
     for (auto& t : textures_) t.gl = 0;
+    for (auto& m : models_) m.parts.clear();
     quadCount_ = 0;
     lines_.clear();
 }
 
 bool Renderer::onContextRestored() {
     if (!createGpuObjects()) return false;
-    for (size_t i = 1; i < textures_.size(); ++i) uploadTexture(textures_[i]);
+    for (size_t i = 1; i < textures_.size(); ++i)
+        if (!textures_[i].path.empty()) uploadTexture(textures_[i]);
+    for (Model& m : models_) buildModel(m); // las texturas incrustadas se vuelven a crear con su modelo
     TITAN_INFO("render", "Contexto de OpenGL restaurado (%zu texturas recargadas)", textures_.size() - 1);
     return true;
 }
@@ -475,6 +478,13 @@ void Renderer::shutdown() {
     for (auto& t : textures_)
         if (t.gl) glDeleteTextures(1, &t.gl);
     textures_.clear();
+    for (auto& model : models_)
+        for (auto& part : model.parts) {
+            glDeleteBuffers(1, &part.mesh.vbo);
+            glDeleteBuffers(1, &part.mesh.ibo);
+            glDeleteVertexArrays(1, &part.mesh.vao);
+        }
+    models_.clear();
     for (auto& m : meshes_) {
         if (m.vbo) glDeleteBuffers(1, &m.vbo);
         if (m.ibo) glDeleteBuffers(1, &m.ibo);
@@ -619,37 +629,42 @@ void Renderer::drawSky() {
 void Renderer::drawMesh(MeshPrimitive type, const Mat4& world, const MeshRenderer& mat, TextureHandle tex) {
     const GpuMesh& mesh = meshes_[static_cast<int>(type)];
     if (!mesh.vao) return;
+    drawSurface(mesh.vao, mesh.indexCount, false, world, mat.color, mat.metallic, mat.roughness, mat.emission,
+                mat.prototypeGrid, mat.unlit, tex, type == MeshPrimitive::Plane);
+}
+
+void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4& world, Color color, float metallic,
+                           float roughness, Color emission, bool grid, bool unlit, TextureHandle tex, bool doubleSided) {
     if (tex >= textures_.size()) tex = kWhiteTexture;
     // Matriz de normales: inversa traspuesta de la parte 3x3 (correcta también con escala no uniforme).
     const Mat4 inv = world.inverted();
     const float normalMat[9] = {inv.m[0], inv.m[4], inv.m[8], inv.m[1], inv.m[5], inv.m[9], inv.m[2], inv.m[6], inv.m[10]};
-    const Color& color = mat.color;
     glUseProgram(meshProgram_);
     glUniformMatrix4fv(uViewProj_, 1, GL_FALSE, viewProj_.m);
     glUniformMatrix4fv(uModel_, 1, GL_FALSE, world.m);
     glUniformMatrix3fv(uNormalMat_, 1, GL_FALSE, normalMat);
     glUniform4f(uColor_, color.r, color.g, color.b, color.a);
     glUniform3f(uCameraPos_, cameraPos_.x, cameraPos_.y, cameraPos_.z);
-    glUniform1f(uMetallic_, mat.metallic);
-    glUniform1f(uRoughness_, mat.roughness);
-    glUniform3f(uEmission_, mat.emission.r, mat.emission.g, mat.emission.b);
-    glUniform1i(uGrid_, mat.prototypeGrid ? 1 : 0);
-    glUniform1i(uUnlit_, (mat.unlit || unlitOverride_) ? 1 : 0);
+    glUniform1f(uMetallic_, metallic);
+    glUniform1f(uRoughness_, roughness);
+    glUniform3f(uEmission_, emission.r, emission.g, emission.b);
+    glUniform1i(uGrid_, grid ? 1 : 0);
+    glUniform1i(uUnlit_, (unlit || unlitOverride_) ? 1 : 0);
     glBindTexture(GL_TEXTURE_2D, textures_[tex].gl);
     // Una escala con determinante negativo invierte el sentido de los triángulos.
     const float det = world.m[0] * (world.m[5] * world.m[10] - world.m[9] * world.m[6]) -
                       world.m[4] * (world.m[1] * world.m[10] - world.m[9] * world.m[2]) +
                       world.m[8] * (world.m[1] * world.m[6] - world.m[5] * world.m[2]);
     glFrontFace(det < 0 ? GL_CW : GL_CCW);
-    if (type == MeshPrimitive::Plane) glDisable(GL_CULL_FACE); // el plano se ve por las dos caras
+    if (doubleSided) glDisable(GL_CULL_FACE);
     const bool transparent = color.a < 0.999f;
     if (transparent) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDepthMask(GL_FALSE);
     }
-    glBindVertexArray(mesh.vao);
-    glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_SHORT, nullptr);
+    glBindVertexArray(vao);
+    glDrawElements(GL_TRIANGLES, count, wideIndices ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, nullptr);
     glBindVertexArray(0);
     if (transparent) {
         glDisable(GL_BLEND);
@@ -659,7 +674,7 @@ void Renderer::drawMesh(MeshPrimitive type, const Mat4& world, const MeshRendere
     glFrontFace(GL_CCW);
     stats_.drawCalls++;
     stats_.meshes++;
-    stats_.triangles += mesh.indexCount / 3;
+    stats_.triangles += count / 3;
 }
 
 void Renderer::pushQuad(TextureHandle tex, const Vec3 c[4], Rect uv, Color color) {

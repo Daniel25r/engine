@@ -227,6 +227,7 @@ bool Editor::Impl::openProject(const std::string& path) {
     project = std::move(p);
     files.root = project->root();
     textureCache.clear();
+    modelCache.clear();
     undoStack.clear();
     redoStack.clear();
     codePath.clear();
@@ -340,6 +341,51 @@ TextureHandle Editor::Impl::editorTexture(AssetRef ref) {
     }
     textureCache[ref.value] = h;
     return h;
+}
+
+int Editor::Impl::editorModel(AssetRef ref) {
+    if (ref.isNull() || !project) return -1;
+    auto it = modelCache.find(ref.value);
+    if (it != modelCache.end()) return it->second;
+    const AssetRecord* r = project->assets().find(ref);
+    const int m = r ? renderer.loadModel("assets/" + r->path) : -1;
+    modelCache[ref.value] = m;
+    return m;
+}
+
+bool Editor::Impl::localBounds(Entity e, Vec3& min, Vec3& max) {
+    const MeshRenderer* mr = scene.world().get<MeshRenderer>(e);
+    if (!mr) return false;
+    if (!mr->model.isNull() && renderer.modelBounds(editorModel(mr->model), min, max)) return true;
+    min = {-0.5f, -0.5f, -0.5f};
+    max = {0.5f, 0.5f, 0.5f};
+    return true;
+}
+
+void Editor::Impl::addModelToScene(const AssetRecord& r) {
+    const int m = editorModel(r.id);
+    Vec3 mn, mx;
+    if (m < 0 || !renderer.modelBounds(m, mn, mx)) {
+        setStatus("No se pudo cargar el modelo (ver Registro)");
+        return;
+    }
+    pushUndo();
+    const std::string name = r.path.substr(r.path.find_last_of('/') + 1);
+    Entity e = scene.createEntity(name.substr(0, name.rfind('.')));
+    MeshRenderer mr;
+    mr.model = r.id;
+    scene.world().add<MeshRenderer>(e, mr);
+    // Se escala para que mida unos 2 metros y se apoya sobre el suelo.
+    const Vec3 size = mx - mn;
+    const float big = std::max(size.x, std::max(size.y, size.z));
+    const float k = big > 1e-5f ? 2.0f / big : 1.0f;
+    Vec3 p = spawnPoint();
+    if (threeD()) p.y = -mn.y * k;
+    scene.transform(e).setPosition(p);
+    scene.transform(e).setScale({k, k, k});
+    select(e);
+    dirty = true;
+    setStatus("Modelo añadido: " + name);
 }
 
 // ============================================================ Deshacer

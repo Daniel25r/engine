@@ -40,7 +40,7 @@ Mat4 lookAt(const Vec3& eye, const Vec3& target) {
 } // namespace
 
 void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& viewport, const SceneView& view,
-                           const TextureResolver& textures) {
+                           const TextureResolver& textures, const ModelResolver& models) {
     // ---- Ambiente: el primer Environment activo, o valores por defecto.
     SceneLighting L;
     bool hasEnv = false;
@@ -81,7 +81,8 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     scene.world().each<MeshRenderer, Transform>([&](Entity e, MeshRenderer& m, Transform& t) {
         if (!m.visible || !scene.isActiveInHierarchy(e)) return;
         const Vec3 d = t.worldPosition() - camPos;
-        MeshItem item{&m, &t.worldMatrix(), textures(m.texture), dot(d, d)};
+        const int model = (!m.model.isNull() && models) ? models(m.model) : -1;
+        MeshItem item{&m, &t.worldMatrix(), textures(m.texture), dot(d, d), model};
         (m.color.a < 0.999f ? transparent_ : opaque_).push_back(item);
     });
 
@@ -101,7 +102,10 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
         L.lightViewProjection = Mat4::ortho(-radius, radius, -radius, radius, 0.1f, radius * 6.0f) * lightView;
         renderer.beginShadowPass(L.lightViewProjection);
         for (const MeshItem& m : opaque_)
-            if (m.mesh->castShadows && !m.mesh->unlit) renderer.drawShadowCaster(m.mesh->mesh, *m.world);
+            if (m.mesh->castShadows && !m.mesh->unlit) {
+                if (m.model >= 0) renderer.drawModelShadow(m.model, *m.world);
+                else renderer.drawShadowCaster(m.mesh->mesh, *m.world);
+            }
         renderer.endShadowPass();
     }
 
@@ -113,8 +117,12 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     // Opacos de delante a atrás (menos píxeles sombreados de más); transparentes de atrás a delante.
     std::sort(opaque_.begin(), opaque_.end(), [](const MeshItem& a, const MeshItem& b) { return a.depth < b.depth; });
     std::sort(transparent_.begin(), transparent_.end(), [](const MeshItem& a, const MeshItem& b) { return a.depth > b.depth; });
-    for (const MeshItem& m : opaque_) renderer.drawMesh(m.mesh->mesh, *m.world, *m.mesh, m.texture);
-    for (const MeshItem& m : transparent_) renderer.drawMesh(m.mesh->mesh, *m.world, *m.mesh, m.texture);
+    auto draw = [&](const MeshItem& m) {
+        if (m.model >= 0) renderer.drawModel(m.model, *m.world, *m.mesh, m.texture);
+        else renderer.drawMesh(m.mesh->mesh, *m.world, *m.mesh, m.texture);
+    };
+    for (const MeshItem& m : opaque_) draw(m);
+    for (const MeshItem& m : transparent_) draw(m);
 
     sprites_.clear();
     scene.world().each<SpriteRenderer, Transform>([&](Entity e, SpriteRenderer& sp, Transform& t) {

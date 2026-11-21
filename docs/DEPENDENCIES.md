@@ -53,6 +53,17 @@ en `third_party/` con su versión fijada, así la compilación no depende de la 
 | Alternativas | Interfaz nativa Kotlin/Compose (no se puede probar sin dispositivo y duplica el editor), Nuklear, RmlUi |
 | Motivo | Un solo editor para todas las plataformas, comprobable automáticamente |
 
+### cgltf 1.14
+| | |
+|---|---|
+| Función | Leer modelos glTF 2.0 / GLB |
+| Licencia | MIT |
+| Origen | `github.com/jkuhlmann/cgltf`, etiqueta `v1.14`, un solo archivo `third_party/cgltf/cgltf.h` |
+| Android | Sí (C99) |
+| Limitaciones | Titán aún no usa animaciones, esqueletos, morph targets ni texturas normal/metálico; los .gltf con archivos externos se rechazan (usar .glb) |
+| Alternativas | Assimp (muy pesado, muchos formatos), tinygltf (C++, depende de json y stb) |
+| Motivo | Pequeño, sin dependencias, muy usado |
+
 ### Bibliotecas del sistema
 - Android: `libandroid`, `libEGL`, `libGLESv3`, `liblog` (NDK r26.3, API mínima 24) y `native_app_glue` del NDK (Apache 2.0).
 - Escritorio: GLFW 3.3 (zlib) y Mesa `libGLESv2` (MIT). Solo para desarrollo y pruebas; no van en el APK.

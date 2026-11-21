@@ -189,7 +189,7 @@ ComponentRegistry ComponentRegistry::createDefault() {
         "MeshRenderer",
         [](const MeshRenderer& m) {
             static const char* names[] = {"cube", "sphere", "plane", "cylinder", "cone", "capsule"};
-            return Json{{"mesh", names[static_cast<int>(m.mesh)]}, {"texture", assetToJson(m.texture)},
+            return Json{{"mesh", names[static_cast<int>(m.mesh)]}, {"model", assetToJson(m.model)}, {"texture", assetToJson(m.texture)},
                         {"color", toJson(m.color)}, {"metallic", toJson(m.metallic)}, {"roughness", toJson(m.roughness)},
                         {"emission", toJson(m.emission)}, {"prototypeGrid", m.prototypeGrid},
                         {"castShadows", m.castShadows}, {"unlit", m.unlit}, {"visible", m.visible}};
@@ -198,6 +198,7 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.readEnum("mesh", m.mesh,
                         {{"cube", MeshPrimitive::Cube}, {"sphere", MeshPrimitive::Sphere}, {"plane", MeshPrimitive::Plane},
                          {"cylinder", MeshPrimitive::Cylinder}, {"cone", MeshPrimitive::Cone}, {"capsule", MeshPrimitive::Capsule}});
+            rd.readAsset("model", m.model);
             rd.readAsset("texture", m.texture);
             rd.read("color", m.color);
             rd.read("metallic", m.metallic);

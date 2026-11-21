@@ -51,6 +51,7 @@ struct Editor::Impl {
     SceneRenderer sceneRenderer;
     ProjectFiles files;
     std::unordered_map<uint64_t, TextureHandle> textureCache;
+    std::unordered_map<uint64_t, int> modelCache;
     std::string status;   // mensaje breve en la barra superior
     float statusTime = 0;
 
@@ -163,6 +164,10 @@ struct Editor::Impl {
     Entity selectedEntity();
     void select(Entity e);
     TextureHandle editorTexture(AssetRef ref);
+    int editorModel(AssetRef ref);
+    // Caja local del objeto (cubo unidad para primitivas, límites del modelo si lo tiene).
+    bool localBounds(Entity e, Vec3& min, Vec3& max);
+    void addModelToScene(const AssetRecord& r);
     void handleShortcuts();
     void touchScroll();
     void track(); // llamar tras cada control de edición continua (arrastres y texto)

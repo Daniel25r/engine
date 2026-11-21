@@ -97,6 +97,7 @@ enum class MeshPrimitive { Cube, Sphere, Plane, Cylinder, Cone, Capsule };
 // Material PBR (metálico/rugosidad). Los colores se indican en sRGB, como en cualquier editor.
 struct MeshRenderer {
     MeshPrimitive mesh = MeshPrimitive::Cube;
+    AssetRef model;              // modelo importado (glTF/GLB); si no es nulo, sustituye a la primitiva
     AssetRef texture;            // textura de color base (nulo = sin textura)
     Color color;                 // color base
     float metallic = 0.0f;       // 0 = dieléctrico (plástico, piedra), 1 = metal

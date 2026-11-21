@@ -82,6 +82,7 @@ private:
     void applyPendingSceneLoad();
     void render(const Viewport& viewport);
     TextureHandle textureFor(AssetRef ref);
+    int modelFor(AssetRef ref);
 
     using Clock = std::chrono::steady_clock;
 
@@ -94,6 +95,7 @@ private:
     std::unique_ptr<Scene> scene_;
     std::unique_ptr<ScriptSystem> scripts_;
     std::unordered_map<uint64_t, TextureHandle> textures_;
+    std::unordered_map<uint64_t, int> models_;
     std::string projectName_;
     UUID pendingScene_;
 

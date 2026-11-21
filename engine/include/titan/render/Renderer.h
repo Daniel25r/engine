@@ -84,6 +84,15 @@ public:
     void setUnlitOverride(bool on) { unlitOverride_ = on; }
 
     void drawMesh(MeshPrimitive mesh, const Mat4& world, const MeshRenderer& material, TextureHandle tex);
+
+    // ---- Modelos importados (glTF 2.0 / GLB) ----
+    // Devuelve -1 si el archivo no existe o no se puede interpretar (el motivo va al registro).
+    int loadModel(const std::string& path);
+    bool modelBounds(int model, Vec3& min, Vec3& max) const;
+    int modelTriangles(int model) const;
+    // El color del MeshRenderer tiñe el del modelo; su textura, si la tiene, sustituye a la del modelo.
+    void drawModel(int model, const Mat4& world, const MeshRenderer& material, TextureHandle overrideTex);
+    void drawModelShadow(int model, const Mat4& world);
     // Sprite con su matriz de mundo completa: respeta posición, rotación, escala y jerarquía.
     void drawSprite(TextureHandle tex, const Mat4& world, Vec2 size, Vec2 pivot, Rect uv, Color color);
     void drawLine(const Vec3& a, const Vec3& b, Color color);
@@ -103,7 +112,7 @@ private:
     struct Texture {
         uint32_t gl = 0;
         int width = 0, height = 0;
-        std::string path;
+        std::string path;          // vacío: textura incrustada en un modelo (se recrea con el modelo)
         TextureOptions options;
     };
     struct TextCmd {
@@ -116,6 +125,24 @@ private:
         uint32_t vao = 0, vbo = 0, ibo = 0;
         int indexCount = 0;
     };
+    struct ModelPart {
+        GpuMesh mesh;
+        Color color;
+        float metallic = 0, roughness = 1;
+        Color emission{0, 0, 0, 1};
+        TextureHandle texture = 0;
+        bool doubleSided = false;
+    };
+    struct Model {
+        std::string path;
+        std::vector<ModelPart> parts;
+        Vec3 min, max;
+        int triangles = 0;
+        bool ok = false;
+    };
+    bool buildModel(Model& m);
+    void drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4& world, Color color, float metallic,
+                     float roughness, Color emission, bool grid, bool unlit, TextureHandle tex, bool doubleSided);
 
     bool createGpuObjects();
     void createMeshes();
@@ -145,6 +172,7 @@ private:
     uint32_t skyProgram_ = 0, skyVao_ = 0;
     int uSkyInvVP_ = -1, uSkyCam_ = -1, uSkyZ_ = -1, uSkyH_ = -1, uSkyG_ = -1, uSkySun_ = -1, uSkySunColor_ = -1;
     SceneLighting lighting_;
+    std::vector<Model> models_;
     bool unlitOverride_ = false;
     GpuMesh meshes_[6];
 

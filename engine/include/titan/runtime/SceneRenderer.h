@@ -19,6 +19,7 @@ struct SceneView {
 class SceneRenderer {
 public:
     using TextureResolver = std::function<TextureHandle(AssetRef)>;
+    using ModelResolver = std::function<int(AssetRef)>; // -1 = sin modelo
 
     // Vista desde la cámara activa de mayor prioridad. Devuelve false si la escena no tiene ninguna.
     static bool cameraView(Scene& scene, float aspect, SceneView& out, Entity* cameraEntity = nullptr);
@@ -26,7 +27,7 @@ public:
     // beginFrame + cámara + luces + mallas opacas, transparentes y sprites.
     // NO llama a endFrame: quien llama puede añadir líneas o texto (rejilla, selección, estadísticas) y luego cerrarlo.
     void render(Scene& scene, Renderer& renderer, const Viewport& viewport, const SceneView& view,
-                const TextureResolver& textures);
+                const TextureResolver& textures, const ModelResolver& models = {});
 
 private:
     struct MeshItem {
@@ -34,6 +35,7 @@ private:
         const Mat4* world;
         TextureHandle texture;
         float depth;
+        int model;
     };
     struct SpriteItem {
         int order;

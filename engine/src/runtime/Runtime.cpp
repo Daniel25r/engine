@@ -197,6 +197,15 @@ TextureHandle Runtime::textureFor(AssetRef ref) {
     return h;
 }
 
+int Runtime::modelFor(AssetRef ref) {
+    auto it = models_.find(ref.value);
+    if (it != models_.end()) return it->second;
+    const AssetRecord* r = assets_.find(ref);
+    const int m = r ? renderer_.loadModel("assets/" + r->path) : -1;
+    models_[ref.value] = m;
+    return m;
+}
+
 void Runtime::render(const Viewport& viewport) {
     const float aspect = screen_.x / screen_.y;
     SceneView view;
@@ -209,7 +218,8 @@ void Runtime::render(const Viewport& viewport) {
     }
     viewProj_ = view.projection * view.view;
     perspective_ = view.perspective;
-    sceneRenderer_.render(*scene_, renderer_, viewport, view, [this](AssetRef r) { return textureFor(r); });
+    sceneRenderer_.render(*scene_, renderer_, viewport, view, [this](AssetRef r) { return textureFor(r); },
+                          [this](AssetRef r) { return modelFor(r); });
 
     for (const auto& t : scriptTexts_) renderer_.drawText({t.x, t.y}, t.size, t.text, t.color);
     scriptTexts_.clear();
@@ -282,6 +292,7 @@ void Runtime::shutdown() {
     }
     scripts_.reset();
     textures_.clear();
+    models_.clear();
     renderer_.shutdown();
     TITAN_INFO("runtime", "Runtime detenido");
 }

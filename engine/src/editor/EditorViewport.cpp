@@ -97,7 +97,8 @@ void Editor::Impl::renderViewport() {
     // Fondo: el de la cámara del juego, para ver la escena como se verá al jugar.
     SceneView gameView;
     view.clearColor = SceneRenderer::cameraView(scene, 1.0f, gameView) ? gameView.clearColor : Color::hex(0x1B2230);
-    sceneRenderer.render(scene, renderer, vp, view, [this](AssetRef r) { return editorTexture(r); });
+    sceneRenderer.render(scene, renderer, vp, view, [this](AssetRef r) { return editorTexture(r); },
+                         [this](AssetRef r) { return editorModel(r); });
     drawGizmos();
     renderer.endFrame();
 }
@@ -163,9 +164,10 @@ void Editor::Impl::drawGizmos() {
     if (sel.isNull()) return;
     const Mat4& m = scene.transform(sel).worldMatrix();
     const Color hi{0.98f, 0.62f, 0.1f, 1};
-    if (scene.world().has<MeshRenderer>(sel)) {
+    Vec3 bmin, bmax;
+    if (localBounds(sel, bmin, bmax)) {
         Vec3 c[8];
-        for (int i = 0; i < 8; ++i) c[i] = m.transformPoint({(i & 1) ? 0.5f : -0.5f, (i & 2) ? 0.5f : -0.5f, (i & 4) ? 0.5f : -0.5f});
+        for (int i = 0; i < 8; ++i) c[i] = m.transformPoint({(i & 1) ? bmax.x : bmin.x, (i & 2) ? bmax.y : bmin.y, (i & 4) ? bmax.z : bmin.z});
         const int edges[12][2] = {{0, 1}, {2, 3}, {4, 5}, {6, 7}, {0, 2}, {1, 3}, {4, 6}, {5, 7}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
         for (auto& e : edges) renderer.drawLine(c[e[0]], c[e[1]], hi);
     } else if (const SpriteRenderer* sp = scene.world().get<SpriteRenderer>(sel)) {
@@ -211,7 +213,15 @@ Entity Editor::Impl::pick(ImVec2 p) {
         const Mat4 inv = world.inverted();
         const Vec3 lo = inv.transformPoint(o), ld = inv.transformDirection(d);
         float t;
-        if (scene.world().has<MeshRenderer>(e) && rayUnitBox(lo, ld, t)) consider(e, t);
+        Vec3 bmin, bmax;
+        if (localBounds(e, bmin, bmax)) {
+            // Rayo contra la caja del objeto: se lleva a la caja unidad.
+            const Vec3 size{std::max(bmax.x - bmin.x, 1e-4f), std::max(bmax.y - bmin.y, 1e-4f), std::max(bmax.z - bmin.z, 1e-4f)};
+            const Vec3 c = (bmin + bmax) * 0.5f;
+            const Vec3 o2{(lo.x - c.x) / size.x, (lo.y - c.y) / size.y, (lo.z - c.z) / size.z};
+            const Vec3 d2{ld.x / size.x, ld.y / size.y, ld.z / size.z};
+            if (rayUnitBox(o2, d2, t)) consider(e, t);
+        }
         if (const SpriteRenderer* sp = scene.world().get<SpriteRenderer>(e)) {
             if (std::fabs(ld.z) > 1e-9f) {
                 const float tt = -lo.z / ld.z;

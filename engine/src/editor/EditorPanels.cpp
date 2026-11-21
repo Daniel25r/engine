@@ -194,11 +194,19 @@ void Editor::Impl::drawUI() {
         const float right = std::max(300 * scale, W * 0.26f);
         const float mainW = W - right;
         const float avail = H - top - statusH;
-        if (beginPanel("##outliner", ImVec2(mainW, top), ImVec2(right, avail * 0.40f))) drawOutliner();
+        // Pantallas bajas (teléfono en horizontal): el panel inferior empieza plegado y la columna se reparte mejor.
+        const bool shortScreen = avail < 520 * scale;
+        static bool layoutDecided = false;
+        if (!layoutDecided) {
+            showBottom = !shortScreen;
+            layoutDecided = true;
+        }
+        const float split = shortScreen ? 0.45f : 0.40f;
+        if (beginPanel("##outliner", ImVec2(mainW, top), ImVec2(right, avail * split))) drawOutliner();
         ImGui::End();
-        if (beginPanel("##detalles", ImVec2(mainW, top + avail * 0.40f), ImVec2(right, avail * 0.60f))) drawDetails();
+        if (beginPanel("##detalles", ImVec2(mainW, top + avail * split), ImVec2(right, avail * (1 - split)))) drawDetails();
         ImGui::End();
-        const float bottomH = showBottom ? avail * 0.30f : 0.0f;
+        const float bottomH = showBottom ? avail * (shortScreen ? 0.45f : 0.30f) : 0.0f;
         if (beginPanel("##documentos", ImVec2(0, top), ImVec2(mainW, rowH), ImGuiWindowFlags_NoScrollbar)) drawDocumentTabs();
         ImGui::End();
         const ImVec2 docPos(0, top + rowH), docSize(mainW, avail - rowH - bottomH);
@@ -657,7 +665,7 @@ const char* Editor::Impl::typeLabel(Entity e) {
     if (w.has<Camera>(e)) return "Cámara";
     if (const Light* l = w.get<Light>(e)) return l->type == Light::Type::Directional ? "Luz direccional" : "Luz puntual";
     if (w.has<Environment>(e)) return "Cielo y niebla";
-    if (w.has<MeshRenderer>(e)) return "Malla";
+    if (const MeshRenderer* m = w.get<MeshRenderer>(e)) return m->model.isNull() ? "Malla" : "Modelo";
     if (w.has<SpriteRenderer>(e)) return "Sprite";
     if (w.has<Script>(e)) return "Script";
     return scene.children(e).empty() ? "Vacío" : "Carpeta";
@@ -819,7 +827,7 @@ bool vec3Row(const char* label, float* v, float speed, const float* resetTo, flo
         if (i) ImGui::SameLine();
         ImGui::PushID(i);
         ImGui::SetNextItemWidth(w);
-        changed |= ImGui::DragFloat("##v", &v[i], speed, 0, 0, "%.3f");
+        changed |= ImGui::DragFloat("##v", &v[i], speed, 0, 0, w < 80 * scale ? "%.2f" : "%.3f");
         ed.track();
         const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
         ImGui::GetWindowDrawList()->AddRectFilled(a, ImVec2(a.x + 3 * scale, b.y), kAxisColor[i], 2 * scale,
@@ -997,8 +1005,15 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
     } else if (name == "MeshRenderer") {
         MeshRenderer& m = *w.get<MeshRenderer>(e);
         int mesh = static_cast<int>(m.mesh);
-        combo("Malla", mesh, "Cubo\0Esfera\0Plano\0Cilindro\0Cono\0Cápsula\0");
-        m.mesh = static_cast<MeshPrimitive>(mesh);
+        propLabel("Modelo");
+        assetCombo("##modelo", AssetType::Model, m.model);
+        if (m.model.isNull()) {
+            combo("Malla", mesh, "Cubo\0Esfera\0Plano\0Cilindro\0Cono\0Cápsula\0");
+            m.mesh = static_cast<MeshPrimitive>(mesh);
+        } else {
+            propLabel("Triángulos");
+            ImGui::TextDisabled("%d", renderer.modelTriangles(editorModel(m.model)));
+        }
         propLabel("Textura");
         assetCombo("##tex", AssetType::Texture, m.texture);
         color("Color base", m.color);
@@ -1215,6 +1230,12 @@ void Editor::Impl::drawContent() {
             ImGui::SameLine();
             if (ImGui::SmallButton("Editar")) openScriptFile(sel->path);
         }
+        if (sel->type == AssetType::Model) {
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, kBlue);
+            if (ImGui::SmallButton("Añadir a la escena")) addModelToScene(*sel);
+            ImGui::PopStyleColor();
+        }
         if ((sel->type == AssetType::Texture || sel->type == AssetType::Script) && !target.isNull()) {
             ImGui::SameLine();
             if (ImGui::SmallButton(("Asignar a " + scene.info(target).name).c_str())) {
@@ -1283,6 +1304,8 @@ void Editor::Impl::drawContent() {
                 loadScene(r->id);
             } else if (r->type == AssetType::Script) {
                 openScriptFile(r->path);
+            } else if (r->type == AssetType::Model) {
+                addModelToScene(*r);
             }
         }
         const ImVec2 a = ImGui::GetItemRectMin();

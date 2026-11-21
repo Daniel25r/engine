@@ -13,8 +13,8 @@ android {
         applicationId = "dev.titan.editor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.4.0"
+        versionCode = 4
+        versionName = "0.5.0"
         ndk {
             abiFilters += ((project.findProperty("titanAbis") as String?) ?: "arm64-v8a,armeabi-v7a,x86_64").split(",")
         }

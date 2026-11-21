@@ -1,5 +1,18 @@
 # Registro de cambios
 
+## 0.5.0 — 2026-11-21 · Modelos 3D y modo horizontal
+
+Añadido
+- Importación de modelos glTF 2.0 (.glb, o .gltf con datos incrustados) con cgltf: mallas de todos los nodos,
+  normales (o calculadas si faltan), UV, índices de 32 bits, materiales PBR (color, metálico, rugosidad, emisión,
+  doble cara) y texturas incrustadas. Proyectan sombras. Campo `model` en `MeshRenderer`.
+- Editor: "Añadir a la escena" desde el navegador de contenido (escala el modelo a ~2 m y lo apoya en el suelo),
+  selección y caja de selección ajustadas a los límites del modelo, campo Modelo y número de triángulos en Detalles.
+- La app del editor funciona solo en horizontal; interfaz más compacta en teléfonos y panel inferior plegado en
+  pantallas bajas.
+
+Probado con los modelos oficiales de Khronos Duck, BoxTextured y Fox.
+
 ## 0.4.0 — 2026-11-21 · Interfaz profesional y render PBR
 
 Añadido

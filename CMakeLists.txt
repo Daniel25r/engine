@@ -58,6 +58,7 @@ target_compile_options(titan_scripting PRIVATE ${TITAN_WARNINGS} $<$<NOT:$<CXX_C
 add_library(titan_render STATIC
     engine/src/render/Renderer.cpp
     engine/src/render/stb_impl.cpp
+    engine/src/render/Model.cpp
 )
 target_include_directories(titan_render PRIVATE third_party/stb)
 target_link_libraries(titan_render PUBLIC titan_core)

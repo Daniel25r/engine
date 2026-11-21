@@ -96,7 +96,7 @@ public:
     std::vector<std::string> monoFontCandidates() override {
         return {"/system/fonts/DroidSansMono.ttf", "/system/fonts/NotoSansMono-Regular.ttf", "/system/fonts/CutiveMono.ttf"};
     }
-    float uiScale() override { return density; }
+    float uiScale() override { return density * 0.8f; }
     bool isTouchScreen() override { return true; }
 };
 
