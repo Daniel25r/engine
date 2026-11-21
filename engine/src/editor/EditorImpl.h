@@ -25,8 +25,11 @@ public:
     bool read(const std::string& path, std::vector<uint8_t>& out) override;
 };
 
-enum class Panel { Scene, Hierarchy, Inspector, Code, Assets, Console };
-enum class Tool { Move, Camera };
+// Pestañas de la hoja inferior en teléfonos.
+enum class Panel { Outliner, Details, Content, Console };
+// Herramientas de la vista (como Q/W/E/R en los editores profesionales).
+enum class Tool { Select, Translate, Rotate, Scale };
+enum class ViewAngle { Perspective, Top, Front, Right };
 
 struct Editor::Impl {
     explicit Impl(EditorPlatform& p) : platform(p), registry(ComponentRegistry::createDefault()) {}
@@ -69,8 +72,19 @@ struct Editor::Impl {
     // ---- Vista de escena y gestos ----
     ImVec2 vpMin{0, 0}, vpMax{0, 0};
     bool vpVisible = false;
-    Tool tool = Tool::Move;
+    Tool tool = Tool::Translate;
     bool snap = false;
+    float snapMove = 0.5f, snapRotate = 15.0f, snapScale = 0.25f;
+    ViewAngle viewAngle = ViewAngle::Perspective;
+    bool viewUnlit = false, showGrid = true, showGizmos = true, showStats = false;
+    ImVec2 vpBarMin{0, 0}, vpBarMax{0, 0}; // barra flotante de la vista: sus toques van a la interfaz
+    // Gizmo de transformación
+    int gizmoAxis = -1;   // 0=X 1=Y 2=Z 3=centro
+    bool gizmoDragging = false;
+    ImVec2 gizmoGrab{0, 0};
+    Vec3 gizmoStartWorld, gizmoStartScale;
+    Quat gizmoStartWorldRot;
+    bool playPaused = false;
     struct Touch {
         int id;
         ImVec2 pos, start, last;
@@ -87,7 +101,13 @@ struct Editor::Impl {
     float dragDistance = 0;
 
     // ---- Paneles ----
-    Panel panel = Panel::Scene;
+    Panel panel = Panel::Outliner;   // hoja inferior (teléfono)
+    bool codeTabActive = false;       // documento activo: escena o script
+    bool bottomIsConsole = false;     // panel inferior (pantalla ancha): contenido o consola
+    bool showBottom = true;
+    std::string outlinerFilter;
+    std::string contentFolder;        // carpeta mostrada en el navegador de contenido
+    UUID contentSelected;
     bool showBrowser = true;
     Vec3 inspectorEuler;
     UUID inspectorEulerFor;
@@ -155,19 +175,23 @@ struct Editor::Impl {
 
     // ================= EditorPanels.cpp =================
     void drawUI();
+    void drawMenuBar();
     void drawToolbar(const ImVec2& pos, const ImVec2& size);
+    void drawDocumentTabs();
+    void drawViewportBar();
+    void drawStatusBar(const ImVec2& pos, const ImVec2& size);
     void drawBrowser();
-    void drawHierarchy();
-    void drawHierarchyNode(Entity e);
-    void drawInspector();
+    void drawOutliner();
+    void drawOutlinerNode(Entity e);
+    void drawDetails();
     void drawComponentFields(const std::string& name, Entity e);
     bool assetCombo(const char* label, AssetType type, AssetRef& ref);
     void drawCode();
-    void drawAssets();
+    void drawContent();
     void drawConsole();
-    void drawPanelTabs(bool wide);
-    void drawPanel(Panel p);
+    void drawCreateMenu();
     void checkCode();
+    const char* typeLabel(Entity e);
 
     // ================= EditorViewport.cpp =================
     bool threeD() const;
@@ -184,6 +208,12 @@ struct Editor::Impl {
         return vpVisible && p.x >= vpMin.x && p.y >= vpMin.y && p.x < vpMax.x && p.y < vpMax.y;
     }
     Vec3 spawnPoint() const;
+    bool worldToScreen(const Vec3& p, ImVec2& out) const;
+    float gizmoLength() const;
+    int gizmoHitTest(ImVec2 p);
+    void gizmoDrag(ImVec2 p);
+    void drawGizmo(ImDrawList* dl);
+    void drawAxisIndicator(ImDrawList* dl);
 };
 
 } // namespace titan

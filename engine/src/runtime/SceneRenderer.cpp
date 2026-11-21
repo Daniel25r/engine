@@ -1,6 +1,7 @@
 #include "titan/runtime/SceneRenderer.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace titan {
 
@@ -24,31 +25,57 @@ bool SceneRenderer::cameraView(Scene& scene, float aspect, SceneView& out, Entit
     return true;
 }
 
+namespace {
+Mat4 lookAt(const Vec3& eye, const Vec3& target) {
+    const Vec3 f = (target - eye).normalized();
+    Vec3 r = cross(f, std::fabs(f.y) > 0.99f ? Vec3{1, 0, 0} : Vec3{0, 1, 0}).normalized();
+    const Vec3 u = cross(r, f);
+    Mat4 m;
+    m.m[0] = r.x; m.m[1] = r.y; m.m[2] = r.z;
+    m.m[4] = u.x; m.m[5] = u.y; m.m[6] = u.z;
+    m.m[8] = -f.x; m.m[9] = -f.y; m.m[10] = -f.z;
+    m.m[12] = eye.x; m.m[13] = eye.y; m.m[14] = eye.z;
+    return m.inverted();
+}
+} // namespace
+
 void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& viewport, const SceneView& view,
                            const TextureResolver& textures) {
-    renderer.beginFrame(viewport, view.clearColor);
-    renderer.setCamera(view.view, view.projection);
+    // ---- Ambiente: el primer Environment activo, o valores por defecto.
+    SceneLighting L;
+    bool hasEnv = false;
+    scene.world().each<Environment>([&](Entity e, Environment& env) {
+        if (!hasEnv && scene.isActiveInHierarchy(e)) {
+            L.env = env;
+            hasEnv = true;
+        }
+    });
+    if (!hasEnv && !view.perspective) {
+        // 2D sin Environment: sin cielo, sin niebla y con luz ambiente neutra.
+        L.env.sky = false;
+        L.env.fogDensity = 0;
+        L.env.shadows = false;
+    }
+    L.drawSky = L.env.sky && view.perspective;
 
-    // Luces: la primera direccional activa y hasta 4 puntuales. Sin ninguna luz en la escena se usa
-    // una iluminación por defecto para que un objeto recién creado no salga negro.
-    LightSetup lights;
-    bool anyLight = false, haveDirectional = false;
+    bool anyLight = false, haveSun = false;
     scene.world().each<Light, Transform>([&](Entity e, Light& l, Transform& t) {
         if (!scene.isActiveInHierarchy(e)) return;
         anyLight = true;
         const Color c{l.color.r * l.intensity, l.color.g * l.intensity, l.color.b * l.intensity, 1};
-        if (l.type == Light::Type::Directional && !haveDirectional) {
-            haveDirectional = true;
-            lights.directionalDir = t.forward();
-            lights.directionalColor = c;
-        } else if (l.type == Light::Type::Point && lights.points.size() < Renderer::kMaxPointLights) {
-            lights.points.push_back({t.worldPosition(), l.range, c});
+        if (l.type == Light::Type::Directional && !haveSun) {
+            haveSun = true;
+            L.sunDirection = t.forward();
+            L.sunColor = c;
+        } else if (l.type == Light::Type::Point && L.points.size() < Renderer::kMaxPointLights) {
+            L.points.push_back({t.worldPosition(), l.range, c});
         }
     });
-    if (anyLight && !haveDirectional) lights.directionalColor = {0, 0, 0, 1};
-    renderer.setLights(lights);
+    if (anyLight && !haveSun) L.sunColor = {0, 0, 0, 1};
 
-    const Vec3 camPos = view.view.inverted().translation();
+    // ---- Recoger mallas.
+    const Mat4 camWorld = view.view.inverted();
+    const Vec3 camPos = camWorld.translation();
     opaque_.clear();
     transparent_.clear();
     scene.world().each<MeshRenderer, Transform>([&](Entity e, MeshRenderer& m, Transform& t) {
@@ -57,13 +84,37 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
         MeshItem item{&m, &t.worldMatrix(), textures(m.texture), dot(d, d)};
         (m.color.a < 0.999f ? transparent_ : opaque_).push_back(item);
     });
+
+    // ---- Sombras del sol: un mapa ortográfico centrado delante de la cámara, alineado a sus texels
+    // para que las sombras no "tiemblen" al mover la cámara.
+    L.shadows = L.env.shadows && haveSun && !opaque_.empty() && view.perspective;
+    if (L.shadows) {
+        const float radius = std::max(5.0f, L.env.shadowDistance * 0.5f);
+        const Vec3 forward = camWorld.transformDirection({0, 0, -1}).normalized();
+        Vec3 focus = camPos + forward * radius * 0.8f;
+        const Vec3 dir = L.sunDirection.normalized();
+        Mat4 lightView = lookAt(focus - dir * radius * 3.0f, focus);
+        const float texel = 2.0f * radius / Renderer::kShadowMapSize;
+        Vec3 ls = lightView.transformPoint(focus);
+        const Vec3 snapped{std::floor(ls.x / texel) * texel, std::floor(ls.y / texel) * texel, ls.z};
+        lightView = Mat4::translate(snapped - ls) * lightView;
+        L.lightViewProjection = Mat4::ortho(-radius, radius, -radius, radius, 0.1f, radius * 6.0f) * lightView;
+        renderer.beginShadowPass(L.lightViewProjection);
+        for (const MeshItem& m : opaque_)
+            if (m.mesh->castShadows && !m.mesh->unlit) renderer.drawShadowCaster(m.mesh->mesh, *m.world);
+        renderer.endShadowPass();
+    }
+
+    // ---- Pasada principal.
+    renderer.beginFrame(viewport, L.drawSky ? L.env.skyHorizon : view.clearColor);
+    renderer.setCamera(view.view, view.projection);
+    renderer.setLighting(L);
+    renderer.drawSky();
     // Opacos de delante a atrás (menos píxeles sombreados de más); transparentes de atrás a delante.
     std::sort(opaque_.begin(), opaque_.end(), [](const MeshItem& a, const MeshItem& b) { return a.depth < b.depth; });
     std::sort(transparent_.begin(), transparent_.end(), [](const MeshItem& a, const MeshItem& b) { return a.depth > b.depth; });
-    for (const MeshItem& m : opaque_)
-        renderer.drawMesh(m.mesh->mesh, *m.world, m.mesh->color, m.texture, m.mesh->shininess, m.mesh->unlit);
-    for (const MeshItem& m : transparent_)
-        renderer.drawMesh(m.mesh->mesh, *m.world, m.mesh->color, m.texture, m.mesh->shininess, m.mesh->unlit);
+    for (const MeshItem& m : opaque_) renderer.drawMesh(m.mesh->mesh, *m.world, *m.mesh, m.texture);
+    for (const MeshItem& m : transparent_) renderer.drawMesh(m.mesh->mesh, *m.world, *m.mesh, m.texture);
 
     sprites_.clear();
     scene.world().each<SpriteRenderer, Transform>([&](Entity e, SpriteRenderer& sp, Transform& t) {

@@ -1,10 +1,22 @@
-// Paneles del editor. Cada control modifica directamente los datos de la escena (titan::Scene)
-// y registra la operación para poder deshacerla.
+// Paneles y distribución del editor. Cada control modifica directamente los datos de la escena
+// (titan::Scene) y registra la operación para poder deshacerla.
+//
+//  ┌ Menú ─────────────────────────────────────────────────────────────┐
+//  │ Barra: guardar · Q W E R · imán · ▶ ❚❚ ■                          │
+//  ├ Documentos (Escena | script.lua) ───────────────┬ Outliner ───────┤
+//  │ Vista de escena (con su barra flotante)         │                 │
+//  │                                                 ├ Detalles ───────┤
+//  ├ Contenido | Consola ────────────────────────────┤                 │
+//  └ Barra de estado ────────────────────────────────┴─────────────────┘
+// En teléfonos: vista arriba y una hoja inferior con pestañas.
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <map>
+#include <set>
 
 #include "EditorImpl.h"
+#include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include "lauxlib.h"
 #include "lua.h"
@@ -18,10 +30,11 @@ namespace titan {
 
 namespace {
 
-const ImVec4 kAccent(0.949f, 0.71f, 0.29f, 1);
-const ImVec4 kPlay(0.30f, 0.70f, 0.45f, 1);
-const ImVec4 kStop(0.85f, 0.36f, 0.38f, 1);
-const ImVec4 kDim(0.56f, 0.61f, 0.70f, 1);
+const ImVec4 kBlue(0.0f, 0.44f, 0.88f, 1);
+const ImVec4 kPlayGreen(0.30f, 0.75f, 0.35f, 1);
+const ImVec4 kStopRed(0.86f, 0.30f, 0.30f, 1);
+const ImVec4 kDim(0.55f, 0.55f, 0.55f, 1);
+const ImU32 kAxisColor[3] = {IM_COL32(220, 60, 60, 255), IM_COL32(110, 190, 40, 255), IM_COL32(50, 110, 230, 255)};
 
 constexpr ImGuiWindowFlags kPanelFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                          ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
@@ -33,32 +46,112 @@ bool beginPanel(const char* id, ImVec2 pos, ImVec2 size, ImGuiWindowFlags extra 
     return ImGui::Begin(id, nullptr, kPanelFlags | extra);
 }
 
-void sectionTitle(const char* text) {
-    ImGui::PushStyleColor(ImGuiCol_Text, kDim);
-    ImGui::TextUnformatted(text);
-    ImGui::PopStyleColor();
+// Cabecera de panel al estilo de los editores profesionales: título en una franja oscura.
+void panelHeader(const char* title, float scale) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float h = ImGui::GetTextLineHeight() + 8 * scale;
+    const float w = ImGui::GetContentRegionAvail().x;
+    dl->AddRectFilled(ImVec2(p.x - 4 * scale, p.y), ImVec2(p.x + w + 4 * scale, p.y + h), IM_COL32(26, 26, 26, 255));
+    dl->AddRectFilled(ImVec2(p.x - 4 * scale, p.y + h - 2 * scale), ImVec2(p.x + 60 * scale, p.y + h), IM_COL32(0, 112, 224, 255));
+    ImGui::SetCursorScreenPos(ImVec2(p.x + 2 * scale, p.y + 4 * scale));
+    ImGui::TextUnformatted(title);
+    ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + h + 4 * scale));
 }
 
-bool coloredButton(const char* label, ImVec4 color, ImVec2 size = ImVec2(0, 0)) {
-    ImGui::PushStyleColor(ImGuiCol_Button, color);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(color.x * 1.1f, color.y * 1.1f, color.z * 1.1f, 1));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(color.x * 0.9f, color.y * 0.9f, color.z * 0.9f, 1));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.06f, 0.07f, 0.09f, 1));
-    const bool r = ImGui::Button(label, size);
-    ImGui::PopStyleColor(4);
-    return r;
+enum class Icon { Save, Select, Move, Rotate, Scale, Magnet, Play, Pause, Stop, Undo, Redo, Plus, Folder };
+
+void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float r, ImU32 col) {
+    const float t = std::max(1.5f, r * 0.16f);
+    switch (icon) {
+    case Icon::Play: dl->AddTriangleFilled(ImVec2(c.x - r * 0.6f, c.y - r * 0.75f), ImVec2(c.x - r * 0.6f, c.y + r * 0.75f), ImVec2(c.x + r * 0.75f, c.y), col); break;
+    case Icon::Pause:
+        dl->AddRectFilled(ImVec2(c.x - r * 0.6f, c.y - r * 0.7f), ImVec2(c.x - r * 0.15f, c.y + r * 0.7f), col);
+        dl->AddRectFilled(ImVec2(c.x + r * 0.15f, c.y - r * 0.7f), ImVec2(c.x + r * 0.6f, c.y + r * 0.7f), col);
+        break;
+    case Icon::Stop: dl->AddRectFilled(ImVec2(c.x - r * 0.6f, c.y - r * 0.6f), ImVec2(c.x + r * 0.6f, c.y + r * 0.6f), col, r * 0.1f); break;
+    case Icon::Save:
+        dl->AddRect(ImVec2(c.x - r * 0.7f, c.y - r * 0.7f), ImVec2(c.x + r * 0.7f, c.y + r * 0.7f), col, r * 0.12f, 0, t);
+        dl->AddRectFilled(ImVec2(c.x - r * 0.4f, c.y - r * 0.7f), ImVec2(c.x + r * 0.3f, c.y - r * 0.2f), col);
+        dl->AddRectFilled(ImVec2(c.x - r * 0.45f, c.y + r * 0.15f), ImVec2(c.x + r * 0.45f, c.y + r * 0.55f), col);
+        break;
+    case Icon::Select:
+        dl->AddTriangleFilled(ImVec2(c.x - r * 0.55f, c.y - r * 0.8f), ImVec2(c.x - r * 0.55f, c.y + r * 0.5f), ImVec2(c.x + r * 0.55f, c.y + r * 0.05f), col);
+        dl->AddLine(ImVec2(c.x - r * 0.1f, c.y + r * 0.1f), ImVec2(c.x + r * 0.35f, c.y + r * 0.8f), col, t * 1.3f);
+        break;
+    case Icon::Move:
+        dl->AddLine(ImVec2(c.x - r * 0.8f, c.y), ImVec2(c.x + r * 0.8f, c.y), col, t);
+        dl->AddLine(ImVec2(c.x, c.y - r * 0.8f), ImVec2(c.x, c.y + r * 0.8f), col, t);
+        for (int i = 0; i < 4; ++i) {
+            const float a = i * 1.5708f, ca = std::cos(a), sa = std::sin(a);
+            const ImVec2 tip(c.x + ca * r * 0.95f, c.y + sa * r * 0.95f);
+            dl->AddTriangleFilled(tip, ImVec2(c.x + ca * r * 0.55f - sa * r * 0.28f, c.y + sa * r * 0.55f + ca * r * 0.28f),
+                                  ImVec2(c.x + ca * r * 0.55f + sa * r * 0.28f, c.y + sa * r * 0.55f - ca * r * 0.28f), col);
+        }
+        break;
+    case Icon::Rotate:
+        dl->PathArcTo(c, r * 0.65f, 0.3f, 5.6f, 20);
+        dl->PathStroke(col, 0, t);
+        dl->AddTriangleFilled(ImVec2(c.x + r * 0.95f, c.y + r * 0.05f), ImVec2(c.x + r * 0.35f, c.y + r * 0.05f), ImVec2(c.x + r * 0.65f, c.y + r * 0.5f), col);
+        break;
+    case Icon::Scale:
+        dl->AddRect(ImVec2(c.x - r * 0.75f, c.y - r * 0.1f), ImVec2(c.x + r * 0.1f, c.y + r * 0.75f), col, 0, 0, t);
+        dl->AddLine(ImVec2(c.x - r * 0.1f, c.y + r * 0.1f), ImVec2(c.x + r * 0.75f, c.y - r * 0.75f), col, t);
+        dl->AddTriangleFilled(ImVec2(c.x + r * 0.8f, c.y - r * 0.8f), ImVec2(c.x + r * 0.2f, c.y - r * 0.75f), ImVec2(c.x + r * 0.75f, c.y - r * 0.2f), col);
+        break;
+    case Icon::Magnet:
+        dl->PathArcTo(ImVec2(c.x, c.y + r * 0.05f), r * 0.55f, 0.0f, 3.1416f, 14);
+        dl->PathStroke(col, 0, t * 1.6f);
+        dl->AddLine(ImVec2(c.x - r * 0.55f, c.y + r * 0.05f), ImVec2(c.x - r * 0.55f, c.y - r * 0.7f), col, t * 1.6f);
+        dl->AddLine(ImVec2(c.x + r * 0.55f, c.y + r * 0.05f), ImVec2(c.x + r * 0.55f, c.y - r * 0.7f), col, t * 1.6f);
+        break;
+    case Icon::Undo:
+    case Icon::Redo: {
+        const float s = icon == Icon::Undo ? 1.0f : -1.0f;
+        dl->PathArcTo(c, r * 0.55f, icon == Icon::Undo ? 3.6f : -0.46f, icon == Icon::Undo ? 6.9f : 2.75f, 16);
+        dl->PathStroke(col, 0, t);
+        dl->AddTriangleFilled(ImVec2(c.x - s * r * 0.85f, c.y - r * 0.2f), ImVec2(c.x - s * r * 0.25f, c.y - r * 0.55f), ImVec2(c.x - s * r * 0.3f, c.y + r * 0.1f), col);
+        break;
+    }
+    case Icon::Plus:
+        dl->AddLine(ImVec2(c.x - r * 0.6f, c.y), ImVec2(c.x + r * 0.6f, c.y), col, t * 1.4f);
+        dl->AddLine(ImVec2(c.x, c.y - r * 0.6f), ImVec2(c.x, c.y + r * 0.6f), col, t * 1.4f);
+        break;
+    case Icon::Folder:
+        dl->AddRectFilled(ImVec2(c.x - r * 0.8f, c.y - r * 0.45f), ImVec2(c.x + r * 0.8f, c.y + r * 0.6f), col, r * 0.1f);
+        dl->AddRectFilled(ImVec2(c.x - r * 0.8f, c.y - r * 0.65f), ImVec2(c.x - r * 0.1f, c.y - r * 0.35f), col, r * 0.1f);
+        break;
+    }
 }
 
-bool toggleButton(const char* label, bool on) {
-    if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(kAccent.x, kAccent.y, kAccent.z, 0.45f));
-    const bool r = ImGui::Button(label);
-    if (on) ImGui::PopStyleColor();
-    return r;
+bool iconButton(const char* id, Icon icon, bool active, const char* tooltip, ImU32 color = IM_COL32(205, 205, 205, 255)) {
+    const float sz = ImGui::GetFrameHeight();
+    if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.44f, 0.88f, 0.55f));
+    const bool pressed = ImGui::Button(id, ImVec2(sz * 1.15f, sz));
+    if (active) ImGui::PopStyleColor();
+    const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+    drawIcon(ImGui::GetWindowDrawList(), icon, ImVec2((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f), sz * 0.36f, color);
+    if (tooltip && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("%s", tooltip);
+    return pressed;
+}
+
+void vsep() {
+    ImGui::SameLine();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float h = ImGui::GetFrameHeight();
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + h * 0.15f), ImVec2(p.x, p.y + h * 0.85f), IM_COL32(70, 70, 70, 255));
+    ImGui::Dummy(ImVec2(1, h));
+    ImGui::SameLine();
 }
 
 std::string fileName(const std::string& path) {
     const size_t s = path.find_last_of('/');
     return s == std::string::npos ? path : path.substr(s + 1);
+}
+
+std::string folderOf(const std::string& path) {
+    const size_t s = path.find_last_of('/');
+    return s == std::string::npos ? "" : path.substr(0, s);
 }
 
 std::string identifierFrom(const std::string& name) {
@@ -76,178 +169,374 @@ std::string identifierFrom(const std::string& name) {
     return out;
 }
 
-const char* kTemplateNames[] = {"2D vacío", "3D vacío", "2D Plataformas (jugable)", "3D Exploración (jugable)"};
-const char* kTemplateHelp[] = {
-    "Una cámara 2D. Para empezar desde cero.",
-    "Cámara en perspectiva, luz, suelo y un cubo.",
-    "Un personaje que corre, salta y recoge monedas. Todo está programado en Lua y puedes cambiarlo.",
-    "Un personaje que camina donde tocas, con cámara que le sigue, luces y gemas que recoger.",
-};
-
 } // namespace
 
 // ============================================================ Distribución general
 
 void Editor::Impl::drawUI() {
     vpVisible = false;
+    vpBarMin = vpBarMax = ImVec2(0, 0);
     if (!project || showBrowser) {
         drawBrowser();
         return;
     }
     const float W = float(fbWidth), H = float(fbHeight);
     const ImGuiStyle& st = ImGui::GetStyle();
-    const float barH = ImGui::GetFrameHeight() + st.WindowPadding.y * 2;
-    drawToolbar(ImVec2(0, 0), ImVec2(W, barH));
-    const bool wide = W > H * 1.2f && W > 760 * scale;
-    const float tabsH = ImGui::GetFrameHeight() + st.WindowPadding.y * 2;
+    drawMenuBar();
+    const float menuH = ImGui::GetFrameHeight();
+    const float rowH = ImGui::GetFrameHeight() + st.WindowPadding.y * 2;
+    drawToolbar(ImVec2(0, menuH), ImVec2(W, rowH));
+    const float statusH = ImGui::GetFrameHeight() + 4 * scale;
+    const float top = menuH + rowH;
+    const bool wide = W > H * 1.15f && W > 760 * scale;
 
     if (wide) {
-        const float left = std::max(230 * scale, W * 0.22f), right = std::max(270 * scale, W * 0.27f);
-        const float colH = H - barH;
-        if (beginPanel("##jerarquia", ImVec2(0, barH), ImVec2(left, colH * 0.58f))) drawHierarchy();
+        const float right = std::max(300 * scale, W * 0.26f);
+        const float mainW = W - right;
+        const float avail = H - top - statusH;
+        if (beginPanel("##outliner", ImVec2(mainW, top), ImVec2(right, avail * 0.40f))) drawOutliner();
         ImGui::End();
-        if (beginPanel("##recursos", ImVec2(0, barH + colH * 0.58f), ImVec2(left, colH * 0.42f))) drawAssets();
+        if (beginPanel("##detalles", ImVec2(mainW, top + avail * 0.40f), ImVec2(right, avail * 0.60f))) drawDetails();
         ImGui::End();
-        if (beginPanel("##inspector", ImVec2(W - right, barH), ImVec2(right, colH))) drawInspector();
+        const float bottomH = showBottom ? avail * 0.30f : 0.0f;
+        if (beginPanel("##documentos", ImVec2(0, top), ImVec2(mainW, rowH), ImGuiWindowFlags_NoScrollbar)) drawDocumentTabs();
         ImGui::End();
-        const float cx = left, cw = W - left - right;
-        if (beginPanel("##pestanas", ImVec2(cx, barH), ImVec2(cw, tabsH), ImGuiWindowFlags_NoScrollbar)) drawPanelTabs(true);
-        ImGui::End();
-        const ImVec2 cpos(cx, barH + tabsH), csize(cw, H - barH - tabsH);
-        if (panel == Panel::Code || panel == Panel::Console) {
-            if (beginPanel("##central", cpos, csize)) drawPanel(panel);
+        const ImVec2 docPos(0, top + rowH), docSize(mainW, avail - rowH - bottomH);
+        if (codeTabActive) {
+            if (beginPanel("##codigo", docPos, docSize)) drawCode();
             ImGui::End();
         } else {
             vpVisible = true;
-            vpMin = cpos;
-            vpMax = ImVec2(cpos.x + csize.x, cpos.y + csize.y);
+            vpMin = docPos;
+            vpMax = ImVec2(docPos.x + docSize.x, docPos.y + docSize.y);
         }
+        if (showBottom) {
+            if (beginPanel("##inferior", ImVec2(0, top + avail - bottomH), ImVec2(mainW, bottomH))) {
+                if (ImGui::BeginTabBar("##inf")) {
+                    if (ImGui::BeginTabItem("Contenido", nullptr, bottomIsConsole ? 0 : ImGuiTabItemFlags_None)) {
+                        bottomIsConsole = false;
+                        drawContent();
+                        ImGui::EndTabItem();
+                    }
+                    if (ImGui::BeginTabItem("Registro de salida")) {
+                        bottomIsConsole = true;
+                        drawConsole();
+                        ImGui::EndTabItem();
+                    }
+                    ImGui::EndTabBar();
+                }
+            }
+            ImGui::End();
+        }
+        drawStatusBar(ImVec2(0, H - statusH), ImVec2(W, statusH));
     } else {
-        if (beginPanel("##pestanas", ImVec2(0, barH), ImVec2(W, tabsH), ImGuiWindowFlags_NoScrollbar |
-                                                                          ImGuiWindowFlags_HorizontalScrollbar))
-            drawPanelTabs(false);
+        // Teléfono: documentos, vista y hoja inferior con pestañas.
+        if (beginPanel("##documentos", ImVec2(0, top), ImVec2(W, rowH), ImGuiWindowFlags_NoScrollbar)) drawDocumentTabs();
         ImGui::End();
-        const float y0 = barH + tabsH, avail = H - y0;
-        if (panel == Panel::Scene) {
-            vpVisible = true;
-            vpMin = ImVec2(0, y0);
-            vpMax = ImVec2(W, H);
-        } else if (panel == Panel::Hierarchy || panel == Panel::Inspector) {
-            const float vh = avail * 0.42f;
+        const float y0 = top + rowH, avail = H - y0;
+        if (codeTabActive) {
+            if (beginPanel("##codigo", ImVec2(0, y0), ImVec2(W, avail))) drawCode();
+            ImGui::End();
+        } else {
+            const float vh = avail * 0.46f;
             vpVisible = true;
             vpMin = ImVec2(0, y0);
             vpMax = ImVec2(W, y0 + vh);
-            if (beginPanel("##panel", ImVec2(0, y0 + vh), ImVec2(W, avail - vh))) drawPanel(panel);
-            ImGui::End();
-        } else {
-            if (beginPanel("##panel", ImVec2(0, y0), ImVec2(W, avail))) drawPanel(panel);
+            if (beginPanel("##hoja", ImVec2(0, y0 + vh), ImVec2(W, avail - vh))) {
+                struct Tab { const char* label; Panel p; };
+                static const Tab tabs[] = {{"Outliner", Panel::Outliner}, {"Detalles", Panel::Details},
+                                           {"Contenido", Panel::Content}, {"Registro", Panel::Console}};
+                if (ImGui::BeginTabBar("##hojatabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+                    for (const Tab& t : tabs) {
+                        static Panel lastPanel = Panel::Outliner;
+                        const bool force = panel != lastPanel && panel == t.p;
+                        if (ImGui::BeginTabItem(t.label, nullptr, force ? ImGuiTabItemFlags_SetSelected : 0)) {
+                            if (!(panel != lastPanel && panel != t.p)) panel = t.p;
+                            lastPanel = panel;
+                            ImGui::EndTabItem();
+                        }
+                    }
+                    ImGui::EndTabBar();
+                }
+                ImGui::BeginChild("##hojacontenido");
+                switch (panel) {
+                case Panel::Outliner: drawOutliner(); break;
+                case Panel::Details: drawDetails(); break;
+                case Panel::Content: drawContent(); break;
+                case Panel::Console: drawConsole(); break;
+                }
+                ImGui::EndChild();
+            }
             ImGui::End();
         }
     }
 
-    // Indicaciones sobre la vista de escena.
     if (vpVisible) {
-        ImDrawList* dl = ImGui::GetForegroundDrawList();
-        const char* hint = runtime ? "Jugando: toca la vista para interactuar con el juego"
-                         : tool == Tool::Move ? "Mover: arrastra un objeto · 1 dedo en vacío gira/desplaza · 2 dedos zoom"
-                                              : "Cámara: 1 dedo gira/desplaza · 2 dedos desplazan y hacen zoom";
-        const ImVec2 ts = ImGui::CalcTextSize(hint);
-        const ImVec2 p(vpMin.x + 8 * scale, vpMax.y - ts.y - 8 * scale);
-        dl->AddRectFilled(ImVec2(p.x - 4 * scale, p.y - 2 * scale), ImVec2(p.x + ts.x + 4 * scale, p.y + ts.y + 2 * scale),
-                          IM_COL32(16, 20, 28, 170), 4 * scale);
-        dl->AddText(p, IM_COL32(200, 208, 222, 255), hint);
-        if (runtime) dl->AddRect(vpMin, vpMax, IM_COL32(77, 178, 115, 255), 0, 0, 3 * scale);
+        updateEditorCamera((vpMax.x - vpMin.x) / std::max(1.0f, vpMax.y - vpMin.y));
+        drawViewportBar();
+        ImDrawList* dl = ImGui::GetBackgroundDrawList();
+        if (!runtime) {
+            if (showGizmos) drawGizmo(dl);
+            drawAxisIndicator(dl);
+        } else {
+            dl->AddRect(vpMin, vpMax, IM_COL32(77, 190, 90, 255), 0, 0, 2 * scale);
+        }
     }
 }
 
-void Editor::Impl::drawPanelTabs(bool wide) {
-    struct Tab { const char* label; Panel p; };
-    static const Tab all[] = {{"Escena", Panel::Scene}, {"Jerarquía", Panel::Hierarchy}, {"Inspector", Panel::Inspector},
-                              {"Código", Panel::Code},  {"Recursos", Panel::Assets},     {"Consola", Panel::Console}};
-    bool first = true;
-    for (const Tab& t : all) {
-        if (wide && (t.p == Panel::Hierarchy || t.p == Panel::Inspector || t.p == Panel::Assets)) continue;
-        if (!first) ImGui::SameLine();
-        first = false;
-        const bool on = panel == t.p || (wide && t.p == Panel::Scene && panel != Panel::Code && panel != Panel::Console);
-        std::string label = t.label;
-        if (t.p == Panel::Code && codeDirty) label += " *";
-        if (t.p == Panel::Console && runtime && !runtime->scripts().errors().empty()) label += " (!)";
-        if (toggleButton((label + "##tab").c_str(), on)) panel = t.p;
+// ============================================================ Menú y barras
+
+void Editor::Impl::drawCreateMenu() {
+    static const char* basic[] = {"Vacío", "Cámara", "Sprite"};
+    static const char* shapes[] = {"Cubo", "Esfera", "Plano", "Cilindro", "Cono", "Cápsula"};
+    static const char* lights[] = {"Luz direccional", "Luz puntual"};
+    for (const char* k : basic)
+        if (ImGui::MenuItem(k)) createEntityOfKind(k);
+    if (ImGui::BeginMenu("Formas")) {
+        for (const char* k : shapes)
+            if (ImGui::MenuItem(k)) createEntityOfKind(k);
+        ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu("Luces")) {
+        for (const char* k : lights)
+            if (ImGui::MenuItem(k)) createEntityOfKind(k);
+        ImGui::EndMenu();
+    }
+    if (ImGui::MenuItem("Cielo y niebla")) createEntityOfKind("Cielo y niebla");
 }
 
-void Editor::Impl::drawPanel(Panel p) {
-    switch (p) {
-    case Panel::Hierarchy: drawHierarchy(); break;
-    case Panel::Inspector: drawInspector(); break;
-    case Panel::Code: drawCode(); break;
-    case Panel::Assets: drawAssets(); break;
-    case Panel::Console: drawConsole(); break;
-    default: break;
-    }
-}
-
-// ============================================================ Barra superior
-
-void Editor::Impl::drawToolbar(const ImVec2& pos, const ImVec2& size) {
-    if (!beginPanel("##barra", pos, size, ImGuiWindowFlags_NoScrollbar)) {
-        ImGui::End();
-        return;
-    }
-    if (ImGui::Button("Menú")) ImGui::OpenPopup("menu");
-    if (ImGui::BeginPopup("menu")) {
-        if (ImGui::MenuItem("Guardar", "Ctrl+S")) save();
-        if (ImGui::MenuItem("Deshacer", "Ctrl+Z", false, !undoStack.empty() && !runtime)) undo();
-        if (ImGui::MenuItem("Rehacer", "Ctrl+Y", false, !redoStack.empty() && !runtime)) redo();
-        ImGui::Separator();
-        if (ImGui::MenuItem("Exportar paquete del juego")) exportPackage();
-        ImGui::Separator();
+void Editor::Impl::drawMenuBar() {
+    if (!ImGui::BeginMainMenuBar()) return;
+    if (ImGui::BeginMenu("Archivo")) {
+        if (ImGui::MenuItem("Guardar todo", "Ctrl+S")) save();
         if (ImGui::MenuItem("Proyectos...")) {
             save();
             showBrowser = true;
         }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Exportar paquete del juego")) exportPackage();
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Editar")) {
+        if (ImGui::MenuItem("Deshacer", "Ctrl+Z", false, !undoStack.empty() && !runtime)) undo();
+        if (ImGui::MenuItem("Rehacer", "Ctrl+Y", false, !redoStack.empty() && !runtime)) redo();
+        ImGui::Separator();
+        const bool sel = !selectedEntity().isNull();
+        if (ImGui::MenuItem("Duplicar", "Ctrl+D", false, sel)) duplicateSelected();
+        if (ImGui::MenuItem("Eliminar", "Supr", false, sel)) deleteSelected();
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Crear")) {
+        drawCreateMenu();
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Ventana")) {
+        ImGui::MenuItem("Panel inferior", nullptr, &showBottom);
+        ImGui::MenuItem("Rejilla", nullptr, &showGrid);
+        ImGui::MenuItem("Gizmos", nullptr, &showGizmos);
+        ImGui::MenuItem("Estadísticas de render", nullptr, &showStats);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Ayuda")) {
+        ImGui::TextDisabled("%s %s", kEngineName, kEngineVersion);
+        ImGui::TextDisabled("Q seleccionar · W mover · E rotar · R escalar");
+        ImGui::TextDisabled("Ctrl+P jugar/detener · Ctrl+S guardar");
+        ImGui::EndMenu();
+    }
+    // Nombre del proyecto a la derecha.
+    const std::string title = project->name() + (dirty ? " *" : "");
+    const float w = ImGui::CalcTextSize(title.c_str()).x;
+    ImGui::SameLine(ImGui::GetWindowWidth() - w - 12 * scale);
+    ImGui::TextDisabled("%s", title.c_str());
+    ImGui::EndMainMenuBar();
+}
+
+void Editor::Impl::drawToolbar(const ImVec2& pos, const ImVec2& size) {
+    if (!beginPanel("##barra", pos, size, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_HorizontalScrollbar)) {
+        ImGui::End();
+        return;
+    }
+    auto playControls = [&]() {
+        if (!runtime) {
+            if (iconButton("##jugar", Icon::Play, false, "Jugar (Ctrl+P)", ImGui::GetColorU32(kPlayGreen))) play();
+        } else if (iconButton("##reanudar", Icon::Play, !playPaused, "Reanudar", ImGui::GetColorU32(kPlayGreen))) {
+            playPaused = false;
+            runtime->paused = false;
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!runtime);
+        if (iconButton("##pausa", Icon::Pause, playPaused, "Pausa")) {
+            playPaused = !playPaused;
+            runtime->paused = playPaused;
+        }
+        ImGui::SameLine();
+        if (iconButton("##detener", Icon::Stop, false, "Detener", ImGui::GetColorU32(runtime ? kStopRed : kDim))) stop();
+        ImGui::EndDisabled();
+    };
+    // En teléfonos el botón de jugar va primero para que siempre esté a la vista.
+    const bool narrow = size.x < 700 * scale;
+    if (narrow) {
+        playControls();
+        vsep();
+    }
+    if (iconButton("##guardar", Icon::Save, false, "Guardar todo (Ctrl+S)")) save();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(undoStack.empty() || runtime);
+    if (iconButton("##deshacer", Icon::Undo, false, "Deshacer (Ctrl+Z)")) undo();
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(redoStack.empty() || runtime);
+    if (iconButton("##rehacer", Icon::Redo, false, "Rehacer (Ctrl+Y)")) redo();
+    ImGui::EndDisabled();
+    vsep();
+    if (iconButton("##sel", Icon::Select, tool == Tool::Select, "Seleccionar (Q)")) tool = Tool::Select;
+    ImGui::SameLine();
+    if (iconButton("##mover", Icon::Move, tool == Tool::Translate, "Mover (W)")) tool = Tool::Translate;
+    ImGui::SameLine();
+    if (iconButton("##rotar", Icon::Rotate, tool == Tool::Rotate, "Rotar (E)")) tool = Tool::Rotate;
+    ImGui::SameLine();
+    if (iconButton("##escalar", Icon::Scale, tool == Tool::Scale, "Escalar (R)")) tool = Tool::Scale;
+    vsep();
+    if (iconButton("##iman", Icon::Magnet, snap, "Ajustar a la rejilla")) snap = !snap;
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(ImGui::GetFrameHeight() * 2.2f);
+    float* snapValue = tool == Tool::Rotate ? &snapRotate : tool == Tool::Scale ? &snapScale : &snapMove;
+    ImGui::DragFloat("##snapv", snapValue, 0.05f, 0.01f, 90.0f, tool == Tool::Rotate ? "%.0f°" : "%.2f");
+    if (ImGui::IsItemActive()) noScrollWidgetActive = true;
+    vsep();
+    if (iconButton("##crear", Icon::Plus, false, "Añadir a la escena")) ImGui::OpenPopup("crear");
+    if (ImGui::BeginPopup("crear")) {
+        drawCreateMenu();
         ImGui::EndPopup();
     }
-    const bool wide = size.x > 900 * scale;
-    if (wide) {
-        ImGui::SameLine();
-        if (ImGui::Button(dirty ? "Guardar *" : "Guardar")) save();
-        ImGui::SameLine();
-        ImGui::BeginDisabled(undoStack.empty() || runtime);
-        if (ImGui::Button("Deshacer")) undo();
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        ImGui::BeginDisabled(redoStack.empty() || runtime);
-        if (ImGui::Button("Rehacer")) redo();
-        ImGui::EndDisabled();
-    }
-    ImGui::SameLine();
-    if (toggleButton("Mover", tool == Tool::Move)) tool = Tool::Move;
-    ImGui::SameLine();
-    if (toggleButton("Cámara", tool == Tool::Camera)) tool = Tool::Camera;
-    ImGui::SameLine();
-    if (toggleButton("Imán", snap)) snap = !snap;
 
-    // Nombre del proyecto y estado.
-    ImGui::SameLine();
-    std::string title = project->name() + (dirty ? " *" : "");
-    if (statusTime > 0 && wide) title += "   ·   " + status;
-    const float playW = ImGui::CalcTextSize("Detener").x + ImGui::GetStyle().FramePadding.x * 2 + 8 * scale;
-    const float room = ImGui::GetContentRegionAvail().x - playW;
-    if (room > 40 * scale) {
-        ImGui::PushStyleColor(ImGuiCol_Text, statusTime > 0 ? kAccent : kDim);
-        ImGui::SetNextItemWidth(room);
+    if (!narrow) {
+        // Controles de juego, centrados.
+        ImGui::SameLine();
+        const float sz = ImGui::GetFrameHeight() * 1.15f;
+        const float groupW = sz * 3 + ImGui::GetStyle().ItemSpacing.x * 2;
+        const float after = ImGui::GetCursorPosX() + sz * 0.5f; // nunca encima de las herramientas
+        ImGui::SetCursorPosX(std::max(after, (size.x - groupW) * 0.5f));
+        playControls();
+    }
+    if (statusTime > 0 && size.x > 900 * scale) {
+        ImGui::SameLine();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(statusTime > 0 && !wide ? status.c_str() : title.c_str());
-        ImGui::PopStyleColor();
+        ImGui::TextDisabled("  %s", status.c_str());
     }
-    ImGui::SameLine(size.x - playW);
+    ImGui::End();
+}
+
+void Editor::Impl::drawDocumentTabs() {
+    const AssetRecord* r = project->assets().find(sceneId);
+    const std::string sceneLabel = (r ? fileName(r->path) : std::string("escena")) + (dirty ? " *" : "");
+    auto tab = [&](const std::string& label, bool active) {
+        if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_TabSelected));
+        const bool pressed = ImGui::Button(label.c_str());
+        if (active) {
+            const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(a.x, b.y - 2 * scale), b, IM_COL32(0, 112, 224, 255));
+            ImGui::PopStyleColor();
+        }
+        return pressed;
+    };
+    if (tab(sceneLabel + "##docescena", !codeTabActive)) codeTabActive = false;
+    if (!codePath.empty()) {
+        ImGui::SameLine();
+        if (tab(fileName(codePath) + (codeDirty ? " *" : "") + "##doccodigo", codeTabActive)) codeTabActive = true;
+        ImGui::SameLine(0, 0);
+        if (ImGui::SmallButton("x##cerrarcodigo")) {
+            saveCode();
+            codePath.clear();
+            code.clear();
+            codeTabActive = false;
+        }
+    }
+}
+
+void Editor::Impl::drawViewportBar() {
+    ImGui::SetNextWindowPos(ImVec2(vpMin.x + 6 * scale, vpMin.y + 6 * scale));
+    ImGui::SetNextWindowBgAlpha(0.0f);
+    ImGui::Begin("##barravista", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove |
+                                              ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.1f, 0.1f, 0.85f));
+    if (ImGui::Button("=##vistamenu")) ImGui::OpenPopup("vistamenu");
+    if (ImGui::BeginPopup("vistamenu")) {
+        ImGui::MenuItem("Rejilla", nullptr, &showGrid);
+        ImGui::MenuItem("Gizmos", nullptr, &showGizmos);
+        ImGui::MenuItem("Estadísticas de render", nullptr, &showStats);
+        if (runtime) ImGui::MenuItem("Estadísticas del juego", nullptr, &runtime->showStats);
+        ImGui::EndPopup();
+    }
+    if (threeD() && !runtime) {
+        ImGui::SameLine();
+        static const char* angles[] = {"Perspectiva", "Superior", "Frontal", "Derecha"};
+        if (ImGui::Button((std::string(angles[int(viewAngle)]) + "##angulo").c_str())) ImGui::OpenPopup("angulo");
+        if (ImGui::BeginPopup("angulo")) {
+            for (int i = 0; i < 4; ++i)
+                if (ImGui::MenuItem(angles[i], nullptr, int(viewAngle) == i)) viewAngle = ViewAngle(i);
+            ImGui::EndPopup();
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(viewUnlit ? "Sin iluminación##luz" : "Iluminado##luz")) ImGui::OpenPopup("luz");
+    if (ImGui::BeginPopup("luz")) {
+        if (ImGui::MenuItem("Iluminado", nullptr, !viewUnlit)) viewUnlit = false;
+        if (ImGui::MenuItem("Sin iluminación", nullptr, viewUnlit)) viewUnlit = true;
+        ImGui::EndPopup();
+    }
     if (runtime) {
-        if (coloredButton("Detener", kStop)) stop();
-    } else if (coloredButton("Jugar", kPlay)) {
-        play();
+        ImGui::SameLine();
+        ImGui::TextColored(kPlayGreen, playPaused ? "  EN PAUSA" : "  JUGANDO");
     }
+    ImGui::PopStyleColor();
+    vpBarMin = ImGui::GetWindowPos();
+    vpBarMax = ImVec2(vpBarMin.x + ImGui::GetWindowSize().x, vpBarMin.y + ImGui::GetWindowSize().y);
+    ImGui::End();
+
+    if (showStats && !runtime) {
+        const RenderStats& rs = renderer.stats();
+        char text[200];
+        std::snprintf(text, sizeof(text), "%.0f FPS · %d draw calls · %d mallas · %d triángulos · %zu entidades",
+                      ImGui::GetIO().Framerate, rs.drawCalls, rs.meshes, rs.triangles, scene.entityCount());
+        const ImVec2 ts = ImGui::CalcTextSize(text);
+        ImGui::GetBackgroundDrawList()->AddText(ImVec2(vpMax.x - ts.x - 10 * scale, vpMin.y + 10 * scale),
+                                                IM_COL32(230, 230, 230, 220), text);
+    }
+}
+
+void Editor::Impl::drawStatusBar(const ImVec2& pos, const ImVec2& size) {
+    if (!beginPanel("##estado", pos, size, ImGuiWindowFlags_NoScrollbar)) {
+        ImGui::End();
+        return;
+    }
+    if (ImGui::SmallButton("Contenido")) {
+        showBottom = !(showBottom && !bottomIsConsole);
+        bottomIsConsole = false;
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Registro de salida")) {
+        showBottom = !(showBottom && bottomIsConsole);
+        bottomIsConsole = true;
+    }
+    const char* saved = dirty || codeDirty ? "Cambios sin guardar" : "Todo guardado";
+    const float savedX = size.x - ImGui::CalcTextSize(saved).x - 14 * scale;
+    ImGui::SameLine();
+    if (!logs.empty()) {
+        // Último mensaje del registro, recortado para no pisar el estado de guardado.
+        const LogMessage& m = logs.back();
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::PushClipRect(p, ImVec2(pos.x + savedX - 10 * scale, p.y + size.y), true);
+        ImGui::PushStyleColor(ImGuiCol_Text, m.level == LogLevel::Error ? ImVec4(0.95f, 0.45f, 0.45f, 1)
+                                             : m.level == LogLevel::Warning ? ImVec4(0.95f, 0.78f, 0.35f, 1)
+                                                                            : kDim);
+        ImGui::TextUnformatted(("  " + m.text).c_str());
+        ImGui::PopStyleColor();
+        ImGui::PopClipRect();
+    }
+    ImGui::SameLine(savedX);
+    ImGui::TextDisabled("%s", saved);
     ImGui::End();
 }
 
@@ -259,51 +548,64 @@ void Editor::Impl::drawBrowser() {
         ImGui::End();
         return;
     }
-    const float pad = std::max(0.0f, (W - 720 * scale) * 0.5f);
-    ImGui::Indent(pad);
-    ImGui::PushStyleColor(ImGuiCol_Text, kAccent);
-    ImGui::Text("%s", kEngineName);
-    ImGui::PopStyleColor();
+    const float colW = std::min(W - 32 * scale, 760 * scale);
+    ImGui::SetCursorPosX((W - colW) * 0.5f);
+    ImGui::BeginChild("##col", ImVec2(colW, 0), 0, ImGuiWindowFlags_NoBackground);
+    ImGui::Dummy(ImVec2(0, 12 * scale));
+    ImGui::SetWindowFontScale(1.6f);
+    ImGui::TextUnformatted(kEngineName);
+    ImGui::SetWindowFontScale(1.0f);
     ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
     ImGui::TextDisabled("motor de videojuegos %s", kEngineVersion);
     if (project && ImGui::Button(("Volver a " + project->name()).c_str())) showBrowser = false;
-    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0, 8 * scale));
 
-    sectionTitle("NUEVO PROYECTO");
-    ImGui::SetNextItemWidth(std::min(W - pad * 2 - 20 * scale, 420 * scale));
+    panelHeader("NUEVO PROYECTO", scale);
+    ImGui::SetNextItemWidth(std::min(colW, 420 * scale));
     ImGui::InputText("Nombre", &newProjectName);
-    for (int i = 0; i < 4; ++i) {
-        ImGui::RadioButton(kTemplateNames[i], &newProjectTemplate, i);
-        ImGui::Indent(30 * scale);
-        ImGui::PushStyleColor(ImGuiCol_Text, kDim);
-        ImGui::PushTextWrapPos(W - pad - 10 * scale);
-        ImGui::TextUnformatted(kTemplateHelp[i]);
-        ImGui::PopTextWrapPos();
+    // Tarjetas 2D / 3D.
+    const float cardW = (std::min(colW, 520 * scale) - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+    const char* titles[] = {"2D", "3D"};
+    const char* desc[] = {"Cámara ortográfica. Sprites y juegos en plano.",
+                          "Nivel inicial con cielo, sol con sombras, niebla y suelo de prototipado."};
+    for (int i = 0; i < 2; ++i) {
+        if (i) ImGui::SameLine();
+        const bool sel = newProjectTemplate == i;
+        ImGui::PushStyleColor(ImGuiCol_Button, sel ? ImVec4(0.0f, 0.44f, 0.88f, 0.45f) : ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+        ImGui::PushID(i);
+        if (ImGui::Button("##tarjeta", ImVec2(cardW, 92 * scale))) newProjectTemplate = i;
+        const ImVec2 a = ImGui::GetItemRectMin();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddText(nullptr, ImGui::GetFontSize() * 1.5f, ImVec2(a.x + 12 * scale, a.y + 10 * scale), IM_COL32(235, 235, 235, 255), titles[i]);
+        dl->AddText(nullptr, ImGui::GetFontSize() * 0.85f, ImVec2(a.x + 12 * scale, a.y + 48 * scale), IM_COL32(170, 170, 170, 255),
+                    desc[i], nullptr, cardW - 24 * scale);
+        ImGui::PopID();
         ImGui::PopStyleColor();
-        ImGui::Unindent(30 * scale);
     }
     std::string safeName;
     for (char c : newProjectName) safeName += (c == '/' || c == '\\' || c == ':' || c == '.') ? '_' : c;
     const std::string dir = projectsDir() + "/" + safeName;
     const bool exists = !safeName.empty() && fs::exists(dir);
     ImGui::BeginDisabled(safeName.empty() || exists);
-    if (coloredButton("Crear proyecto", kAccent)) {
-        static const ProjectTemplate t[] = {ProjectTemplate::Empty2D, ProjectTemplate::Empty3D,
-                                            ProjectTemplate::Platformer2D, ProjectTemplate::Explorer3D};
+    ImGui::PushStyleColor(ImGuiCol_Button, kBlue);
+    if (ImGui::Button("Crear proyecto", ImVec2(180 * scale, 0))) {
         std::string err;
-        if (createProjectFromTemplate(dir, newProjectName, t[newProjectTemplate], &err)) openProject(dir);
-        else setStatus("No se pudo crear: " + err);
+        if (createProjectFromTemplate(dir, newProjectName, newProjectTemplate == 1 ? ProjectTemplate::Empty3D : ProjectTemplate::Empty2D, &err))
+            openProject(dir);
+        else
+            setStatus("No se pudo crear: " + err);
     }
+    ImGui::PopStyleColor();
     ImGui::EndDisabled();
     if (exists) {
         ImGui::SameLine();
         ImGui::TextDisabled("Ya hay un proyecto con ese nombre");
     }
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    sectionTitle("TUS PROYECTOS");
-    std::vector<std::pair<std::string, std::string>> found; // carpeta, descripción
+    ImGui::Dummy(ImVec2(0, 10 * scale));
+    panelHeader("PROYECTOS", scale);
+    std::vector<std::pair<std::string, std::string>> found;
     std::error_code ec;
     for (auto& d : fs::directory_iterator(projectsDir(), ec)) {
         if (!d.is_directory() || !fs::exists(d.path() / "project.titan")) continue;
@@ -315,68 +617,95 @@ void Editor::Impl::drawBrowser() {
             found.push_back({d.path().generic_string(), d.path().filename().string() + "  (no se puede leer)"});
             continue;
         }
-        found.push_back({d.path().generic_string(), name + (dim == ProjectDimension::ThreeD ? "   3D" : "   2D")});
+        found.push_back({d.path().generic_string(), name + (dim == ProjectDimension::ThreeD ? "   ·  3D" : "   ·  2D")});
     }
     std::sort(found.begin(), found.end());
-    if (found.empty()) ImGui::TextDisabled("Aún no hay proyectos. Crea el primero arriba.");
+    if (found.empty()) ImGui::TextDisabled("Aún no hay proyectos.");
     for (auto& [path, label] : found) {
         ImGui::PushID(path.c_str());
-        if (ImGui::Button("Abrir")) openProject(path);
-        ImGui::SameLine();
+        if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap,
+                              ImVec2(colW - 200 * scale, ImGui::GetFrameHeight())))
+            openProject(path);
+        ImGui::SameLine(colW - 190 * scale);
         if (pendingDelete == path) {
-            if (coloredButton("Confirmar borrado", kStop)) {
+            ImGui::PushStyleColor(ImGuiCol_Button, kStopRed);
+            if (ImGui::Button("Confirmar")) {
                 if (project && project->root() == path) closeProject();
                 fs::remove_all(path, ec);
                 pendingDelete.clear();
             }
+            ImGui::PopStyleColor();
             ImGui::SameLine();
             if (ImGui::Button("Cancelar")) pendingDelete.clear();
-        } else if (ImGui::Button("Borrar")) {
-            pendingDelete = path;
+        } else {
+            if (ImGui::Button("Abrir")) openProject(path);
+            ImGui::SameLine();
+            if (ImGui::Button("Borrar")) pendingDelete = path;
         }
-        ImGui::SameLine();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(label.c_str());
         ImGui::PopID();
     }
-    ImGui::Spacing();
+    ImGui::Dummy(ImVec2(0, 8 * scale));
     ImGui::TextDisabled("Carpeta: %s", projectsDir().c_str());
-    ImGui::Unindent(pad);
+    ImGui::EndChild();
     ImGui::End();
 }
 
-// ============================================================ Jerarquía
+// ============================================================ Outliner
 
-void Editor::Impl::drawHierarchy() {
-    sectionTitle("JERARQUÍA");
-    ImGui::SameLine();
-    if (ImGui::Button("+ Crear")) ImGui::OpenPopup("crear");
-    if (ImGui::BeginPopup("crear")) {
-        static const char* kinds2D[] = {"Vacío", "Sprite", "Cámara"};
-        static const char* kinds3D[] = {"Cubo", "Esfera", "Plano", "Cilindro", "Cono", "Cápsula", "Luz direccional", "Luz puntual"};
-        for (const char* k : kinds2D)
-            if (ImGui::MenuItem(k)) createEntityOfKind(k);
-        ImGui::Separator();
-        for (const char* k : kinds3D)
-            if (ImGui::MenuItem(k)) createEntityOfKind(k);
+const char* Editor::Impl::typeLabel(Entity e) {
+    World& w = scene.world();
+    if (w.has<Camera>(e)) return "Cámara";
+    if (const Light* l = w.get<Light>(e)) return l->type == Light::Type::Directional ? "Luz direccional" : "Luz puntual";
+    if (w.has<Environment>(e)) return "Cielo y niebla";
+    if (w.has<MeshRenderer>(e)) return "Malla";
+    if (w.has<SpriteRenderer>(e)) return "Sprite";
+    if (w.has<Script>(e)) return "Script";
+    return scene.children(e).empty() ? "Vacío" : "Carpeta";
+}
+
+void Editor::Impl::drawOutliner() {
+    panelHeader("OUTLINER", scale);
+    if (iconButton("##outcrear", Icon::Plus, false, "Añadir")) ImGui::OpenPopup("crearout");
+    if (ImGui::BeginPopup("crearout")) {
+        drawCreateMenu();
         ImGui::EndPopup();
     }
-    Entity sel = selectedEntity();
-    if (!sel.isNull()) {
-        ImGui::SameLine();
-        if (ImGui::Button("Duplicar")) duplicateSelected();
-        ImGui::SameLine();
-        if (ImGui::Button("Eliminar")) deleteSelected();
-    }
-    ImGui::Separator();
-    for (Entity r : scene.roots()) drawHierarchyNode(r);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputTextWithHint("##buscar", "Buscar...", &outlinerFilter);
 
-    // Zona para sacar una entidad a la raíz.
-    ImGui::Spacing();
-    ImGui::PushStyleColor(ImGuiCol_Text, kDim);
-    ImGui::Selectable("(suelta aquí para sacarla a la raíz)", false, ImGuiSelectableFlags_Disabled);
-    ImGui::PopStyleColor();
-    if (ImGui::BeginDragDropTarget()) {
+    const float footer = ImGui::GetTextLineHeightWithSpacing() + 4 * scale;
+    if (ImGui::BeginTable("##tablaout", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerV |
+                                               ImGuiTableFlags_Resizable,
+                          ImVec2(0, ImGui::GetContentRegionAvail().y - footer))) {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("##vis", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFrameHeight() * 0.9f);
+        ImGui::TableSetupColumn("Nombre", ImGuiTableColumnFlags_WidthStretch, 2.0f);
+        ImGui::TableSetupColumn("Tipo", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableHeadersRow();
+        if (outlinerFilter.empty()) {
+            for (Entity r : scene.roots()) drawOutlinerNode(r);
+        } else {
+            std::string f = outlinerFilter;
+            std::transform(f.begin(), f.end(), f.begin(), ::tolower);
+            scene.traverse([&](Entity e, int) {
+                std::string n = scene.info(e).name;
+                std::transform(n.begin(), n.end(), n.begin(), ::tolower);
+                if (n.find(f) == std::string::npos) return;
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(1);
+                ImGui::PushID(static_cast<int>(scene.info(e).id.value));
+                if (ImGui::Selectable(scene.info(e).name.c_str(), scene.info(e).id == selected, ImGuiSelectableFlags_SpanAllColumns))
+                    selected = scene.info(e).id;
+                ImGui::TableSetColumnIndex(2);
+                ImGui::TextDisabled("%s", typeLabel(e));
+                ImGui::PopID();
+            });
+        }
+        ImGui::EndTable();
+    }
+    // Soltar en el vacío del panel: sacar a la raíz.
+    if (ImGui::BeginDragDropTargetCustom(ImGui::GetCurrentWindow()->InnerRect, ImGui::GetID("##raiz"))) {
         if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("TITAN_ENTITY")) {
             Entity child = scene.findById(UUID{*static_cast<const uint64_t*>(pl->Data)});
             if (!child.isNull() && !scene.parent(child).isNull()) {
@@ -386,20 +715,39 @@ void Editor::Impl::drawHierarchy() {
         }
         ImGui::EndDragDropTarget();
     }
-    if (scene.entityCount() == 0) ImGui::TextDisabled("La escena está vacía. Pulsa \"+ Crear\".");
+    ImGui::TextDisabled("%zu entidades%s", scene.entityCount(), selectedEntity().isNull() ? "" : " (1 seleccionada)");
 }
 
-void Editor::Impl::drawHierarchyNode(Entity e) {
-    const EntityInfo& info = scene.info(e);
+void Editor::Impl::drawOutlinerNode(Entity e) {
+    EntityInfo& info = scene.info(e);
     const auto kids = scene.children(e);
-    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick |
-                               ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen |
-                               ImGuiTreeNodeFlags_FramePadding;
-    if (kids.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
+    ImGui::TableNextRow();
+    ImGui::PushID(static_cast<int>(info.id.value ^ (info.id.value >> 32)));
+
+    // Visibilidad (activa/inactiva), como el "ojo" de los outliners profesionales.
+    ImGui::TableSetColumnIndex(0);
+    {
+        const float s = ImGui::GetFrameHeight() * 0.8f;
+        if (ImGui::InvisibleButton("##ojo", ImVec2(s, s))) {
+            pushUndo();
+            info.active = !info.active;
+        }
+        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImU32 col = info.active ? IM_COL32(200, 200, 200, 255) : IM_COL32(90, 90, 90, 255);
+        dl->AddEllipse(c, ImVec2(s * 0.42f, s * 0.24f), col, 0, 20, 1.5f);
+        if (info.active) dl->AddCircleFilled(c, s * 0.12f, col);
+        else dl->AddLine(ImVec2(a.x + s * 0.1f, b.y - s * 0.1f), ImVec2(b.x - s * 0.1f, a.y + s * 0.1f), col, 1.5f);
+    }
+
+    ImGui::TableSetColumnIndex(1);
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanFullWidth |
+                               ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_FramePadding;
+    if (kids.empty()) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
     if (info.id == selected) flags |= ImGuiTreeNodeFlags_Selected;
     if (!info.active) ImGui::PushStyleColor(ImGuiCol_Text, kDim);
-    const bool open = ImGui::TreeNodeEx(reinterpret_cast<void*>(static_cast<uintptr_t>(info.id.value)), flags, "%s",
-                                        info.name.c_str());
+    const bool open = ImGui::TreeNodeEx("##nodo", flags, "%s", info.name.c_str());
     if (!info.active) ImGui::PopStyleColor();
     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
         selected = info.id;
@@ -421,23 +769,16 @@ void Editor::Impl::drawHierarchyNode(Entity e) {
         }
         ImGui::EndDragDropTarget();
     }
-    // Etiqueta breve con lo que es.
-    const char* kind = nullptr;
-    if (scene.world().has<Camera>(e)) kind = "cámara";
-    else if (scene.world().has<Light>(e)) kind = "luz";
-    else if (scene.world().has<MeshRenderer>(e)) kind = "malla";
-    else if (scene.world().has<SpriteRenderer>(e)) kind = "sprite";
-    if (kind || scene.world().has<Script>(e)) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("%s%s", kind ? kind : "", scene.world().has<Script>(e) ? " +lua" : "");
-    }
-    if (open) {
-        for (Entity c : kids) drawHierarchyNode(c);
+    ImGui::TableSetColumnIndex(2);
+    ImGui::TextDisabled("%s", typeLabel(e));
+    ImGui::PopID();
+    if (open && !kids.empty()) {
+        for (Entity c : kids) drawOutlinerNode(c);
         ImGui::TreePop();
     }
 }
 
-// ============================================================ Inspector
+// ============================================================ Detalles
 
 bool Editor::Impl::assetCombo(const char* label, AssetType type, AssetRef& ref) {
     const AssetRecord* cur = project->assets().find(ref);
@@ -462,11 +803,67 @@ bool Editor::Impl::assetCombo(const char* label, AssetType type, AssetRef& ref) 
     return changed;
 }
 
-void Editor::Impl::drawInspector() {
-    sectionTitle("INSPECTOR");
+namespace {
+// Fila "Etiqueta  [X][Y][Z]  ↺" con una franja de color por eje.
+bool vec3Row(const char* label, float* v, float speed, const float* resetTo, float scale, Editor::Impl& ed) {
+    bool changed = false;
+    ImGui::PushID(label);
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::TableSetColumnIndex(1);
+    const float reset = ImGui::GetFrameHeight();
+    const float w = (ImGui::GetContentRegionAvail().x - reset - ImGui::GetStyle().ItemSpacing.x * 3) / 3.0f;
+    for (int i = 0; i < 3; ++i) {
+        if (i) ImGui::SameLine();
+        ImGui::PushID(i);
+        ImGui::SetNextItemWidth(w);
+        changed |= ImGui::DragFloat("##v", &v[i], speed, 0, 0, "%.3f");
+        ed.track();
+        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        ImGui::GetWindowDrawList()->AddRectFilled(a, ImVec2(a.x + 3 * scale, b.y), kAxisColor[i], 2 * scale,
+                                                  ImDrawFlags_RoundCornersLeft);
+        ImGui::PopID();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("##reset", ImVec2(reset, reset))) {
+        ed.pushUndo();
+        for (int i = 0; i < 3; ++i) v[i] = resetTo[i];
+        changed = true;
+    }
+    {
+        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        drawIcon(ImGui::GetWindowDrawList(), Icon::Undo, c, reset * 0.3f, IM_COL32(170, 170, 170, 255));
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("Restablecer");
+    }
+    ImGui::PopID();
+    return changed;
+}
+
+bool beginProps(const char* id) {
+    if (!ImGui::BeginTable(id, 2, ImGuiTableFlags_SizingStretchProp)) return false;
+    ImGui::TableSetupColumn("k", ImGuiTableColumnFlags_WidthStretch, 0.32f);
+    ImGui::TableSetupColumn("v", ImGuiTableColumnFlags_WidthStretch, 0.68f);
+    return true;
+}
+
+void propLabel(const char* label) {
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::TableSetColumnIndex(1);
+    ImGui::SetNextItemWidth(-1);
+}
+} // namespace
+
+void Editor::Impl::drawDetails() {
+    panelHeader("DETALLES", scale);
     Entity e = selectedEntity();
     if (e.isNull()) {
-        ImGui::TextDisabled("Selecciona una entidad en la escena o en la jerarquía.");
+        ImGui::TextDisabled("Selecciona algo en la vista o en el Outliner.");
         return;
     }
     EntityInfo& info = scene.info(e);
@@ -477,51 +874,14 @@ void Editor::Impl::drawInspector() {
         info.active = active;
     }
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(-1);
+    const float addW = ImGui::CalcTextSize("+ Añadir").x + ImGui::GetStyle().FramePadding.x * 2;
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - addW - ImGui::GetStyle().ItemSpacing.x);
     ImGui::InputText("##nombre", &info.name);
     track();
-    ImGui::TextDisabled("id %s", info.id.toString().c_str());
-
-    if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-        Transform& t = scene.transform(e);
-        Vec3 p = t.position(), s = t.scale();
-        if (inspectorEulerFor != info.id || !ImGui::IsAnyItemActive()) {
-            // Se recalcula desde el cuaternión salvo mientras se arrastra (evita saltos de Euler).
-            inspectorEuler = t.eulerDegrees();
-            inspectorEulerFor = info.id;
-        }
-        if (ImGui::DragFloat3("Posición", &p.x, 0.05f)) t.setPosition(p);
-        track();
-        if (ImGui::DragFloat3("Rotación", &inspectorEuler.x, 0.5f)) t.setEulerDegrees(inspectorEuler);
-        track();
-        if (ImGui::DragFloat3("Escala", &s.x, 0.02f)) t.setScale(s);
-        track();
-        if (ImGui::SmallButton("Restablecer")) {
-            pushUndo();
-            t.reset();
-        }
-    }
-
-    for (const auto& type : registry.types()) {
-        if (type.name == "Transform" || !type.has(scene, e)) continue;
-        bool keep = true;
-        if (ImGui::CollapsingHeader(type.name.c_str(), &keep, ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::PushID(type.name.c_str());
-            drawComponentFields(type.name, e);
-            ImGui::PopID();
-        }
-        if (!keep && type.remove) {
-            pushUndo();
-            type.remove(scene, e);
-            break;
-        }
-    }
-    if (auto* kept = scene.world().get<PreservedComponents>(e))
-        for (auto it = kept->data.begin(); it != kept->data.end(); ++it)
-            ImGui::TextDisabled("%s (tipo desconocido, se conserva)", it.key().c_str());
-
-    ImGui::Spacing();
-    if (ImGui::Button("Añadir componente", ImVec2(-1, 0))) ImGui::OpenPopup("añadir");
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Button, kBlue);
+    if (ImGui::Button("+ Añadir")) ImGui::OpenPopup("añadir");
+    ImGui::PopStyleColor();
     if (ImGui::BeginPopup("añadir")) {
         for (const auto& type : registry.types()) {
             if (type.name == "Transform" || type.has(scene, e)) continue;
@@ -535,98 +895,148 @@ void Editor::Impl::drawInspector() {
         }
         ImGui::EndPopup();
     }
+    ImGui::TextDisabled("%s  ·  id %s", typeLabel(e), info.id.toString().c_str());
+
+    if (ImGui::CollapsingHeader("Transformación", ImGuiTreeNodeFlags_DefaultOpen)) {
+        Transform& t = scene.transform(e);
+        Vec3 p = t.position(), s = t.scale();
+        if (inspectorEulerFor != info.id || !ImGui::IsAnyItemActive()) {
+            inspectorEuler = t.eulerDegrees(); // se recalcula salvo mientras se arrastra (evita saltos)
+            inspectorEulerFor = info.id;
+        }
+        static const float zero[3] = {0, 0, 0}, one[3] = {1, 1, 1};
+        if (beginProps("##tr")) {
+            if (vec3Row("Ubicación", &p.x, 0.05f, zero, scale, *this)) t.setPosition(p);
+            if (vec3Row("Rotación", &inspectorEuler.x, 0.5f, zero, scale, *this)) t.setEulerDegrees(inspectorEuler);
+            if (vec3Row("Escala", &s.x, 0.02f, one, scale, *this)) t.setScale(s);
+            ImGui::EndTable();
+        }
+    }
+
+    for (const auto& type : registry.types()) {
+        if (type.name == "Transform" || !type.has(scene, e)) continue;
+        bool keep = true;
+        if (ImGui::CollapsingHeader(type.name.c_str(), &keep, ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::PushID(type.name.c_str());
+            if (beginProps("##props")) {
+                drawComponentFields(type.name, e);
+                ImGui::EndTable();
+            }
+            ImGui::PopID();
+        }
+        if (!keep && type.remove) {
+            pushUndo();
+            type.remove(scene, e);
+            break;
+        }
+    }
+    if (auto* kept = scene.world().get<PreservedComponents>(e))
+        for (auto it = kept->data.begin(); it != kept->data.end(); ++it)
+            ImGui::TextDisabled("%s (tipo desconocido, se conserva)", it.key().c_str());
     ImGui::PopID();
 }
 
 void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
     World& w = scene.world();
+    auto check = [&](const char* label, bool& value) {
+        propLabel(label);
+        bool v = value;
+        if (ImGui::Checkbox((std::string("##") + label).c_str(), &v)) {
+            pushUndo();
+            value = v;
+        }
+    };
+    auto dragF = [&](const char* label, float& v, float speed, float lo, float hi, const char* fmt = "%.3f") {
+        propLabel(label);
+        ImGui::DragFloat((std::string("##") + label).c_str(), &v, speed, lo, hi, fmt);
+        track();
+    };
+    auto color = [&](const char* label, Color& c, bool alpha = true) {
+        propLabel(label);
+        if (alpha) ImGui::ColorEdit4((std::string("##") + label).c_str(), &c.r);
+        else ImGui::ColorEdit3((std::string("##") + label).c_str(), &c.r);
+        track();
+    };
+    auto combo = [&](const char* label, int& v, const char* items) {
+        propLabel(label);
+        int t = v;
+        if (ImGui::Combo((std::string("##") + label).c_str(), &t, items)) {
+            pushUndo();
+            v = t;
+        }
+    };
+
     if (name == "Camera") {
         Camera& c = *w.get<Camera>(e);
         int proj = static_cast<int>(c.projection);
-        if (ImGui::Combo("Proyección", &proj, "Ortográfica (2D)\0Perspectiva (3D)\0")) {
-            pushUndo();
-            c.projection = static_cast<Camera::Projection>(proj);
-        }
-        if (c.projection == Camera::Projection::Orthographic) {
-            ImGui::DragFloat("Tamaño", &c.orthographicSize, 0.05f, 0.1f, 500.0f);
-            track();
-        } else {
-            ImGui::DragFloat("Campo de visión", &c.fieldOfView, 0.25f, 10.0f, 150.0f);
-            track();
-        }
-        ImGui::DragFloat("Plano cercano", &c.nearClip, 0.01f, 0.001f, c.farClip);
+        combo("Proyección", proj, "Ortográfica (2D)\0Perspectiva (3D)\0");
+        c.projection = static_cast<Camera::Projection>(proj);
+        if (c.projection == Camera::Projection::Orthographic) dragF("Tamaño", c.orthographicSize, 0.05f, 0.1f, 500.0f);
+        else dragF("Campo de visión", c.fieldOfView, 0.25f, 10.0f, 150.0f, "%.1f°");
+        dragF("Plano cercano", c.nearClip, 0.01f, 0.001f, c.farClip);
+        dragF("Plano lejano", c.farClip, 1.0f, c.nearClip + 0.01f, 100000.0f, "%.1f");
+        propLabel("Prioridad");
+        ImGui::DragInt("##prio", &c.priority, 0.1f);
         track();
-        ImGui::DragFloat("Plano lejano", &c.farClip, 1.0f, c.nearClip + 0.01f, 100000.0f);
-        track();
-        ImGui::DragInt("Prioridad", &c.priority, 0.1f);
-        track();
-        ImGui::ColorEdit4("Fondo", &c.clearColor.r);
-        track();
+        color("Fondo", c.clearColor);
     } else if (name == "SpriteRenderer") {
         SpriteRenderer& s = *w.get<SpriteRenderer>(e);
-        assetCombo("Textura", AssetType::Texture, s.texture);
-        ImGui::ColorEdit4("Color", &s.color.r);
+        propLabel("Textura");
+        assetCombo("##tex", AssetType::Texture, s.texture);
+        color("Color", s.color);
+        propLabel("Tamaño");
+        ImGui::DragFloat2("##size", &s.size.x, 0.02f);
         track();
-        ImGui::DragFloat2("Tamaño", &s.size.x, 0.02f);
+        propLabel("Pivote");
+        ImGui::DragFloat2("##pivot", &s.pivot.x, 0.01f, 0, 1);
         track();
-        ImGui::DragFloat2("Pivote", &s.pivot.x, 0.01f, 0, 1);
+        propLabel("Orden");
+        ImGui::DragInt("##orden", &s.sortingOrder, 0.1f);
         track();
-        ImGui::DragInt("Orden", &s.sortingOrder, 0.1f);
-        track();
-        bool vis = s.visible;
-        if (ImGui::Checkbox("Visible", &vis)) {
-            pushUndo();
-            s.visible = vis;
-        }
+        check("Visible", s.visible);
     } else if (name == "MeshRenderer") {
         MeshRenderer& m = *w.get<MeshRenderer>(e);
         int mesh = static_cast<int>(m.mesh);
-        if (ImGui::Combo("Malla", &mesh, "Cubo\0Esfera\0Plano\0Cilindro\0Cono\0Cápsula\0")) {
-            pushUndo();
-            m.mesh = static_cast<MeshPrimitive>(mesh);
-        }
-        assetCombo("Textura", AssetType::Texture, m.texture);
-        ImGui::ColorEdit4("Color", &m.color.r);
-        track();
-        ImGui::DragFloat("Brillo", &m.shininess, 0.5f, 1.0f, 256.0f);
-        track();
-        bool unlit = m.unlit, vis = m.visible;
-        if (ImGui::Checkbox("Sin iluminación", &unlit)) {
-            pushUndo();
-            m.unlit = unlit;
-        }
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Visible", &vis)) {
-            pushUndo();
-            m.visible = vis;
-        }
+        combo("Malla", mesh, "Cubo\0Esfera\0Plano\0Cilindro\0Cono\0Cápsula\0");
+        m.mesh = static_cast<MeshPrimitive>(mesh);
+        propLabel("Textura");
+        assetCombo("##tex", AssetType::Texture, m.texture);
+        color("Color base", m.color);
+        dragF("Metálico", m.metallic, 0.01f, 0, 1, "%.2f");
+        dragF("Rugosidad", m.roughness, 0.01f, 0, 1, "%.2f");
+        color("Emisión", m.emission, false);
+        check("Rejilla", m.prototypeGrid);
+        check("Sombras", m.castShadows);
+        check("Sin luz", m.unlit);
+        check("Visible", m.visible);
     } else if (name == "Light") {
         Light& l = *w.get<Light>(e);
         int type = static_cast<int>(l.type);
-        if (ImGui::Combo("Tipo", &type, "Direccional\0Puntual\0")) {
-            pushUndo();
-            l.type = static_cast<Light::Type>(type);
-        }
-        ImGui::ColorEdit3("Color", &l.color.r);
-        track();
-        ImGui::DragFloat("Intensidad", &l.intensity, 0.02f, 0, 20);
-        track();
-        if (l.type == Light::Type::Point) {
-            ImGui::DragFloat("Alcance", &l.range, 0.1f, 0.1f, 500);
-            track();
-        } else {
-            ImGui::TextDisabled("Ilumina en la dirección en la que apunta (gírala).");
-        }
+        combo("Tipo", type, "Direccional (sol)\0Puntual\0");
+        l.type = static_cast<Light::Type>(type);
+        color("Color", l.color, false);
+        dragF("Intensidad", l.intensity, 0.02f, 0, 20, "%.2f");
+        if (l.type == Light::Type::Point) dragF("Alcance", l.range, 0.1f, 0.1f, 500, "%.1f");
+    } else if (name == "Environment") {
+        Environment& v = *w.get<Environment>(e);
+        check("Cielo", v.sky);
+        color("Cénit", v.skyZenith, false);
+        color("Horizonte", v.skyHorizon, false);
+        color("Suelo", v.ground, false);
+        dragF("Luz ambiental", v.ambientIntensity, 0.01f, 0, 4, "%.2f");
+        color("Niebla", v.fogColor, false);
+        dragF("Niebla dens.", v.fogDensity, 0.0005f, 0, 0.5f, "%.4f");
+        dragF("Exposición", v.exposure, 0.01f, 0.05f, 8, "%.2f");
+        check("Sombras", v.shadows);
+        dragF("Dist. sombras", v.shadowDistance, 0.5f, 5, 500, "%.0f");
     } else if (name == "Script") {
         Script& s = *w.get<Script>(e);
-        assetCombo("Archivo", AssetType::Script, s.script);
-        bool en = s.enabled;
-        if (ImGui::Checkbox("Activado", &en)) {
-            pushUndo();
-            s.enabled = en;
-        }
+        propLabel("Archivo");
+        assetCombo("##script", AssetType::Script, s.script);
+        check("Activado", s.enabled);
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(1);
         if (const AssetRecord* r = project->assets().find(s.script)) {
-            ImGui::SameLine();
             if (ImGui::Button("Editar código")) openScriptFile(r->path);
         } else if (ImGui::Button("Crear script nuevo")) {
             const std::string cls = identifierFrom(scene.info(e).name);
@@ -657,50 +1067,30 @@ void Editor::Impl::checkCode() {
 }
 
 void Editor::Impl::drawCode() {
-    // Selector de archivo y acciones.
-    const std::string preview = codePath.empty() ? "(elige un script)" : codePath;
-    ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.45f, 320 * scale));
-    if (ImGui::BeginCombo("##script", preview.c_str())) {
-        for (const AssetRecord* r : project->assets().all())
-            if (r->type == AssetType::Script && ImGui::Selectable(r->path.c_str(), r->path == codePath)) openScriptFile(r->path);
-        ImGui::EndCombo();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Nuevo")) ImGui::OpenPopup("nuevo script");
-    if (ImGui::BeginPopup("nuevo script")) {
-        ImGui::SetNextItemWidth(220 * scale);
-        ImGui::InputText("Nombre", &newScriptName);
-        if (ImGui::Button("Crear") && !newScriptName.empty()) {
-            const std::string cls = identifierFrom(newScriptName);
-            const std::string rel = "scripts/" + cls + ".lua";
-            if (!fs::exists(project->assetsDir() + "/" + rel)) {
-                fileio::writeAtomic(project->assetsDir() + "/" + rel, newScriptSource(cls), false);
-                project->assets().import(rel);
-            }
-            openScriptFile(rel);
-            newScriptName.clear();
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
     if (codePath.empty()) {
-        ImGui::TextDisabled("Abre un script o crea uno nuevo. Para que se ejecute, añádelo a una entidad");
-        ImGui::TextDisabled("con el componente Script (Inspector > Añadir componente > Script).");
+        codeTabActive = false;
         return;
     }
-    ImGui::SameLine();
     if (ImGui::Button(codeDirty ? "Guardar *" : "Guardar")) saveCode();
     ImGui::SameLine();
     if (ImGui::Button("Comprobar")) checkCode();
+    ImGui::SameLine();
+    ImGui::TextDisabled("Línea %d", codeCursorLine);
+    if (!codeCheck.empty()) {
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text, codeErrorLine ? ImVec4(0.95f, 0.45f, 0.45f, 1) : ImVec4(0.45f, 0.85f, 0.55f, 1));
+        ImGui::TextUnformatted(codeCheck.c_str());
+        ImGui::PopStyleColor();
+    }
 
-    // Fila de atajos para teclados táctiles: inserta en la posición del cursor.
+    // Atajos para teclados táctiles: insertan en la posición del cursor.
     static const char* snippets[] = {"self.entity:", "function", "end", "local", "if", "then", "else", "for", "do",
                                      "return", "(", ")", "{", "}", "=", "==", ".", ":", ",", "\"", "--", "dt"};
     ImGui::BeginChild("##atajos", ImVec2(0, ImGui::GetFrameHeight() + ImGui::GetStyle().ScrollbarSize + 4 * scale), 0,
                       ImGuiWindowFlags_HorizontalScrollbar);
     for (size_t i = 0; i < sizeof(snippets) / sizeof(*snippets); ++i) {
         if (i) ImGui::SameLine();
-        if (ImGui::Button(snippets[i])) {
+        if (ImGui::SmallButton(snippets[i])) {
             std::string ins = snippets[i];
             if (ins == "function") ins = "function Nombre:onUpdate(dt)\n    \nend\n";
             else if (ins == "if") ins = "if  then\n    \nend";
@@ -714,20 +1104,13 @@ void Editor::Impl::drawCode() {
     }
     ImGui::EndChild();
 
-    // Estado: línea actual y resultado de la comprobación.
-    if (!codeCheck.empty()) {
-        ImGui::PushStyleColor(ImGuiCol_Text, codeErrorLine ? ImVec4(0.95f, 0.45f, 0.45f, 1) : ImVec4(0.45f, 0.85f, 0.55f, 1));
-        ImGui::TextWrapped("%s", codeCheck.c_str());
-        ImGui::PopStyleColor();
-    }
-    ImGui::TextDisabled("Línea %d", codeCursorLine);
-
     if (monoFont) ImGui::PushFont(monoFont);
     if (codeRequestFocus) {
         ImGui::SetKeyboardFocusHere();
         codeRequestFocus = false;
     }
     const std::string before = code;
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.08f, 0.08f, 0.08f, 1));
     ImGui::InputTextMultiline(
         "##codigo", &code, ImGui::GetContentRegionAvail(), ImGuiInputTextFlags_AllowTabInput | ImGuiInputTextFlags_CallbackAlways,
         [](ImGuiInputTextCallbackData* d) {
@@ -741,6 +1124,7 @@ void Editor::Impl::drawCode() {
             return 0;
         },
         this);
+    ImGui::PopStyleColor();
     if (ImGui::IsItemActive()) noScrollWidgetActive = true;
     if (monoFont) ImGui::PopFont();
     if (code != before) {
@@ -749,32 +1133,54 @@ void Editor::Impl::drawCode() {
     }
 }
 
-// ============================================================ Recursos
+// ============================================================ Navegador de contenido
 
-void Editor::Impl::drawAssets() {
-    sectionTitle("RECURSOS");
+void Editor::Impl::drawContent() {
+    if (iconButton("##contanadir", Icon::Plus, false, "Añadir")) ImGui::OpenPopup("anadircont");
+    if (ImGui::BeginPopup("anadircont")) {
+        if (ImGui::MenuItem("Nueva escena")) {
+            save();
+            Scene s("nueva");
+            Entity cam = s.createEntity("Cámara");
+            Camera c;
+            if (project->dimension() == ProjectDimension::ThreeD) {
+                c.projection = Camera::Projection::Perspective;
+                s.transform(cam).setPosition({0, 3, 9});
+                s.transform(cam).setEulerDegrees({-15, 0, 0});
+                s.world().add<Environment>(s.createEntity("Cielo y niebla"));
+                Entity sun = s.createEntity("Sol");
+                s.transform(sun).setEulerDegrees({-50, 35, 0});
+                s.world().add<Light>(sun);
+            } else {
+                s.transform(cam).setPosition({0, 0, 10});
+            }
+            s.world().add<Camera>(cam, c);
+            std::string rel = "scenes/escena.scene";
+            for (int i = 2; fs::exists(project->assetsDir() + "/" + rel); ++i) rel = "scenes/escena" + std::to_string(i) + ".scene";
+            const UUID id = project->saveScene(s, registry, rel);
+            if (!id.isNull()) loadScene(id);
+        }
+        if (ImGui::BeginMenu("Nuevo script")) {
+            ImGui::SetNextItemWidth(200 * scale);
+            ImGui::InputTextWithHint("##nombrescript", "Nombre", &newScriptName);
+            if (ImGui::Button("Crear") && !newScriptName.empty()) {
+                const std::string cls = identifierFrom(newScriptName);
+                const std::string rel = "scripts/" + cls + ".lua";
+                if (!fs::exists(project->assetsDir() + "/" + rel)) {
+                    fileio::writeAtomic(project->assetsDir() + "/" + rel, newScriptSource(cls), false);
+                    project->assets().import(rel);
+                }
+                openScriptFile(rel);
+                newScriptName.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::EndPopup();
+    }
     ImGui::SameLine();
     if (ImGui::Button("Importar")) {
         if (!platform.requestImportFile()) ImGui::OpenPopup("importar ruta");
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Nueva escena")) {
-        save();
-        Scene s("nueva");
-        Entity cam = s.createEntity("Cámara");
-        Camera c;
-        if (project->dimension() == ProjectDimension::ThreeD) {
-            c.projection = Camera::Projection::Perspective;
-            s.transform(cam).setPosition({0, 3, 8});
-            s.transform(cam).setEulerDegrees({-15, 0, 0});
-        } else {
-            s.transform(cam).setPosition({0, 0, 10});
-        }
-        s.world().add<Camera>(cam, c);
-        std::string rel = "scenes/escena.scene";
-        for (int i = 2; fs::exists(project->assetsDir() + "/" + rel); ++i) rel = "scenes/escena" + std::to_string(i) + ".scene";
-        const UUID id = project->saveScene(s, registry, rel);
-        if (!id.isNull()) loadScene(id);
     }
     if (ImGui::BeginPopup("importar ruta")) {
         ImGui::TextUnformatted("Ruta del archivo a importar:");
@@ -787,74 +1193,126 @@ void Editor::Impl::drawAssets() {
         }
         ImGui::EndPopup();
     }
-    ImGui::Separator();
-
-    Entity sel = selectedEntity();
-    struct Group { AssetType type; const char* title; };
-    static const Group groups[] = {{AssetType::Scene, "Escenas"},   {AssetType::Script, "Scripts"},
-                                   {AssetType::Texture, "Texturas"}, {AssetType::Audio, "Audio (aún sin reproductor)"},
-                                   {AssetType::Model, "Modelos (importador pendiente)"}, {AssetType::Font, "Fuentes"},
-                                   {AssetType::Data, "Datos"},         {AssetType::Unknown, "Otros"}};
-    for (const Group& g : groups) {
-        std::vector<const AssetRecord*> items;
-        for (const AssetRecord* r : project->assets().all())
-            if (r->type == g.type) items.push_back(r);
-        if (items.empty()) continue;
-        if (!ImGui::TreeNodeEx(g.title, ImGuiTreeNodeFlags_DefaultOpen)) continue;
-        for (const AssetRecord* r : items) {
-            ImGui::PushID(r->path.c_str());
-            const bool isStart = r->id == project->startScene(), isOpen = r->id == sceneId;
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("%s%s%s", fileName(r->path).c_str(), isStart ? "  (inicial)" : "", isOpen ? "  [abierta]" : "");
-            if (g.type == AssetType::Scene) {
-                if (!isOpen) {
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Abrir")) {
-                        save();
-                        loadScene(r->id);
-                    }
-                }
-                if (!isStart) {
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Hacer inicial")) {
-                        project->setStartScene(r->id);
-                        project->save();
-                    }
-                }
-            } else if (g.type == AssetType::Script) {
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Editar")) openScriptFile(r->path);
-                if (!sel.isNull()) {
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Asignar")) {
-                        pushUndo();
-                        scene.world().add<Script>(sel, {r->id, true});
-                    }
-                }
-            } else if (g.type == AssetType::Texture && !sel.isNull()) {
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Asignar")) {
-                    pushUndo();
-                    if (auto* m = scene.world().get<MeshRenderer>(sel)) m->texture = r->id;
-                    else {
-                        SpriteRenderer sp = scene.world().has<SpriteRenderer>(sel) ? *scene.world().get<SpriteRenderer>(sel) : SpriteRenderer{};
-                        sp.texture = r->id;
-                        scene.world().add<SpriteRenderer>(sel, sp);
-                    }
+    // Ruta actual.
+    ImGui::SameLine();
+    ImGui::TextDisabled("  Contenido%s%s", contentFolder.empty() ? "" : " / ", contentFolder.c_str());
+    const AssetRecord* sel = project->assets().find(contentSelected);
+    Entity target = selectedEntity();
+    if (sel) {
+        ImGui::SameLine();
+        if (sel->type == AssetType::Scene && sel->id != sceneId && ImGui::SmallButton("Abrir escena")) {
+            save();
+            loadScene(sel->id);
+        }
+        if (sel->type == AssetType::Scene && sel->id != project->startScene()) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Hacer inicial")) {
+                project->setStartScene(sel->id);
+                project->save();
+            }
+        }
+        if (sel->type == AssetType::Script) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Editar")) openScriptFile(sel->path);
+        }
+        if ((sel->type == AssetType::Texture || sel->type == AssetType::Script) && !target.isNull()) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton(("Asignar a " + scene.info(target).name).c_str())) {
+                pushUndo();
+                if (sel->type == AssetType::Script) scene.world().add<Script>(target, {sel->id, true});
+                else if (auto* m = scene.world().get<MeshRenderer>(target)) m->texture = sel->id;
+                else {
+                    SpriteRenderer sp = scene.world().has<SpriteRenderer>(target) ? *scene.world().get<SpriteRenderer>(target) : SpriteRenderer{};
+                    sp.texture = sel->id;
+                    scene.world().add<SpriteRenderer>(target, sp);
                 }
             }
-            ImGui::PopID();
         }
-        ImGui::TreePop();
     }
-    if (!sel.isNull()) ImGui::TextDisabled("\"Asignar\" aplica el recurso a: %s", scene.info(sel).name.c_str());
+
+    // Árbol de carpetas a la izquierda, mosaicos a la derecha.
+    std::set<std::string> folders;
+    for (const AssetRecord* r : project->assets().all())
+        for (std::string f = folderOf(r->path); !f.empty(); f = folderOf(f)) folders.insert(f);
+    const float treeW = std::min(200 * scale, ImGui::GetContentRegionAvail().x * 0.3f);
+    ImGui::BeginChild("##carpetas", ImVec2(treeW, 0), ImGuiChildFlags_Borders);
+    if (ImGui::Selectable("Contenido", contentFolder.empty())) contentFolder.clear();
+    for (const std::string& f : folders) {
+        const int depth = static_cast<int>(std::count(f.begin(), f.end(), '/')) + 1;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + depth * 12 * scale);
+        if (ImGui::Selectable((fileName(f) + "##" + f).c_str(), contentFolder == f)) contentFolder = f;
+    }
+    ImGui::EndChild();
+    ImGui::SameLine();
+    ImGui::BeginChild("##mosaicos", ImVec2(0, 0), ImGuiChildFlags_Borders);
+    const float tile = 84 * scale, pad = ImGui::GetStyle().ItemSpacing.x;
+    const int cols = std::max(1, static_cast<int>((ImGui::GetContentRegionAvail().x + pad) / (tile + pad)));
+    int col = 0;
+    auto tileStart = [&]() {
+        if (col > 0) ImGui::SameLine();
+        if (++col >= cols) col = 0;
+    };
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    // Subcarpetas directas.
+    for (const std::string& f : folders) {
+        if (folderOf(f) != contentFolder) continue;
+        tileStart();
+        ImGui::PushID(f.c_str());
+        if (ImGui::Button("##carpeta", ImVec2(tile, tile))) contentFolder = f;
+        const ImVec2 a = ImGui::GetItemRectMin();
+        drawIcon(dl, Icon::Folder, ImVec2(a.x + tile * 0.5f, a.y + tile * 0.4f), tile * 0.3f, IM_COL32(200, 160, 80, 255));
+        const std::string n = fileName(f);
+        dl->AddText(ImVec2(a.x + 4 * scale, a.y + tile - ImGui::GetFontSize() - 4 * scale), IM_COL32(220, 220, 220, 255), n.c_str());
+        ImGui::PopID();
+    }
+    // Recursos de la carpeta.
+    for (const AssetRecord* r : project->assets().all()) {
+        if (folderOf(r->path) != contentFolder) continue;
+        tileStart();
+        ImGui::PushID(r->path.c_str());
+        const bool selectedTile = r->id == contentSelected;
+        if (selectedTile) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.44f, 0.88f, 0.6f));
+        if (ImGui::Button("##tile", ImVec2(tile, tile))) {
+            if (contentSelected == r->id && r->type == AssetType::Script) openScriptFile(r->path); // segundo toque abre
+            contentSelected = r->id;
+        }
+        if (selectedTile) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+            if (r->type == AssetType::Scene && r->id != sceneId) {
+                save();
+                loadScene(r->id);
+            } else if (r->type == AssetType::Script) {
+                openScriptFile(r->path);
+            }
+        }
+        const ImVec2 a = ImGui::GetItemRectMin();
+        const ImVec2 thumbA(a.x + 6 * scale, a.y + 6 * scale), thumbB(a.x + tile - 6 * scale, a.y + tile - ImGui::GetFontSize() - 10 * scale);
+        static const ImU32 typeColors[] = {IM_COL32(120, 120, 120, 255), IM_COL32(230, 140, 40, 255), IM_COL32(200, 70, 70, 255),
+                                           IM_COL32(70, 160, 230, 255),  IM_COL32(170, 90, 220, 255), IM_COL32(60, 190, 120, 255),
+                                           IM_COL32(200, 200, 80, 255),  IM_COL32(150, 150, 150, 255)};
+        const ImU32 tc = typeColors[static_cast<int>(r->type)];
+        if (r->type == AssetType::Texture) {
+            const TextureHandle h = editorTexture(r->id);
+            dl->AddImage(static_cast<ImTextureID>(static_cast<uintptr_t>(renderer.glTexture(h))), thumbA, thumbB);
+        } else {
+            dl->AddRectFilled(thumbA, thumbB, IM_COL32(40, 40, 40, 255), 4 * scale);
+            const char* kind = assetTypeName(r->type);
+            const ImVec2 ks = ImGui::CalcTextSize(kind);
+            dl->AddText(ImVec2((thumbA.x + thumbB.x - ks.x) * 0.5f, (thumbA.y + thumbB.y - ks.y) * 0.5f), tc, kind);
+        }
+        dl->AddRectFilled(ImVec2(thumbA.x, thumbB.y - 3 * scale), thumbB, tc);
+        std::string n = fileName(r->path);
+        while (n.size() > 3 && ImGui::CalcTextSize(n.c_str()).x > tile - 8 * scale) n = n.substr(0, n.size() - 4) + "..";
+        dl->AddText(ImVec2(a.x + 4 * scale, a.y + tile - ImGui::GetFontSize() - 4 * scale), IM_COL32(220, 220, 220, 255), n.c_str());
+        if (r->id == project->startScene()) dl->AddCircleFilled(ImVec2(thumbB.x - 6 * scale, thumbA.y + 6 * scale), 4 * scale, IM_COL32(240, 200, 60, 255));
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
 }
 
-// ============================================================ Consola
+// ============================================================ Registro de salida
 
 void Editor::Impl::drawConsole() {
-    sectionTitle("CONSOLA");
-    ImGui::SameLine();
     ImGui::Checkbox("Info", &showInfo);
     ImGui::SameLine();
     ImGui::Checkbox("Avisos", &showWarnings);
@@ -873,8 +1331,7 @@ void Editor::Impl::drawConsole() {
             ImGui::PopID();
         }
     }
-    ImGui::Separator();
-    ImGui::BeginChild("##log");
+    ImGui::BeginChild("##log", ImVec2(0, 0), ImGuiChildFlags_Borders);
     if (monoFont) ImGui::PushFont(monoFont);
     for (const LogMessage& m : logs) {
         if ((m.level == LogLevel::Info && !showInfo) || (m.level == LogLevel::Warning && !showWarnings) ||
@@ -882,9 +1339,9 @@ void Editor::Impl::drawConsole() {
             continue;
         const ImVec4 col = m.level == LogLevel::Error ? ImVec4(0.95f, 0.45f, 0.45f, 1)
                          : m.level == LogLevel::Warning ? ImVec4(0.95f, 0.78f, 0.35f, 1)
-                                                        : ImVec4(0.80f, 0.84f, 0.90f, 1);
+                                                        : ImVec4(0.78f, 0.78f, 0.78f, 1);
         ImGui::PushStyleColor(ImGuiCol_Text, col);
-        ImGui::TextWrapped("%7.2f [%s] %s", m.seconds, m.category.c_str(), m.text.c_str());
+        ImGui::TextWrapped("%7.2f  %-8s %s", m.seconds, m.category.c_str(), m.text.c_str());
         ImGui::PopStyleColor();
     }
     if (scrollConsole) {

@@ -156,6 +156,18 @@ Detalles y API en `docs/ENGINE_API.md`. Aislamiento:
 | D7 | Runtime de Android con NativeActivity | Sin Java en el juego exportado | GameActivity (se evaluará al añadir teclado y mando) |
 | D8 | Editor en C++ con Dear ImGui sobre el renderizador propio; Kotlin solo para la actividad, el teclado y los archivos | Un único editor para Android y escritorio que se puede ejecutar y probar de forma automática; la vista de escena y el modo Play comparten contexto GL con la interfaz | Interfaz Kotlin/Compose + JNI (decisión anterior: duplicaba la interfaz por plataforma y no se podía probar sin dispositivo) |
 
+## 11b. Pipeline gráfico 3D (v0.4)
+
+1. Sombras: pasada de profundidad del sol a un mapa de 2048×2048 (ortográfico, centrado delante de la cámara y
+   alineado a texels).
+2. Pasada principal: cielo procedural (triángulo a pantalla completa) → mallas opacas de delante a atrás →
+   transparentes de atrás a delante → sprites → líneas del editor → texto.
+3. Sombreado por píxel: PBR (GGX + Smith + Schlick) con sol y hasta 4 luces puntuales, ambiente hemisférico de
+   cielo, emisión, ACES + gamma y niebla exponencial. Las entradas de color son sRGB y se convierten a lineal.
+
+Límites conocidos: sin HDR intermedio ni posprocesado (el tonemapping se hace en cada malla), una sola cascada de
+sombras, sin iluminación global ni oclusión ambiental. Son los siguientes pasos hacia escenas de gran calidad.
+
 ## 12. Editor
 
 `titan_editor` (C++, Dear ImGui) depende de runtime, render y core. La plataforma implementa `EditorPlatform`:

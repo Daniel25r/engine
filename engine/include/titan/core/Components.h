@@ -94,13 +94,33 @@ struct SpriteRenderer {
 // Primitivas de geometría generadas por el motor (los modelos importados llegarán con glTF).
 enum class MeshPrimitive { Cube, Sphere, Plane, Cylinder, Cone, Capsule };
 
+// Material PBR (metálico/rugosidad). Los colores se indican en sRGB, como en cualquier editor.
 struct MeshRenderer {
     MeshPrimitive mesh = MeshPrimitive::Cube;
-    AssetRef texture;           // nulo = sin textura
-    Color color;                // color base del material
-    float shininess = 32.0f;    // brillo especular (Blinn-Phong)
-    bool unlit = false;         // ignora las luces
+    AssetRef texture;            // textura de color base (nulo = sin textura)
+    Color color;                 // color base
+    float metallic = 0.0f;       // 0 = dieléctrico (plástico, piedra), 1 = metal
+    float roughness = 0.6f;      // 0 = espejo, 1 = mate
+    Color emission{0, 0, 0, 1};  // luz propia
+    bool prototypeGrid = false;  // rejilla de prototipado alineada al mundo
+    bool castShadows = true;
+    bool unlit = false;          // ignora las luces
     bool visible = true;
+};
+
+// Ambiente de la escena: cielo, luz ambiental, niebla, exposición y sombras.
+// Si una escena 3D no tiene ninguno, se usan estos valores por defecto.
+struct Environment {
+    bool sky = true;
+    Color skyZenith = Color::hex(0x2F6DB5);
+    Color skyHorizon = Color::hex(0xB8D4EC);
+    Color ground = Color::hex(0x4D463E);
+    float ambientIntensity = 1.0f;
+    Color fogColor = Color::hex(0xB8D4EC);
+    float fogDensity = 0.008f;   // niebla exponencial; 0 = sin niebla
+    float exposure = 1.0f;
+    bool shadows = true;
+    float shadowDistance = 50.0f;
 };
 
 struct Light {

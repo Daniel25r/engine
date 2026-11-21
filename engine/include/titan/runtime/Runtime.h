@@ -61,6 +61,8 @@ public:
     const FrameProfile& profile() const { return profile_; }
 
     bool showStats = true;
+    // En pausa no se ejecuta la lógica, pero se sigue dibujando.
+    bool paused = false;
 
     // ScriptHost
     double scriptTime() const override { return time_; }

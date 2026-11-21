@@ -41,8 +41,8 @@ void main() {
 }
 )";
 
-// Iluminación Blinn-Phong: ambiente + 1 direccional + hasta 4 puntuales.
-// Preparado para sustituirse por PBR sin cambiar la interfaz del renderizador.
+// Mallas: PBR metálico/rugosidad (GGX + Smith + Schlick), sol con sombras PCF, 4 luces puntuales,
+// ambiente de cielo hemisférico, niebla exponencial y tonemapping ACES. Los colores de entrada son sRGB.
 const char* kMeshVS = R"(#version 300 es
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
@@ -50,57 +50,173 @@ layout(location = 2) in vec2 aUV;
 uniform mat4 uViewProj;
 uniform mat4 uModel;
 uniform mat3 uNormalMat;
+uniform mat4 uLightVP;
 out vec3 vWorld;
 out vec3 vNormal;
 out vec2 vUV;
+out vec4 vShadow;
 void main() {
     vec4 w = uModel * vec4(aPos, 1.0);
     vWorld = w.xyz;
-    vNormal = uNormalMat * aNormal;
+    vNormal = normalize(uNormalMat * aNormal);
     vUV = aUV;
+    // Desplazar el punto un poco por la normal evita el "acné" de sombras.
+    vShadow = uLightVP * vec4(w.xyz + vNormal * 0.04, 1.0);
     gl_Position = uViewProj * w;
 }
 )";
 
 const char* kMeshFS = R"(#version 300 es
 precision highp float;
+precision highp sampler2DShadow;
 in vec3 vWorld;
 in vec3 vNormal;
 in vec2 vUV;
+in vec4 vShadow;
 uniform sampler2D uTex;
+uniform sampler2DShadow uShadowMap;
 uniform vec4 uColor;
-uniform vec3 uAmbient;
+uniform float uMetallic;
+uniform float uRoughness;
+uniform vec3 uEmission;
+uniform int uGrid;
+uniform int uUnlit;
 uniform vec3 uDirDir;
 uniform vec3 uDirColor;
 uniform int uPointCount;
 uniform vec4 uPointPosRange[4];
 uniform vec3 uPointColor[4];
 uniform vec3 uCameraPos;
-uniform float uShininess;
-uniform int uUnlit;
+uniform vec3 uSkyZenith;
+uniform vec3 uSkyHorizon;
+uniform vec3 uGround;
+uniform float uAmbientI;
+uniform vec3 uFogColor;
+uniform float uFogDensity;
+uniform float uExposure;
+uniform int uShadowsOn;
 out vec4 outColor;
 
-vec3 shade(vec3 n, vec3 v, vec3 l, vec3 color) {
-    float d = max(dot(n, l), 0.0);
-    float s = d > 0.0 ? pow(max(dot(n, normalize(l + v)), 0.0), uShininess) : 0.0;
-    return color * (d + 0.35 * s);
+const float PI = 3.14159265;
+vec3 toLinear(vec3 c) { return pow(c, vec3(2.2)); }
+vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+
+vec3 brdf(vec3 n, vec3 v, vec3 l, vec3 albedo, float metal, float rough, vec3 radiance) {
+    float ndl = dot(n, l);
+    if (ndl <= 0.0) return vec3(0.0);
+    vec3 h = normalize(l + v);
+    float ndv = max(dot(n, v), 1e-4), ndh = max(dot(n, h), 0.0), vdh = max(dot(v, h), 0.0);
+    float a = max(rough * rough, 0.002);
+    float a2 = a * a;
+    float d = ndh * ndh * (a2 - 1.0) + 1.0;
+    float D = a2 / (PI * d * d);
+    float k = a * 0.5;
+    float V = 0.25 / ((ndv * (1.0 - k) + k) * (ndl * (1.0 - k) + k));
+    vec3 F0 = mix(vec3(0.04), albedo, metal);
+    vec3 F = F0 + (1.0 - F0) * pow(1.0 - vdh, 5.0);
+    vec3 kd = (1.0 - F) * (1.0 - metal);
+    return (kd * albedo / PI + D * V * F) * radiance * ndl;
+}
+
+float shadowFactor() {
+    if (uShadowsOn == 0) return 1.0;
+    vec3 p = vShadow.xyz / vShadow.w * 0.5 + 0.5;
+    if (p.x <= 0.0 || p.x >= 1.0 || p.y <= 0.0 || p.y >= 1.0 || p.z >= 1.0) return 1.0;
+    float texel = 1.0 / float(textureSize(uShadowMap, 0).x);
+    float sum = 0.0;
+    for (int x = -1; x <= 1; ++x)
+        for (int y = -1; y <= 1; ++y)
+            sum += texture(uShadowMap, vec3(p.xy + vec2(x, y) * texel, p.z - 0.0008));
+    return sum / 9.0;
+}
+
+float gridLines(vec3 n) {
+    // Rejilla de prototipado alineada al mundo: líneas cada metro y más marcadas cada 5.
+    vec3 an = abs(n);
+    vec2 uv = an.y > an.x && an.y > an.z ? vWorld.xz : (an.x > an.z ? vWorld.zy : vWorld.xy);
+    vec2 g1 = abs(fract(uv - 0.5) - 0.5) / fwidth(uv);
+    vec2 g5 = abs(fract(uv / 5.0 - 0.5) - 0.5) / fwidth(uv / 5.0);
+    float l1 = 1.0 - min(min(g1.x, g1.y), 1.0);
+    float l5 = 1.0 - min(min(g5.x, g5.y), 1.0);
+    return max(l1 * 0.18, l5 * 0.35);
 }
 
 void main() {
-    vec4 base = texture(uTex, vUV) * uColor;
-    if (uUnlit == 1) { outColor = base; return; }
-    vec3 n = normalize(vNormal);
-    if (!gl_FrontFacing) n = -n;
+    vec4 tex = texture(uTex, vUV);
+    vec3 albedo = toLinear(tex.rgb * uColor.rgb);
+    float alpha = tex.a * uColor.a;
+    vec3 n = normalize(gl_FrontFacing ? vNormal : -vNormal);
+    if (uGrid == 1) albedo *= 1.0 - gridLines(n);
+    if (uUnlit == 1) { outColor = vec4(pow(albedo, vec3(1.0 / 2.2)), alpha); return; }
+
     vec3 v = normalize(uCameraPos - vWorld);
-    vec3 light = uAmbient + shade(n, v, normalize(-uDirDir), uDirColor);
+    float rough = clamp(uRoughness, 0.04, 1.0);
+    vec3 color = brdf(n, v, normalize(-uDirDir), albedo, uMetallic, rough, uDirColor * 2.4) * shadowFactor();
     for (int i = 0; i < 4; ++i) {
         if (i >= uPointCount) break;
         vec3 toLight = uPointPosRange[i].xyz - vWorld;
         float dist = length(toLight);
         float att = clamp(1.0 - dist / uPointPosRange[i].w, 0.0, 1.0);
-        light += shade(n, v, toLight / max(dist, 1e-4), uPointColor[i]) * att * att;
+        color += brdf(n, v, toLight / max(dist, 1e-4), albedo, uMetallic, rough, uPointColor[i] * 3.0 * att * att);
     }
-    outColor = vec4(base.rgb * light, base.a);
+    // Ambiente: cielo arriba, suelo abajo; reflejo especular aproximado del cielo.
+    vec3 sky = toLinear(uSkyZenith), horizon = toLinear(uSkyHorizon), ground = toLinear(uGround);
+    vec3 hemi = mix(ground, mix(horizon, sky, max(n.y, 0.0)), n.y * 0.5 + 0.5);
+    hemi = mix(vec3(dot(hemi, vec3(0.3, 0.59, 0.11))), hemi, 0.45); // luz ambiental menos saturada
+    vec3 F0 = mix(vec3(0.04), albedo, uMetallic);
+    float ndv = max(dot(n, v), 0.0);
+    vec3 F = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - ndv, 5.0);
+    vec3 r = reflect(-v, n);
+    vec3 env = mix(ground, mix(horizon, sky, max(r.y, 0.0)), r.y * 0.5 + 0.5);
+    color += (hemi * albedo * (1.0 - uMetallic) * (1.0 - F) * 0.45 + env * F * (1.0 - rough * 0.7)) * uAmbientI;
+    color += toLinear(uEmission) * 2.0;
+
+    color = pow(aces(color * uExposure), vec3(1.0 / 2.2));
+    float fog = 1.0 - exp(-uFogDensity * length(uCameraPos - vWorld));
+    outColor = vec4(mix(color, uFogColor, clamp(fog, 0.0, 1.0)), alpha);
+}
+)";
+
+const char* kShadowVS = R"(#version 300 es
+layout(location = 0) in vec3 aPos;
+uniform mat4 uLightVP;
+uniform mat4 uModel;
+void main() { gl_Position = uLightVP * uModel * vec4(aPos, 1.0); }
+)";
+
+const char* kShadowFS = R"(#version 300 es
+precision mediump float;
+void main() {}
+)";
+
+// Cielo: triángulo a pantalla completa; el color depende de la dirección de la vista.
+const char* kSkyVS = R"(#version 300 es
+out vec2 vNdc;
+void main() {
+    vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)) * 2.0 - 1.0;
+    vNdc = p;
+    gl_Position = vec4(p, 0.9999, 1.0);
+}
+)";
+
+const char* kSkyFS = R"(#version 300 es
+precision highp float;
+in vec2 vNdc;
+uniform mat4 uInvViewProj;
+uniform vec3 uCam;
+uniform vec3 uZenith;
+uniform vec3 uHorizon;
+uniform vec3 uGroundC;
+uniform vec3 uSunDir;
+uniform vec3 uSunColor;
+out vec4 outColor;
+void main() {
+    vec4 far = uInvViewProj * vec4(vNdc, 1.0, 1.0);
+    vec3 dir = normalize(far.xyz / far.w - uCam);
+    vec3 c = dir.y > 0.0 ? mix(uHorizon, uZenith, pow(dir.y, 0.55)) : mix(uHorizon, uGroundC, pow(-dir.y, 0.35));
+    float s = max(dot(dir, -uSunDir), 0.0);
+    c += uSunColor * (pow(s, 900.0) * 3.0 + pow(s, 12.0) * 0.18);
+    outColor = vec4(c, 1.0);
 }
 )";
 
@@ -167,20 +283,47 @@ bool Renderer::createGpuObjects() {
     if (!spriteProgram_ || !meshProgram_) return false;
     uSpriteViewProj_ = glGetUniformLocation(spriteProgram_, "uViewProj");
     uSpriteTex_ = glGetUniformLocation(spriteProgram_, "uTex");
-    uViewProj_ = glGetUniformLocation(meshProgram_, "uViewProj");
-    uModel_ = glGetUniformLocation(meshProgram_, "uModel");
-    uNormalMat_ = glGetUniformLocation(meshProgram_, "uNormalMat");
-    uColor_ = glGetUniformLocation(meshProgram_, "uColor");
-    uTex_ = glGetUniformLocation(meshProgram_, "uTex");
-    uAmbient_ = glGetUniformLocation(meshProgram_, "uAmbient");
-    uDirDir_ = glGetUniformLocation(meshProgram_, "uDirDir");
-    uDirColor_ = glGetUniformLocation(meshProgram_, "uDirColor");
-    uPointCount_ = glGetUniformLocation(meshProgram_, "uPointCount");
-    uPointPosRange_ = glGetUniformLocation(meshProgram_, "uPointPosRange");
-    uPointColor_ = glGetUniformLocation(meshProgram_, "uPointColor");
-    uCameraPos_ = glGetUniformLocation(meshProgram_, "uCameraPos");
-    uShininess_ = glGetUniformLocation(meshProgram_, "uShininess");
-    uUnlit_ = glGetUniformLocation(meshProgram_, "uUnlit");
+    shadowProgram_ = linkProgram(kShadowVS, kShadowFS);
+    skyProgram_ = linkProgram(kSkyVS, kSkyFS);
+    if (!shadowProgram_ || !skyProgram_) return false;
+    auto u = [this](const char* n) { return glGetUniformLocation(meshProgram_, n); };
+    uViewProj_ = u("uViewProj"); uModel_ = u("uModel"); uNormalMat_ = u("uNormalMat"); uColor_ = u("uColor");
+    uTex_ = u("uTex"); uDirDir_ = u("uDirDir"); uDirColor_ = u("uDirColor"); uPointCount_ = u("uPointCount");
+    uPointPosRange_ = u("uPointPosRange"); uPointColor_ = u("uPointColor"); uCameraPos_ = u("uCameraPos");
+    uUnlit_ = u("uUnlit"); uMetallic_ = u("uMetallic"); uRoughness_ = u("uRoughness"); uEmission_ = u("uEmission");
+    uGrid_ = u("uGrid"); uSkyZenith_ = u("uSkyZenith"); uSkyHorizon_ = u("uSkyHorizon"); uGround_ = u("uGround");
+    uAmbientI_ = u("uAmbientI"); uFogColor_ = u("uFogColor"); uFogDensity_ = u("uFogDensity");
+    uExposure_ = u("uExposure"); uLightVP_ = u("uLightVP"); uShadowMap_ = u("uShadowMap"); uShadowsOn_ = u("uShadowsOn");
+    uShadowLVP_ = glGetUniformLocation(shadowProgram_, "uLightVP");
+    uShadowModel_ = glGetUniformLocation(shadowProgram_, "uModel");
+    uSkyInvVP_ = glGetUniformLocation(skyProgram_, "uInvViewProj");
+    uSkyCam_ = glGetUniformLocation(skyProgram_, "uCam");
+    uSkyZ_ = glGetUniformLocation(skyProgram_, "uZenith");
+    uSkyH_ = glGetUniformLocation(skyProgram_, "uHorizon");
+    uSkyG_ = glGetUniformLocation(skyProgram_, "uGroundC");
+    uSkySun_ = glGetUniformLocation(skyProgram_, "uSunDir");
+    uSkySunColor_ = glGetUniformLocation(skyProgram_, "uSunColor");
+    glGenVertexArrays(1, &skyVao_);
+
+    // Mapa de sombras: textura de profundidad con comparación por hardware (PCF 2x2 gratis).
+    glGenTextures(1, &shadowTex_);
+    glBindTexture(GL_TEXTURE_2D, shadowTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, kShadowMapSize, kShadowMapSize, 0, GL_DEPTH_COMPONENT,
+                 GL_UNSIGNED_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    glGenFramebuffers(1, &shadowFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex_, 0);
+    const GLenum none = GL_NONE;
+    glDrawBuffers(1, &none);
+    glReadBuffer(GL_NONE);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) TITAN_WARN("render", "Mapa de sombras incompleto");
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // Sprites: búfer dinámico + índices fijos.
     glGenVertexArrays(1, &spriteVao_);
@@ -314,6 +457,7 @@ Vec2 Renderer::textureSize(TextureHandle id) const {
 
 void Renderer::onContextLost() {
     spriteProgram_ = meshProgram_ = spriteVao_ = spriteVbo_ = spriteIbo_ = lineVao_ = lineVbo_ = 0;
+    shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = 0;
     for (auto& m : meshes_) m = {};
     for (auto& t : textures_) t.gl = 0;
     quadCount_ = 0;
@@ -343,7 +487,13 @@ void Renderer::shutdown() {
         if (*v) glDeleteVertexArrays(1, v);
     if (spriteProgram_) glDeleteProgram(spriteProgram_);
     if (meshProgram_) glDeleteProgram(meshProgram_);
+    if (shadowProgram_) glDeleteProgram(shadowProgram_);
+    if (skyProgram_) glDeleteProgram(skyProgram_);
+    if (shadowFbo_) glDeleteFramebuffers(1, &shadowFbo_);
+    if (shadowTex_) glDeleteTextures(1, &shadowTex_);
+    if (skyVao_) glDeleteVertexArrays(1, &skyVao_);
     spriteProgram_ = meshProgram_ = spriteVao_ = spriteVbo_ = spriteIbo_ = lineVao_ = lineVbo_ = 0;
+    shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = 0;
 }
 
 // ---------------------------------------------------------------- Fotograma
@@ -375,12 +525,44 @@ void Renderer::setCamera(const Mat4& view, const Mat4& projection) {
     cameraPos_ = view.inverted().translation();
 }
 
-void Renderer::setLights(const LightSetup& l) {
+void Renderer::beginShadowPass(const Mat4& lightVP) {
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+    glViewport(0, 0, kShadowMapSize, kShadowMapSize);
+    glDisable(GL_SCISSOR_TEST);
+    glDepthMask(GL_TRUE);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDisable(GL_CULL_FACE); // las caras traseras también proyectan sombra (planos, objetos abiertos)
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(1.5f, 2.0f);
+    glUseProgram(shadowProgram_);
+    glUniformMatrix4fv(uShadowLVP_, 1, GL_FALSE, lightVP.m);
+}
+
+void Renderer::drawShadowCaster(MeshPrimitive type, const Mat4& world) {
+    const GpuMesh& mesh = meshes_[static_cast<int>(type)];
+    if (!mesh.vao) return;
+    glUniformMatrix4fv(uShadowModel_, 1, GL_FALSE, world.m);
+    glBindVertexArray(mesh.vao);
+    glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_SHORT, nullptr);
+    stats_.drawCalls++;
+}
+
+void Renderer::endShadowPass() {
+    glBindVertexArray(0);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo_));
+}
+
+void Renderer::setLighting(const SceneLighting& l) {
+    lighting_ = l;
+    const Environment& e = l.env;
     glUseProgram(meshProgram_);
-    glUniform3f(uAmbient_, l.ambient.r, l.ambient.g, l.ambient.b);
-    const Vec3 d = l.directionalDir.normalized();
+    const Vec3 d = l.sunDirection.normalized();
     glUniform3f(uDirDir_, d.x, d.y, d.z);
-    glUniform3f(uDirColor_, l.directionalColor.r, l.directionalColor.g, l.directionalColor.b);
+    glUniform3f(uDirColor_, l.sunColor.r, l.sunColor.g, l.sunColor.b);
     float posRange[kMaxPointLights * 4] = {};
     float colors[kMaxPointLights * 3] = {};
     const int n = static_cast<int>(std::min<size_t>(l.points.size(), kMaxPointLights));
@@ -393,24 +575,66 @@ void Renderer::setLights(const LightSetup& l) {
     glUniform1i(uPointCount_, n);
     glUniform4fv(uPointPosRange_, kMaxPointLights, posRange);
     glUniform3fv(uPointColor_, kMaxPointLights, colors);
+    glUniform3f(uSkyZenith_, e.skyZenith.r, e.skyZenith.g, e.skyZenith.b);
+    glUniform3f(uSkyHorizon_, e.skyHorizon.r, e.skyHorizon.g, e.skyHorizon.b);
+    glUniform3f(uGround_, e.ground.r, e.ground.g, e.ground.b);
+    glUniform1f(uAmbientI_, e.ambientIntensity);
+    glUniform3f(uFogColor_, e.fogColor.r, e.fogColor.g, e.fogColor.b);
+    glUniform1f(uFogDensity_, std::max(e.fogDensity, 0.0f));
+    glUniform1f(uExposure_, std::max(e.exposure, 0.01f));
+    glUniform1i(uShadowsOn_, l.shadows ? 1 : 0);
+    glUniformMatrix4fv(uLightVP_, 1, GL_FALSE, l.lightViewProjection.m);
+    glUniform1i(uShadowMap_, 1);
+    glUniform1i(uTex_, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, shadowTex_);
+    glActiveTexture(GL_TEXTURE0);
 }
 
-void Renderer::drawMesh(MeshPrimitive type, const Mat4& world, Color color, TextureHandle tex, float shininess, bool unlit) {
+void Renderer::drawSky() {
+    if (!lighting_.drawSky) return;
+    const Environment& e = lighting_.env;
+    const Vec3 d = lighting_.sunDirection.normalized();
+    glUseProgram(skyProgram_);
+    const Mat4 inv = viewProj_.inverted();
+    glUniformMatrix4fv(uSkyInvVP_, 1, GL_FALSE, inv.m);
+    glUniform3f(uSkyCam_, cameraPos_.x, cameraPos_.y, cameraPos_.z);
+    glUniform3f(uSkyZ_, e.skyZenith.r, e.skyZenith.g, e.skyZenith.b);
+    glUniform3f(uSkyH_, e.skyHorizon.r, e.skyHorizon.g, e.skyHorizon.b);
+    glUniform3f(uSkyG_, e.ground.r, e.ground.g, e.ground.b);
+    glUniform3f(uSkySun_, d.x, d.y, d.z);
+    glUniform3f(uSkySunColor_, lighting_.sunColor.r, lighting_.sunColor.g, lighting_.sunColor.b);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glBindVertexArray(skyVao_);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    stats_.drawCalls++;
+}
+
+void Renderer::drawMesh(MeshPrimitive type, const Mat4& world, const MeshRenderer& mat, TextureHandle tex) {
     const GpuMesh& mesh = meshes_[static_cast<int>(type)];
     if (!mesh.vao) return;
     if (tex >= textures_.size()) tex = kWhiteTexture;
     // Matriz de normales: inversa traspuesta de la parte 3x3 (correcta también con escala no uniforme).
     const Mat4 inv = world.inverted();
     const float normalMat[9] = {inv.m[0], inv.m[4], inv.m[8], inv.m[1], inv.m[5], inv.m[9], inv.m[2], inv.m[6], inv.m[10]};
+    const Color& color = mat.color;
     glUseProgram(meshProgram_);
     glUniformMatrix4fv(uViewProj_, 1, GL_FALSE, viewProj_.m);
     glUniformMatrix4fv(uModel_, 1, GL_FALSE, world.m);
     glUniformMatrix3fv(uNormalMat_, 1, GL_FALSE, normalMat);
     glUniform4f(uColor_, color.r, color.g, color.b, color.a);
     glUniform3f(uCameraPos_, cameraPos_.x, cameraPos_.y, cameraPos_.z);
-    glUniform1f(uShininess_, std::max(shininess, 1.0f));
-    glUniform1i(uUnlit_, unlit ? 1 : 0);
-    glUniform1i(uTex_, 0);
+    glUniform1f(uMetallic_, mat.metallic);
+    glUniform1f(uRoughness_, mat.roughness);
+    glUniform3f(uEmission_, mat.emission.r, mat.emission.g, mat.emission.b);
+    glUniform1i(uGrid_, mat.prototypeGrid ? 1 : 0);
+    glUniform1i(uUnlit_, (mat.unlit || unlitOverride_) ? 1 : 0);
     glBindTexture(GL_TEXTURE_2D, textures_[tex].gl);
     // Una escala con determinante negativo invierte el sentido de los triángulos.
     const float det = world.m[0] * (world.m[5] * world.m[10] - world.m[9] * world.m[6]) -

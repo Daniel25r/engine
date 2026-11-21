@@ -190,8 +190,9 @@ ComponentRegistry ComponentRegistry::createDefault() {
         [](const MeshRenderer& m) {
             static const char* names[] = {"cube", "sphere", "plane", "cylinder", "cone", "capsule"};
             return Json{{"mesh", names[static_cast<int>(m.mesh)]}, {"texture", assetToJson(m.texture)},
-                        {"color", toJson(m.color)}, {"shininess", toJson(m.shininess)}, {"unlit", m.unlit},
-                        {"visible", m.visible}};
+                        {"color", toJson(m.color)}, {"metallic", toJson(m.metallic)}, {"roughness", toJson(m.roughness)},
+                        {"emission", toJson(m.emission)}, {"prototypeGrid", m.prototypeGrid},
+                        {"castShadows", m.castShadows}, {"unlit", m.unlit}, {"visible", m.visible}};
         },
         [](MeshRenderer& m, FieldReader& rd) {
             rd.readEnum("mesh", m.mesh,
@@ -199,9 +200,34 @@ ComponentRegistry ComponentRegistry::createDefault() {
                          {"cylinder", MeshPrimitive::Cylinder}, {"cone", MeshPrimitive::Cone}, {"capsule", MeshPrimitive::Capsule}});
             rd.readAsset("texture", m.texture);
             rd.read("color", m.color);
-            rd.read("shininess", m.shininess);
+            rd.read("metallic", m.metallic);
+            rd.read("roughness", m.roughness);
+            rd.read("emission", m.emission);
+            rd.read("prototypeGrid", m.prototypeGrid);
+            rd.read("castShadows", m.castShadows);
             rd.read("unlit", m.unlit);
             rd.read("visible", m.visible);
+        });
+
+    r.addSimple<Environment>(
+        "Environment",
+        [](const Environment& e) {
+            return Json{{"sky", e.sky}, {"skyZenith", toJson(e.skyZenith)}, {"skyHorizon", toJson(e.skyHorizon)},
+                        {"ground", toJson(e.ground)}, {"ambientIntensity", toJson(e.ambientIntensity)},
+                        {"fogColor", toJson(e.fogColor)}, {"fogDensity", toJson(e.fogDensity)},
+                        {"exposure", toJson(e.exposure)}, {"shadows", e.shadows}, {"shadowDistance", toJson(e.shadowDistance)}};
+        },
+        [](Environment& e, FieldReader& rd) {
+            rd.read("sky", e.sky);
+            rd.read("skyZenith", e.skyZenith);
+            rd.read("skyHorizon", e.skyHorizon);
+            rd.read("ground", e.ground);
+            rd.read("ambientIntensity", e.ambientIntensity);
+            rd.read("fogColor", e.fogColor);
+            rd.read("fogDensity", e.fogDensity);
+            rd.read("exposure", e.exposure);
+            rd.read("shadows", e.shadows);
+            rd.read("shadowDistance", e.shadowDistance);
         });
 
     r.addSimple<Light>(

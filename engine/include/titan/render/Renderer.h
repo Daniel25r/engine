@@ -45,11 +45,15 @@ struct PointLightData {
     Color color;
 };
 
-struct LightSetup {
-    Color ambient{0.25f, 0.27f, 0.32f, 1};
-    Vec3 directionalDir{-0.4f, -1.0f, -0.6f};
-    Color directionalColor{0.9f, 0.88f, 0.82f, 1};
-    std::vector<PointLightData> points; // como máximo 4 se usan
+// Todo lo que afecta a la luz de un fotograma: ambiente (cielo, niebla, exposición), sol y luces puntuales.
+struct SceneLighting {
+    Environment env;
+    bool drawSky = true;
+    Vec3 sunDirection{-0.4f, -1.0f, -0.6f}; // hacia dónde viaja la luz
+    Color sunColor{1, 0.96f, 0.9f, 1};      // ya multiplicado por la intensidad
+    std::vector<PointLightData> points;     // como máximo 4 se usan
+    bool shadows = false;
+    Mat4 lightViewProjection;               // para el mapa de sombras
 };
 
 class Renderer {
@@ -66,11 +70,20 @@ public:
     TextureHandle loadTexture(const std::string& path, TextureOptions options = {});
     Vec2 textureSize(TextureHandle t) const;
 
+    // Mapa de sombras del sol: se rellena ANTES de beginFrame.
+    static constexpr int kShadowMapSize = 2048;
+    void beginShadowPass(const Mat4& lightViewProjection);
+    void drawShadowCaster(MeshPrimitive mesh, const Mat4& world);
+    void endShadowPass();
+
     void beginFrame(const Viewport& viewport, Color clear);
     void setCamera(const Mat4& view, const Mat4& projection);
-    void setLights(const LightSetup& lights);
+    void setLighting(const SceneLighting& lighting);
+    void drawSky();
+    // "Sin iluminación" del editor: muestra solo el color base.
+    void setUnlitOverride(bool on) { unlitOverride_ = on; }
 
-    void drawMesh(MeshPrimitive mesh, const Mat4& world, Color color, TextureHandle tex, float shininess, bool unlit);
+    void drawMesh(MeshPrimitive mesh, const Mat4& world, const MeshRenderer& material, TextureHandle tex);
     // Sprite con su matriz de mundo completa: respeta posición, rotación, escala y jerarquía.
     void drawSprite(TextureHandle tex, const Mat4& world, Vec2 size, Vec2 pivot, Rect uv, Color color);
     void drawLine(const Vec3& a, const Vec3& b, Color color);
@@ -80,6 +93,7 @@ public:
 
     const RenderStats& stats() const { return lastStats_; }
     const Mat4& viewProjection() const { return viewProj_; }
+    uint32_t glTexture(TextureHandle t) const { return t < textures_.size() ? textures_[t].gl : 0; }
 
 private:
     struct Vertex {
@@ -119,9 +133,19 @@ private:
     int uSpriteViewProj_ = -1, uSpriteTex_ = -1;
     // Programa de mallas iluminadas
     uint32_t meshProgram_ = 0;
-    int uViewProj_ = -1, uModel_ = -1, uNormalMat_ = -1, uColor_ = -1, uTex_ = -1, uAmbient_ = -1, uDirDir_ = -1,
-        uDirColor_ = -1, uPointCount_ = -1, uPointPosRange_ = -1, uPointColor_ = -1, uCameraPos_ = -1,
-        uShininess_ = -1, uUnlit_ = -1;
+    int uViewProj_ = -1, uModel_ = -1, uNormalMat_ = -1, uColor_ = -1, uTex_ = -1, uDirDir_ = -1, uDirColor_ = -1,
+        uPointCount_ = -1, uPointPosRange_ = -1, uPointColor_ = -1, uCameraPos_ = -1, uUnlit_ = -1, uMetallic_ = -1,
+        uRoughness_ = -1, uEmission_ = -1, uGrid_ = -1, uSkyZenith_ = -1, uSkyHorizon_ = -1, uGround_ = -1,
+        uAmbientI_ = -1, uFogColor_ = -1, uFogDensity_ = -1, uExposure_ = -1, uLightVP_ = -1, uShadowMap_ = -1,
+        uShadowsOn_ = -1;
+    // Sombras y cielo
+    uint32_t shadowProgram_ = 0, shadowFbo_ = 0, shadowTex_ = 0;
+    int uShadowLVP_ = -1, uShadowModel_ = -1;
+    int prevFbo_ = 0;
+    uint32_t skyProgram_ = 0, skyVao_ = 0;
+    int uSkyInvVP_ = -1, uSkyCam_ = -1, uSkyZ_ = -1, uSkyH_ = -1, uSkyG_ = -1, uSkySun_ = -1, uSkySunColor_ = -1;
+    SceneLighting lighting_;
+    bool unlitOverride_ = false;
     GpuMesh meshes_[6];
 
     std::vector<Texture> textures_;

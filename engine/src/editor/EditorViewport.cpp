@@ -60,10 +60,19 @@ bool Editor::Impl::threeD() const { return project && project->dimension() == Pr
 
 void Editor::Impl::updateEditorCamera(float aspect) {
     if (threeD()) {
-        const float cp = std::cos(cam3Pitch);
-        const Vec3 eye = cam3Target + Vec3{std::sin(cam3Yaw) * cp, std::sin(cam3Pitch), std::cos(cam3Yaw) * cp} * cam3Dist;
+        float yaw = cam3Yaw, pitch = cam3Pitch;
+        if (viewAngle == ViewAngle::Top) { yaw = 0; pitch = 1.5607f; }
+        else if (viewAngle == ViewAngle::Front) { yaw = 0; pitch = 0; }
+        else if (viewAngle == ViewAngle::Right) { yaw = 1.5708f; pitch = 0; }
+        const float cp = std::cos(pitch);
+        const Vec3 eye = cam3Target + Vec3{std::sin(yaw) * cp, std::sin(pitch), std::cos(yaw) * cp} * cam3Dist;
         editorView = lookAtWorld(eye, cam3Target).inverted();
-        editorProj = Mat4::perspective(55 * kDegToRad, aspect, 0.05f, 2000.0f);
+        if (viewAngle == ViewAngle::Perspective) {
+            editorProj = Mat4::perspective(55 * kDegToRad, aspect, 0.05f, 2000.0f);
+        } else {
+            const float h = cam3Dist * 0.5f;
+            editorProj = Mat4::ortho(-h * aspect, h * aspect, -h, h, -1000.0f, 2000.0f);
+        }
     } else {
         editorView = Mat4::translate({cam2Center.x, cam2Center.y, 50}).inverted();
         editorProj = Mat4::ortho(-cam2Size * aspect, cam2Size * aspect, -cam2Size, cam2Size, 0.1f, 1000.0f);
@@ -84,6 +93,7 @@ void Editor::Impl::renderViewport() {
     view.view = editorView;
     view.projection = editorProj;
     view.perspective = threeD();
+    renderer.setUnlitOverride(viewUnlit);
     // Fondo: el de la cámara del juego, para ver la escena como se verá al jugar.
     SceneView gameView;
     view.clearColor = SceneRenderer::cameraView(scene, 1.0f, gameView) ? gameView.clearColor : Color::hex(0x1B2230);
@@ -94,7 +104,8 @@ void Editor::Impl::renderViewport() {
 
 void Editor::Impl::drawGizmos() {
     // Rejilla.
-    if (threeD()) {
+    if (!showGrid) {
+    } else if (threeD()) {
         const float ext = 20;
         for (int i = -20; i <= 20; ++i) {
             const Color c = i == 0 ? Color{1, 1, 1, 0.25f} : Color{1, 1, 1, i % 5 == 0 ? 0.12f : 0.06f};
@@ -151,7 +162,7 @@ void Editor::Impl::drawGizmos() {
     Entity sel = selectedEntity();
     if (sel.isNull()) return;
     const Mat4& m = scene.transform(sel).worldMatrix();
-    const Color hi{0.95f, 0.71f, 0.29f, 1};
+    const Color hi{0.98f, 0.62f, 0.1f, 1};
     if (scene.world().has<MeshRenderer>(sel)) {
         Vec3 c[8];
         for (int i = 0; i < 8; ++i) c[i] = m.transformPoint({(i & 1) ? 0.5f : -0.5f, (i & 2) ? 0.5f : -0.5f, (i & 4) ? 0.5f : -0.5f});
@@ -164,12 +175,6 @@ void Editor::Impl::drawGizmos() {
                            m.transformPoint({l, tp, 0})};
         for (int i = 0; i < 4; ++i) renderer.drawLine(c[i], c[(i + 1) % 4], hi);
     }
-    // Ejes locales del objeto seleccionado.
-    const Vec3 o = m.translation();
-    const float a = threeD() ? 1.0f : cam2Size * 0.15f;
-    renderer.drawLine(o, o + scene.transform(sel).right() * a, {1, 0.3f, 0.3f, 1});
-    renderer.drawLine(o, o + scene.transform(sel).up() * a, {0.3f, 1, 0.4f, 1});
-    if (threeD()) renderer.drawLine(o, o + scene.transform(sel).forward() * a, {0.35f, 0.55f, 1, 1});
 }
 
 bool Editor::Impl::screenRay(ImVec2 p, Vec3& origin, Vec3& dir) const {
@@ -242,11 +247,34 @@ void Editor::Impl::viewportPointerDown(int id, ImVec2 p) {
     touches.push_back({id, p, p, p});
     gestureMoved = false;
     movingEntity = false;
-    if (touches.size() == 2) pinchStart = pdist(touches[0].pos, touches[1].pos);
-    if (touches.size() != 1 || tool != Tool::Move) return;
+    if (touches.size() == 2) {
+        pinchStart = pdist(touches[0].pos, touches[1].pos);
+        if (gizmoDragging) {
+            gizmoDragging = false;
+            pendingEdit.clear();
+        }
+    }
+    if (touches.size() != 1) return;
+
+    // 1) Las asas del gizmo tienen prioridad.
+    if (showGizmos && tool != Tool::Select && !selectedEntity().isNull()) {
+        const int axis = gizmoHitTest(p);
+        if (axis >= 0) {
+            Entity e = selectedEntity();
+            gizmoAxis = axis;
+            gizmoDragging = true;
+            gizmoGrab = p;
+            Vec3 s;
+            scene.computeWorldMatrix(e).decompose(gizmoStartWorld, gizmoStartWorldRot, s);
+            gizmoStartScale = scene.transform(e).scale();
+            beginEdit();
+            return;
+        }
+    }
+    // 2) Con la herramienta Mover, arrastrar el propio objeto lo desplaza sobre el suelo (3D) o el plano (2D).
+    if (tool != Tool::Translate) return;
     Entity hit = pick(p);
-    if (hit.isNull()) return;
-    select(hit);
+    if (hit.isNull() || scene.info(hit).id != selected) return; // primero se selecciona con un toque
     Vec3 o, d;
     if (!screenRay(p, o, d)) return;
     const Vec3 world = scene.transform(hit).worldPosition();
@@ -271,6 +299,10 @@ void Editor::Impl::viewportPointerMove(int id, ImVec2 p) {
     }
     if (pdist(t->start, p) > 8 * scale) gestureMoved = true;
     if (!gestureMoved) return;
+    if (gizmoDragging && touches.size() == 1) {
+        gizmoDrag(p);
+        return;
+    }
     const float vh = std::max(1.0f, vpMax.y - vpMin.y);
 
     if (touches.size() >= 2) {
@@ -329,6 +361,13 @@ void Editor::Impl::viewportPointerUp(int id, ImVec2 p) {
         runtime->input().touchEnded(id, {p.x - vpMin.x, p.y - vpMin.y});
         return;
     }
+    if (gizmoDragging && touches.empty()) {
+        gizmoDragging = false;
+        gizmoAxis = -1;
+        if (gestureMoved) commitEdit();
+        else pendingEdit.clear();
+        return;
+    }
     if (movingEntity && touches.empty()) {
         movingEntity = false;
         if (gestureMoved) commitEdit();
@@ -342,6 +381,209 @@ void Editor::Impl::viewportScroll(float amount) {
     const float k = std::pow(0.88f, amount);
     if (threeD()) cam3Dist = std::clamp(cam3Dist * k, 1.0f, 500.0f);
     else cam2Size = std::clamp(cam2Size * k, 0.5f, 500.0f);
+}
+
+// ============================================================ Gizmo de transformación
+
+bool Editor::Impl::worldToScreen(const Vec3& p, ImVec2& out) const {
+    const Mat4 vp = editorProj * editorView;
+    const float* m = vp.m;
+    const float x = m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12];
+    const float y = m[1] * p.x + m[5] * p.y + m[9] * p.z + m[13];
+    const float w = m[3] * p.x + m[7] * p.y + m[11] * p.z + m[15];
+    if (w <= 1e-5f) return false;
+    out = ImVec2(vpMin.x + (x / w * 0.5f + 0.5f) * (vpMax.x - vpMin.x), vpMin.y + (0.5f - y / w * 0.5f) * (vpMax.y - vpMin.y));
+    return true;
+}
+
+float Editor::Impl::gizmoLength() const {
+    Entity e = const_cast<Impl*>(this)->selectedEntity();
+    if (e.isNull()) return 1;
+    const Vec3 o = const_cast<Impl*>(this)->scene.computeWorldMatrix(e).translation();
+    if (!threeD()) return cam2Size * 0.28f;
+    if (viewAngle != ViewAngle::Perspective) return cam3Dist * 0.14f;
+    const Vec3 cam = editorView.inverted().translation();
+    return std::max(0.05f, (cam - o).length() * 0.16f);
+}
+
+namespace {
+const Vec3 kAxes[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+const ImU32 kGizmoColors[3] = {IM_COL32(235, 55, 55, 255), IM_COL32(90, 205, 50, 255), IM_COL32(45, 115, 245, 255)};
+const ImU32 kGizmoActive = IM_COL32(255, 215, 40, 255);
+
+float distToSegment(ImVec2 p, ImVec2 a, ImVec2 b) {
+    const float dx = b.x - a.x, dy = b.y - a.y;
+    const float l2 = dx * dx + dy * dy;
+    float t = l2 > 0 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2 : 0;
+    t = std::clamp(t, 0.0f, 1.0f);
+    const float ex = a.x + dx * t - p.x, ey = a.y + dy * t - p.y;
+    return std::sqrt(ex * ex + ey * ey);
+}
+
+// Puntos de un aro alrededor de un eje (para el gizmo de rotación).
+void ringPoints(const Vec3& o, const Vec3& axis, float r, Vec3* out, int n) {
+    const Vec3 u = std::fabs(axis.y) > 0.9f ? Vec3{1, 0, 0} : cross(axis, {0, 1, 0}).normalized();
+    const Vec3 v = cross(axis, u);
+    for (int i = 0; i < n; ++i) {
+        const float a = 6.2831853f * i / n;
+        out[i] = o + (u * std::cos(a) + v * std::sin(a)) * r;
+    }
+}
+} // namespace
+
+int Editor::Impl::gizmoHitTest(ImVec2 p) {
+    Entity e = selectedEntity();
+    if (e.isNull()) return -1;
+    const Vec3 o = scene.computeWorldMatrix(e).translation();
+    const float L = gizmoLength(), tol = 14 * scale;
+    ImVec2 so;
+    if (!worldToScreen(o, so)) return -1;
+    const int axes = threeD() ? 3 : 2;
+    if (tool == Tool::Rotate) {
+        int best = -1;
+        float bestD = tol;
+        for (int a = threeD() ? 0 : 2; a < 3; ++a) {
+            Vec3 pts[48];
+            ringPoints(o, kAxes[a], L, pts, 48);
+            for (int i = 0; i < 48; ++i) {
+                ImVec2 s0, s1;
+                if (!worldToScreen(pts[i], s0) || !worldToScreen(pts[(i + 1) % 48], s1)) continue;
+                const float d = distToSegment(p, s0, s1);
+                if (d < bestD) { bestD = d; best = a; }
+            }
+        }
+        return best;
+    }
+    if (std::fabs(p.x - so.x) < tol && std::fabs(p.y - so.y) < tol) return 3; // centro
+    int best = -1;
+    float bestD = tol;
+    for (int a = 0; a < axes; ++a) {
+        ImVec2 s1;
+        if (!worldToScreen(o + kAxes[a] * L, s1)) continue;
+        const float d = distToSegment(p, so, s1);
+        if (d < bestD) { bestD = d; best = a; }
+    }
+    return best;
+}
+
+void Editor::Impl::gizmoDrag(ImVec2 p) {
+    Entity e = selectedEntity();
+    if (e.isNull()) return;
+    Transform& t = scene.transform(e);
+    const Entity parent = scene.parent(e);
+    const Mat4 parentWorld = parent.isNull() ? Mat4{} : scene.computeWorldMatrix(parent);
+    const float L = gizmoLength();
+    const ImVec2 delta(p.x - gizmoGrab.x, p.y - gizmoGrab.y);
+    ImVec2 s0, s1;
+    if (!worldToScreen(gizmoStartWorld, s0)) return;
+
+    auto alongAxis = [&](int a) -> float { // desplazamiento en unidades de mundo a lo largo del eje a
+        if (!worldToScreen(gizmoStartWorld + kAxes[a] * L, s1)) return 0;
+        const float dx = s1.x - s0.x, dy = s1.y - s0.y, len2 = dx * dx + dy * dy;
+        if (len2 < 25) return 0; // el eje apunta a la cámara: no se puede arrastrar con precisión
+        return (delta.x * dx + delta.y * dy) / len2 * L;
+    };
+
+    if (tool == Tool::Translate) {
+        Vec3 world = gizmoStartWorld;
+        if (gizmoAxis == 3) {
+            // Centro: libre sobre el suelo (3D) o el plano (2D).
+            Vec3 o, d, h0, h1;
+            const Vec3 n = threeD() ? Vec3{0, 1, 0} : Vec3{0, 0, 1};
+            if (screenRay(gizmoGrab, o, d) && rayPlane(o, d, n, gizmoStartWorld, h0) && screenRay(p, o, d) &&
+                rayPlane(o, d, n, gizmoStartWorld, h1))
+                world = gizmoStartWorld + (h1 - h0);
+        } else {
+            world += kAxes[gizmoAxis] * alongAxis(gizmoAxis);
+        }
+        if (snap) {
+            float* c[3] = {&world.x, &world.y, &world.z};
+            for (int a = 0; a < 3; ++a)
+                if (gizmoAxis == a || (gizmoAxis == 3 && a != (threeD() ? 1 : 2))) *c[a] = std::round(*c[a] / snapMove) * snapMove;
+        }
+        t.setPosition(parent.isNull() ? world : parentWorld.inverted().transformPoint(world));
+    } else if (tool == Tool::Rotate && gizmoAxis >= 0 && gizmoAxis < 3) {
+        // Ángulo barrido alrededor del centro del gizmo en pantalla.
+        const ImVec2 v0(gizmoGrab.x - s0.x, gizmoGrab.y - s0.y), v1(p.x - s0.x, p.y - s0.y);
+        float ang = std::atan2(v0.x * v1.y - v0.y * v1.x, v0.x * v1.x + v0.y * v1.y);
+        const Vec3 toCam = (editorView.inverted().translation() - gizmoStartWorld).normalized();
+        if (dot(kAxes[gizmoAxis], toCam) > 0 || !threeD()) ang = -ang; // pantalla con Y hacia abajo
+        if (snap) ang = std::round(ang / (snapRotate * kDegToRad)) * snapRotate * kDegToRad;
+        const Quat world = (Quat::fromAxisAngle(kAxes[gizmoAxis], ang) * gizmoStartWorldRot).normalized();
+        Quat parentRot;
+        Vec3 pt, ps;
+        parentWorld.decompose(pt, parentRot, ps);
+        t.setRotation(parent.isNull() ? world : parentRot.conjugate() * world);
+    } else if (tool == Tool::Scale) {
+        Vec3 s = gizmoStartScale;
+        if (gizmoAxis == 3) {
+            const float f = std::max(0.01f, 1.0f + (delta.x - delta.y) / (120.0f * scale));
+            s = s * f;
+        } else {
+            const float f = std::max(0.01f, 1.0f + alongAxis(gizmoAxis) / L);
+            float* c[3] = {&s.x, &s.y, &s.z};
+            *c[gizmoAxis] *= f;
+            if (snap) *c[gizmoAxis] = std::max(snapScale, std::round(*c[gizmoAxis] / snapScale) * snapScale);
+        }
+        t.setScale(s);
+    }
+}
+
+void Editor::Impl::drawGizmo(ImDrawList* dl) {
+    Entity e = selectedEntity();
+    if (e.isNull() || tool == Tool::Select) return;
+    const Vec3 o = scene.computeWorldMatrix(e).translation();
+    ImVec2 so;
+    if (!worldToScreen(o, so)) return;
+    const float L = gizmoLength(), th = 3.0f * scale;
+    dl->PushClipRect(vpMin, vpMax, true);
+    if (tool == Tool::Rotate) {
+        for (int a = threeD() ? 0 : 2; a < 3; ++a) {
+            Vec3 pts[48];
+            ringPoints(o, kAxes[a], L, pts, 48);
+            ImVec2 sp[49];
+            int n = 0;
+            for (int i = 0; i <= 48; ++i)
+                if (worldToScreen(pts[i % 48], sp[n])) ++n;
+            dl->AddPolyline(sp, n, gizmoDragging && gizmoAxis == a ? kGizmoActive : kGizmoColors[a], 0, th);
+        }
+    } else {
+        const int axes = threeD() ? 3 : 2;
+        for (int a = 0; a < axes; ++a) {
+            ImVec2 s1;
+            if (!worldToScreen(o + kAxes[a] * L, s1)) continue;
+            const ImU32 col = gizmoDragging && gizmoAxis == a ? kGizmoActive : kGizmoColors[a];
+            dl->AddLine(so, s1, col, th);
+            const float dx = s1.x - so.x, dy = s1.y - so.y, len = std::max(1.0f, std::sqrt(dx * dx + dy * dy));
+            const ImVec2 dir(dx / len, dy / len), nrm(-dir.y, dir.x);
+            const float hs = 9 * scale;
+            if (tool == Tool::Translate) {
+                dl->AddTriangleFilled(ImVec2(s1.x + dir.x * hs * 1.6f, s1.y + dir.y * hs * 1.6f),
+                                      ImVec2(s1.x + nrm.x * hs * 0.7f, s1.y + nrm.y * hs * 0.7f),
+                                      ImVec2(s1.x - nrm.x * hs * 0.7f, s1.y - nrm.y * hs * 0.7f), col);
+            } else {
+                dl->AddRectFilled(ImVec2(s1.x - hs * 0.7f, s1.y - hs * 0.7f), ImVec2(s1.x + hs * 0.7f, s1.y + hs * 0.7f), col);
+            }
+        }
+        const float c = 7 * scale;
+        const ImU32 cc = gizmoDragging && gizmoAxis == 3 ? kGizmoActive : IM_COL32(235, 235, 235, 230);
+        if (tool == Tool::Translate) dl->AddCircleFilled(so, c * 0.8f, cc);
+        else dl->AddRectFilled(ImVec2(so.x - c, so.y - c), ImVec2(so.x + c, so.y + c), cc);
+    }
+    dl->PopClipRect();
+}
+
+void Editor::Impl::drawAxisIndicator(ImDrawList* dl) {
+    // Ejes del mundo vistos desde la cámara, en la esquina inferior izquierda.
+    const ImVec2 c(vpMin.x + 34 * scale, vpMax.y - 34 * scale);
+    const float r = 22 * scale;
+    static const char* names[3] = {"X", "Y", "Z"};
+    for (int a = 0; a < (threeD() ? 3 : 2); ++a) {
+        const Vec3 d = editorView.transformDirection(kAxes[a]);
+        const ImVec2 tip(c.x + d.x * r, c.y - d.y * r);
+        dl->AddLine(c, tip, kGizmoColors[a], 2.5f * scale);
+        dl->AddText(ImVec2(tip.x - 4 * scale, tip.y - 8 * scale), kGizmoColors[a], names[a]);
+    }
 }
 
 } // namespace titan

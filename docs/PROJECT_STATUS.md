@@ -1,4 +1,4 @@
-# Estado del proyecto — Titán 0.3.0
+# Estado del proyecto — Titán 0.4.0
 
 Fecha: 2026-11-21 · Generaciones 1 (Fundación) y 2 (Editor) en curso; primeros pasos de la 5 (3D)
 
@@ -46,7 +46,9 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 |---|---|
 | Primitivas (cubo, esfera, plano, cilindro, cono, cápsula) con normales y caras correctas | [COMPLETADO Y PROBADO] |
 | Luz ambiente + direccional + 4 puntuales (Blinn-Phong), profundidad, culling, transparencias | [COMPLETADO Y PROBADO] (visual) |
-| Sombras, PBR, importar glTF/OBJ, física 3D | [PENDIENTE] |
+| PBR metálico/rugosidad, emisión, sombras del sol (PCF), cielo, niebla, tonemapping ACES | [COMPLETADO Y PROBADO] (visual, en escritorio con render por software) |
+| Gizmo mover/rotar/escalar | [COMPLETADO Y PROBADO] (arrastres simulados: mover en X y rotar 71,8° en Y, guardados) |
+| Importar glTF/OBJ, terreno, vegetación, física 3D, iluminación global, posprocesado (bloom, SSAO) | [PENDIENTE] |
 
 ## Core
 

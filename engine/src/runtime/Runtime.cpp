@@ -131,6 +131,7 @@ void Runtime::frame(const Viewport& viewport) {
     float dt = std::chrono::duration<float>(frameStart - last_).count();
     last_ = frameStart;
     dt = std::min(dt, 0.25f);
+    if (paused) dt = 0;
     delta_ = dt;
 
     // 1. Paso fijo con límite: tras un parón no se intenta "recuperar" todo el tiempo perdido.
@@ -147,8 +148,10 @@ void Runtime::frame(const Viewport& viewport) {
 
     // 2-3. Lógica variable.
     time_ += dt;
-    scripts_->update(dt);
-    scripts_->lateUpdate(dt);
+    if (!paused) {
+        scripts_->update(dt);
+        scripts_->lateUpdate(dt);
+    }
     scene_->flushDestroyed();
     profile_.scriptMs = msSince(t);
 

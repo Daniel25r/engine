@@ -1,5 +1,24 @@
 # Registro de cambios
 
+## 0.4.0 — 2026-11-21 · Interfaz profesional y render PBR
+
+Añadido
+- Render 3D: materiales PBR (metálico/rugosidad, GGX), emisión, sombras del sol en tiempo real (mapa de 2048 con
+  PCF, ajustado a la cámara y estable al moverla), cielo procedural con disco solar, luz ambiental de cielo,
+  niebla exponencial, tonemapping ACES y corrección gamma, material de rejilla de prototipado alineada al mundo.
+- Componente `Environment` (cielo, ambiente, niebla, exposición, sombras).
+- Editor rediseñado: menú (Archivo, Editar, Crear, Ventana, Ayuda), barra con iconos (guardar, deshacer, Q/W/E/R,
+  imán con valor, Jugar/Pausa/Detener), documentos en pestañas, Outliner en tabla con visibilidad y tipo, Detalles
+  con Ubicación/Rotación/Escala en campos X/Y/Z de colores y botón de restablecer, navegador de contenido con
+  carpetas y miniaturas, registro de salida, barra de estado, tema gris neutro.
+- Gizmo de transformación en la vista: flechas para mover por eje, aros para rotar, asas para escalar, con imán.
+- Vista: perspectiva, superior, frontal y derecha; modo sin iluminación; indicador de ejes; estadísticas de render.
+- Pausa del juego en el editor.
+
+Eliminado
+- Las plantillas de juego "2D Plataformas" y "3D Exploración" y sus scripts. Quedan las plantillas vacías 2D y 3D
+  (la 3D trae cielo, sol con sombras, niebla y suelo con rejilla).
+
 ## 0.3.0 — 2026-11-21 · Editor y 3D
 
 Añadido

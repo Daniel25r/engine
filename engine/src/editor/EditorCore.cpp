@@ -96,50 +96,78 @@ void Editor::Impl::applyStyle() {
     st = ImGuiStyle();
     ImGui::StyleColorsDark(&st);
     st.WindowRounding = 0;
-    st.FrameRounding = 5;
-    st.GrabRounding = 5;
-    st.TabRounding = 5;
-    st.ChildRounding = 4;
-    st.PopupRounding = 6;
-    st.WindowBorderSize = 0;
-    st.FramePadding = ImVec2(8, 6);
-    st.ItemSpacing = ImVec2(8, 7);
-    st.ItemInnerSpacing = ImVec2(6, 5);
-    st.ScrollbarSize = platform.isTouchScreen() ? 20 : 14;
-    st.GrabMinSize = 16;
-    st.IndentSpacing = 18;
-    if (platform.isTouchScreen()) st.TouchExtraPadding = ImVec2(4, 4);
+    st.ChildRounding = 2;
+    st.FrameRounding = 3;
+    st.PopupRounding = 3;
+    st.GrabRounding = 3;
+    st.TabRounding = 3;
+    st.ScrollbarRounding = 3;
+    st.WindowBorderSize = 1;
+    st.FrameBorderSize = 1;
+    st.PopupBorderSize = 1;
+    st.TabBorderSize = 0;
+    st.WindowPadding = ImVec2(6, 6);
+    st.FramePadding = ImVec2(6, 4);
+    st.ItemSpacing = ImVec2(5, 5);
+    st.ItemInnerSpacing = ImVec2(5, 4);
+    st.CellPadding = ImVec2(5, 3);
+    st.ScrollbarSize = platform.isTouchScreen() ? 18 : 12;
+    st.GrabMinSize = 12;
+    st.IndentSpacing = 16;
+    st.SeparatorTextBorderSize = 1;
+    if (platform.isTouchScreen()) {
+        st.FramePadding = ImVec2(8, 7);
+        st.ItemSpacing = ImVec2(7, 7);
+        st.TouchExtraPadding = ImVec2(4, 4);
+    }
     st.ScaleAllSizes(scale);
 
-    // Paleta: pizarra azulada con acento ámbar.
+    // Grises neutros oscuros, campos hundidos y acento azul para la selección.
+    auto g = [](float v, float a = 1.0f) { return ImVec4(v, v, v, a); };
+    const ImVec4 blue(0.0f, 0.44f, 0.88f, 1), blueSoft(0.0f, 0.44f, 0.88f, 0.55f);
     ImVec4* c = st.Colors;
-    const ImVec4 bg(0.086f, 0.106f, 0.145f, 1), panel(0.106f, 0.133f, 0.188f, 1), frame(0.141f, 0.173f, 0.239f, 1);
-    const ImVec4 accent(0.949f, 0.71f, 0.29f, 1), accentDim(0.949f, 0.71f, 0.29f, 0.55f);
-    c[ImGuiCol_WindowBg] = panel;
-    c[ImGuiCol_ChildBg] = bg;
-    c[ImGuiCol_PopupBg] = ImVec4(0.12f, 0.15f, 0.21f, 0.98f);
-    c[ImGuiCol_FrameBg] = frame;
-    c[ImGuiCol_FrameBgHovered] = ImVec4(0.18f, 0.22f, 0.30f, 1);
-    c[ImGuiCol_FrameBgActive] = ImVec4(0.22f, 0.27f, 0.36f, 1);
-    c[ImGuiCol_TitleBg] = bg;
-    c[ImGuiCol_TitleBgActive] = bg;
-    c[ImGuiCol_Button] = frame;
-    c[ImGuiCol_ButtonHovered] = ImVec4(0.20f, 0.25f, 0.34f, 1);
-    c[ImGuiCol_ButtonActive] = accentDim;
-    c[ImGuiCol_Header] = ImVec4(0.18f, 0.22f, 0.31f, 1);
-    c[ImGuiCol_HeaderHovered] = ImVec4(0.22f, 0.27f, 0.37f, 1);
-    c[ImGuiCol_HeaderActive] = accentDim;
-    c[ImGuiCol_Tab] = frame;
-    c[ImGuiCol_TabHovered] = ImVec4(0.22f, 0.27f, 0.37f, 1);
-    c[ImGuiCol_TabSelected] = ImVec4(0.24f, 0.29f, 0.40f, 1);
-    c[ImGuiCol_TabSelectedOverline] = accent;
-    c[ImGuiCol_CheckMark] = accent;
-    c[ImGuiCol_SliderGrab] = accent;
-    c[ImGuiCol_SliderGrabActive] = accent;
-    c[ImGuiCol_TextSelectedBg] = ImVec4(0.949f, 0.71f, 0.29f, 0.35f);
-    c[ImGuiCol_DragDropTarget] = accent;
-    c[ImGuiCol_NavCursor] = accent;
-    c[ImGuiCol_Separator] = ImVec4(0.2f, 0.24f, 0.33f, 1);
+    c[ImGuiCol_Text] = g(0.80f);
+    c[ImGuiCol_TextDisabled] = g(0.50f);
+    c[ImGuiCol_WindowBg] = g(0.141f);
+    c[ImGuiCol_ChildBg] = g(0.118f);
+    c[ImGuiCol_PopupBg] = g(0.10f, 0.98f);
+    c[ImGuiCol_Border] = g(0.06f);
+    c[ImGuiCol_BorderShadow] = g(0, 0);
+    c[ImGuiCol_FrameBg] = g(0.059f);
+    c[ImGuiCol_FrameBgHovered] = g(0.09f);
+    c[ImGuiCol_FrameBgActive] = g(0.11f);
+    c[ImGuiCol_TitleBg] = g(0.08f);
+    c[ImGuiCol_TitleBgActive] = g(0.08f);
+    c[ImGuiCol_MenuBarBg] = g(0.082f);
+    c[ImGuiCol_ScrollbarBg] = g(0.10f);
+    c[ImGuiCol_ScrollbarGrab] = g(0.30f);
+    c[ImGuiCol_ScrollbarGrabHovered] = g(0.38f);
+    c[ImGuiCol_ScrollbarGrabActive] = g(0.45f);
+    c[ImGuiCol_CheckMark] = g(0.92f);
+    c[ImGuiCol_SliderGrab] = blue;
+    c[ImGuiCol_SliderGrabActive] = blue;
+    c[ImGuiCol_Button] = g(0.22f);
+    c[ImGuiCol_ButtonHovered] = g(0.30f);
+    c[ImGuiCol_ButtonActive] = blueSoft;
+    c[ImGuiCol_Header] = g(0.18f);
+    c[ImGuiCol_HeaderHovered] = g(0.24f);
+    c[ImGuiCol_HeaderActive] = blueSoft;
+    c[ImGuiCol_Separator] = g(0.06f);
+    c[ImGuiCol_ResizeGrip] = g(0, 0);
+    c[ImGuiCol_Tab] = g(0.10f);
+    c[ImGuiCol_TabHovered] = g(0.24f);
+    c[ImGuiCol_TabSelected] = g(0.20f);
+    c[ImGuiCol_TabSelectedOverline] = blue;
+    c[ImGuiCol_TabDimmed] = g(0.10f);
+    c[ImGuiCol_TabDimmedSelected] = g(0.16f);
+    c[ImGuiCol_TableHeaderBg] = g(0.10f);
+    c[ImGuiCol_TableBorderStrong] = g(0.06f);
+    c[ImGuiCol_TableBorderLight] = g(0.08f);
+    c[ImGuiCol_TableRowBg] = g(0, 0);
+    c[ImGuiCol_TableRowBgAlt] = g(1, 0.025f);
+    c[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.44f, 0.88f, 0.40f);
+    c[ImGuiCol_DragDropTarget] = blue;
+    c[ImGuiCol_NavCursor] = blue;
 }
 
 void Editor::Impl::frame(int w, int h, float dt) {
@@ -166,7 +194,7 @@ void Editor::Impl::frame(int w, int h, float dt) {
 
     glViewport(0, 0, fbWidth, fbHeight);
     glDisable(GL_SCISSOR_TEST);
-    glClearColor(0.086f, 0.106f, 0.145f, 1);
+    glClearColor(0.141f, 0.141f, 0.141f, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     if (vpVisible && project) renderViewport();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -216,7 +244,7 @@ bool Editor::Impl::openProject(const std::string& path) {
     cam3Pitch = 0.55f;
     cam3Dist = 14;
     showBrowser = false;
-    panel = Panel::Scene;
+    codeTabActive = false;
     fileio::writeAtomic(projectsDir() + "/.ultimo_proyecto", project->root(), false);
     setStatus("Proyecto '" + project->name() + "' abierto");
     return true;
@@ -409,6 +437,8 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
         scene.transform(e).setPosition({0, 5, 0});
         scene.transform(e).setEulerDegrees({-50, 30, 0});
         scene.world().add<Light>(e);
+    } else if (kind == "Cielo y niebla") {
+        scene.world().add<Environment>(e);
     } else if (kind == "Luz puntual") {
         Light l;
         l.type = Light::Type::Point;
@@ -468,7 +498,7 @@ void Editor::Impl::openScriptFile(const std::string& rel) {
     codeDirty = false;
     codeCheck.clear();
     codeErrorLine = 0;
-    panel = Panel::Code;
+    codeTabActive = true;
 }
 
 void Editor::Impl::importFile(const std::string& path, const std::string& name) {
@@ -493,7 +523,8 @@ void Editor::Impl::importFile(const std::string& path, const std::string& name) 
     if (r && r->type == AssetType::Unknown)
         TITAN_WARN("editor", "%s: el motor todavía no sabe usar este tipo de archivo", rel.c_str());
     setStatus("Importado " + rel);
-    panel = Panel::Assets;
+    panel = Panel::Content;
+    bottomIsConsole = false;
 }
 
 // ============================================================ Play
@@ -512,7 +543,8 @@ void Editor::Impl::play() {
         return;
     }
     playTouches.clear();
-    if (panel == Panel::Code || panel == Panel::Assets) panel = Panel::Scene;
+    codeTabActive = false;
+    playPaused = false;
     setStatus("Jugando: los cambios hechos durante el juego se descartan al detener");
 }
 
@@ -538,8 +570,10 @@ void Editor::Impl::handleShortcuts() {
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D, false)) duplicateSelected();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_P, false)) runtime ? stop() : play();
     if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Delete, false)) deleteSelected();
-    if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_W, false)) tool = Tool::Move;
-    if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Q, false)) tool = Tool::Camera;
+    if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Q, false)) tool = Tool::Select;
+    if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_W, false)) tool = Tool::Translate;
+    if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E, false)) tool = Tool::Rotate;
+    if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_R, false)) tool = Tool::Scale;
 }
 
 void Editor::Impl::touchScroll() {
@@ -586,7 +620,8 @@ void Editor::onPointerDown(int id, float x, float y) {
     if (!m.initialized) return;
     const ImVec2 p(x, y);
     const bool popup = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
-    if (m.insideViewport(p) && !popup && m.imguiPointer != id) {
+    const bool onViewportBar = p.x >= m.vpBarMin.x && p.y >= m.vpBarMin.y && p.x < m.vpBarMax.x && p.y < m.vpBarMax.y;
+    if (m.insideViewport(p) && !popup && !onViewportBar && m.imguiPointer != id) {
         m.viewportPointerDown(id, p);
         return;
     }
@@ -689,8 +724,8 @@ bool Editor::onBack() {
         m.stop();
         return true;
     }
-    if (m.project && m.panel != Panel::Scene) {
-        m.panel = Panel::Scene;
+    if (m.project && m.codeTabActive) {
+        m.codeTabActive = false;
         return true;
     }
     if (m.project) {
@@ -702,12 +737,10 @@ bool Editor::onBack() {
 
 bool Editor::openProject(const std::string& path) { return impl_->openProject(path); }
 
-bool Editor::createProject(const std::string& name, bool threeD, bool playable) {
-    const ProjectTemplate t = threeD ? (playable ? ProjectTemplate::Explorer3D : ProjectTemplate::Empty3D)
-                                     : (playable ? ProjectTemplate::Platformer2D : ProjectTemplate::Empty2D);
+bool Editor::createProject(const std::string& name, bool threeD, bool) {
     std::string err;
     const std::string dir = impl_->projectsDir() + "/" + name;
-    auto p = createProjectFromTemplate(dir, name, t, &err);
+    auto p = createProjectFromTemplate(dir, name, threeD ? ProjectTemplate::Empty3D : ProjectTemplate::Empty2D, &err);
     if (!p) {
         TITAN_ERROR("editor", "No se pudo crear el proyecto: %s", err.c_str());
         return false;
@@ -722,12 +755,16 @@ bool Editor::isPlaying() const { return impl_->runtime != nullptr; }
 void Editor::selectEntity(const std::string& name) { impl_->select(impl_->scene.findByName(name)); }
 
 void Editor::showPanel(const std::string& name) {
-    static const std::pair<const char*, Panel> names[] = {{"escena", Panel::Scene},   {"jerarquia", Panel::Hierarchy},
-                                                          {"inspector", Panel::Inspector}, {"codigo", Panel::Code},
-                                                          {"recursos", Panel::Assets}, {"consola", Panel::Console}};
-    for (auto& [n, p] : names)
-        if (name == n) impl_->panel = p;
-    if (name == "proyectos") impl_->showBrowser = true;
+    Impl& m = *impl_;
+    if (name == "codigo") m.codeTabActive = !m.codePath.empty();
+    else if (name == "escena") m.codeTabActive = false;
+    else if (name == "outliner") m.panel = Panel::Outliner;
+    else if (name == "detalles" || name == "inspector") m.panel = Panel::Details;
+    else if (name == "contenido" || name == "recursos") { m.panel = Panel::Content; m.bottomIsConsole = false; }
+    else if (name == "consola") { m.panel = Panel::Console; m.bottomIsConsole = true; }
+    else if (name == "proyectos") m.showBrowser = true;
+    else if (name == "rotar") m.tool = Tool::Rotate;
+    else if (name == "escalar") m.tool = Tool::Scale;
 }
 
 void Editor::openScript(const std::string& rel) { impl_->openScriptFile(rel); }

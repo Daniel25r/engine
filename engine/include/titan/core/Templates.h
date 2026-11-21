@@ -1,6 +1,5 @@
 #pragma once
-// Plantillas de proyecto. Son proyectos reales (escenas + scripts) que el usuario puede
-// modificar libremente: no hay nada "cerrado" en ellas.
+// Plantillas de proyecto: puntos de partida vacíos que el usuario modifica libremente.
 #include <memory>
 #include <string>
 
@@ -9,10 +8,8 @@
 namespace titan {
 
 enum class ProjectTemplate {
-    Empty2D,     // cámara ortográfica
-    Empty3D,     // cámara en perspectiva, luz y suelo
-    Platformer2D, // jugador que corre y salta y recoge monedas
-    Explorer3D,  // jugador que va donde tocas y recoge gemas; la cámara le sigue
+    Empty2D, // cámara ortográfica
+    Empty3D, // nivel inicial: cámara, sol con sombras, cielo/niebla, suelo y un cubo de referencia
 };
 
 std::unique_ptr<Project> createProjectFromTemplate(const std::string& dir, const std::string& name, ProjectTemplate t,
