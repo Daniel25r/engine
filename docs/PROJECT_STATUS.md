@@ -1,4 +1,4 @@
-# Estado del proyecto — Titán 0.10.0
+# Estado del proyecto — Titán 0.11.0
 
 Fecha: 2026-11-21 · Generaciones 1 (Fundación) y 2 (Editor) en curso; primeros pasos de la 5 (3D)
 
@@ -45,7 +45,7 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 | Función | Estado |
 |---|---|
 | Primitivas (cubo, esfera, plano, cilindro, cono, cápsula) con normales y caras correctas | [COMPLETADO Y PROBADO] |
-| Luz ambiente + direccional + 4 puntuales (Blinn-Phong), profundidad, culling, transparencias | [COMPLETADO Y PROBADO] (visual) |
+| Luz ambiente + sol + 4 puntuales (PBR GGX), profundidad, eliminación de caras traseras, transparencias | [COMPLETADO Y PROBADO] (visual) |
 | PBR metálico/rugosidad, emisión, sombras del sol (PCF), cielo, niebla, tonemapping ACES | [COMPLETADO Y PROBADO] (visual, en escritorio con render por software) |
 | Gizmo mover/rotar/escalar | [COMPLETADO Y PROBADO] (arrastres simulados: mover en X y rotar 71,8° en Y, guardados) |
 | Importar modelos glTF/GLB (mallas, materiales PBR, texturas incrustadas) | [COMPLETADO Y PROBADO] (Duck, BoxTextured, Fox de Khronos) |
@@ -95,7 +95,8 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 | Interfaz de juego: anclajes, imágenes, texto TTF, botones, joystick virtual | [COMPLETADO Y PROBADO] (pruebas automáticas y editor de escritorio con toques simulados); [PENDIENTE DE PRUEBA REAL] en teléfono |
 | Texto con acentos y eñe (fuentes SDF) | [COMPLETADO Y PROBADO] |
 | Interpolación de render entre pasos fijos | [PENDIENTE] (cuando haya física) |
-| Culling | [PENDIENTE] (antes hay que medir) |
+| Culling por frustum (mallas, sprites, sombras, esqueletos) | [COMPLETADO Y PROBADO] (3 pruebas; medido en PC con 1600 objetos; imagen idéntica) |
+| LOD, occlusion culling, instancing | [PENDIENTE] |
 
 ## Scripts (Lua 5.4.7)
 

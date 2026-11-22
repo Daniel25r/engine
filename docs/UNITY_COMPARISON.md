@@ -2,7 +2,7 @@
 
 Este documento recorre los sistemas de Unity 6 (el editor, el runtime y los paquetes oficiales más usados),
 explica brevemente cómo funcionan y dice dónde está Titán. Es la hoja de ruta para llegar a su nivel.
-Estado de Titán a fecha de la versión 0.10.0.
+Estado de Titán a fecha de la versión 0.11.0.
 
 Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 
@@ -41,7 +41,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 | Iluminación global (lightmaps, light probes, APV) | Luz rebotada precalculada | ❌ |
 | Skybox y niebla | Cielo procedural o cubemap | ✅ Cielo procedural, niebla exponencial |
 | Post-procesado (Volume): bloom, tonemapping, color grading, SSAO, DOF | Pila de efectos | 🟡 Tonemapping ACES; ❌ resto (requiere HDR intermedio) |
-| LOD, occlusion culling, GPU instancing, SRP Batcher | Optimización | 🟡 Lotes de sprites; ❌ LOD, culling, instancing |
+| LOD, occlusion culling, GPU instancing, SRP Batcher | Optimización | 🟡 Lotes de sprites, culling por frustum (cámara y sombras); ❌ LOD, occlusion culling, instancing |
 | Terreno (Terrain) | Mapa de alturas, pintura de capas, árboles, hierba | ❌ Prioridad alta para escenarios abiertos |
 | Partículas (Shuriken / VFX Graph) | Emisores configurables | ❌ |
 

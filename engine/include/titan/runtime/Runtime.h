@@ -86,6 +86,7 @@ public:
     AudioEngine& audio() { return audio_; }
     PhysicsWorld& physics() { return physics_; }
     const UISystem& ui() const { return ui_; }
+    SceneRenderer& sceneRenderer() { return sceneRenderer_; }
 
 private:
     bool initSystems(FileSource& files);

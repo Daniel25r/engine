@@ -7,33 +7,30 @@ Lo que aún no existe está marcado como tal.
 ## 1. Módulos
 
 ```
-                    ┌────────────────────┐
- Plataforma         │ android/  (NDK)    │   escritorio/ (GLFW)       tools/titan (CLI)
- (ejecutables)      │ main_android.cpp   │   main_desktop.cpp         main.cpp
-                    └─────────┬──────────┘          │                     │
-                              ▼                     ▼                     │
-                    ┌──────────────────────────────────────┐              │
-                    │ titan_runtime  (bucle, RenderSystem) │              │
-                    └───────┬──────────────┬───────────────┘              │
-                            ▼              ▼                              ▼
-                 ┌──────────────┐  ┌─────────────────┐                    │
-                 │ titan_render │  │ titan_scripting │◄───────────────────┤
-                 │ (GLES 3.0)   │  │ (Lua 5.4)       │                    │
-                 └──────┬───────┘  └────────┬────────┘                    │
-                        ▼                   ▼                             ▼
-                 ┌───────────────────────────────────────────────────────────┐
-                 │ titan_core: Math, Log, UUID, World (ECS), Events, Scene,   │
-                 │ Transform, Serialization, Project, AssetDatabase, FileIO   │
-                 └───────────────────────────────────────────────────────────┘
+ Plataforma         android/editor (Kotlin+JNI)   android/app (NativeActivity)   escritorio (GLFW)   tools/titan (CLI)
+                              │                           │                           │                  │
+ Aplicaciones       titan_editor (ImGui) ──────────► titan_runtime ◄──────────────────┘                  │
+                              │                     (bucle, escenas, SceneRenderer, UIRenderer)            │
+                              │                ┌──────────┼──────────┬────────────┬──────────┐            │
+ Sistemas              titan_render      titan_scripting  titan_physics  titan_audio   titan_ui          │
+                       (GLES 3.0,        (Lua 5.4          (Jolt)        (miniaudio)   (fuentes SDF,      │
+                        cgltf, stb)       aislado)                                     diseño, toques)    │
+                              └──────────┴──────────┬───────┴────────────┴──────────┘                    │
+ Núcleo                                        titan_core ◄──────────────────────────────────────────────┘
+                     (Math, Bounds, ECS, Scene, Events, Serialization, Project/AssetDatabase, Log, FileIO, Input)
 ```
 
 | Módulo | Depende de | No puede depender de | Contenido |
 |---|---|---|---|
-| `titan_core` | biblioteca estándar, nlohmann/json | GPU, plataforma, Lua | Todo lo que define un juego como datos |
+| `titan_core` | biblioteca estándar, nlohmann/json | GPU, plataforma, Lua | Todo lo que define un juego como datos; cajas y frustum |
+| `titan_ui` | core, stb_truetype | GPU | Atlas de fuentes SDF, diseño de la UI, botones y joystick |
 | `titan_scripting` | core, Lua | GPU, plataforma | Intérprete aislado y API de scripts |
-| `titan_render` | core, OpenGL ES 3.0, stb_image | escenas, entidades | Dibujo por lotes a partir de matrices |
-| `titan_runtime` | core, render, scripting | plataforma, editor | Bucle de juego y sistemas |
-| plataforma | runtime | — | Ventana, contexto GL, entrada, archivos |
+| `titan_physics` | core, Jolt | GPU | Mundo físico construido a partir de la escena |
+| `titan_audio` | core, miniaudio | GPU | Voces, mezcla y sonido 3D |
+| `titan_render` | core, ui, OpenGL ES 3.0, cgltf, stb_image | escenas, entidades | Mallas, modelos, sprites, texto, sombras |
+| `titan_runtime` | todos los sistemas | plataforma, editor | Bucle de juego; SceneRenderer (escena → lista de dibujo con culling) |
+| `titan_editor` | runtime y sistemas, ImGui | plataforma | Editor; no va en los juegos exportados |
+| plataforma | runtime / editor | — | Ventana, contexto GL, entrada, archivos |
 | `tools/titan` | core | GPU | Crear, inspeccionar, modificar y empaquetar proyectos |
 
 Regla: **el Core nunca conoce la GPU ni la plataforma**. Por eso las pruebas del Core corren sin ventana
@@ -110,24 +107,26 @@ frame(ancho, alto):
   dt = min(tiempo real, 0.25 s)
   acumulador += dt
   mientras acumulador >= 1/60 y pasos < 5:      ← paso fijo con límite
-      scripts.onFixedUpdate                     ← [física: pendiente]
+      scripts.onFixedUpdate, física (Jolt), eventos de contacto
       escena.flushDestroyed
+  (antes del paso fijo) interfaz: botones y joysticks leen los toques; onClick
   scripts.onUpdate, scripts.onLateUpdate
+  animación (avanza los Animator), audio (oyente = cámara)
   escena.flushDestroyed
   TransformSystem.update
-  render: cámara activa de mayor prioridad, sprites ordenados por sortingOrder y textura
+  render: SceneRenderer (culling, sombras, mallas, sprites) → interfaz del juego → texto
   input.endFrame
   cambio de escena pendiente (Scene.load nunca cambia la escena a mitad de un script)
 ```
 
 Si se alcanza el límite de 5 pasos fijos, el tiempo sobrante se descarta: tras un parón el juego se ralentiza
-en lugar de entrar en una espiral de cálculos. La interpolación de render entre pasos fijos no está hecha:
-no hará falta hasta que haya física.
+en lugar de entrar en una espiral de cálculos. La interpolación de render entre pasos fijos no está hecha todavía.
 
 ## 9. Render
 
 `Renderer` (OpenGL ES 3.0) solo recibe matrices y sprites: no conoce escenas.
-`Runtime::render` hace de RenderSystem: busca la cámara, construye la lista de dibujo y la ordena.
+`SceneRenderer` traduce la escena: busca la cámara, descarta lo que no se ve (culling), calcula las poses de los
+esqueletos visibles, ordena y dibuja. Lo usan el juego y el editor.
 Los sprites se agrupan en lotes de hasta 8192 cuadrados por llamada; solo un cambio de textura corta el lote.
 
 Hoy **no existe** una interfaz de backend gráfico (RHI): `Renderer` llama a OpenGL directamente.
@@ -158,6 +157,9 @@ Detalles y API en `docs/ENGINE_API.md`. Aislamiento:
 
 ## 11b. Pipeline gráfico 3D (v0.4)
 
+0. Visibilidad: cada malla tiene una caja en el mundo (`transformAABB` de su caja local; ×2 para personajes
+   animados). Se compara con el frustum de la cámara (pasada principal) y con la caja ortográfica de la luz
+   (sombras). Solo se calcula la pose de los esqueletos que quedan en alguna de las dos.
 1. Sombras: pasada de profundidad del sol a un mapa de 2048×2048 (ortográfico, centrado delante de la cámara y
    alineado a texels).
 2. Pasada principal: cielo procedural (triángulo a pantalla completa) → mallas opacas de delante a atrás →
@@ -181,5 +183,5 @@ instantáneas de la escena serializada (pendiente: comandos por operación).
 
 ## 13. Límites actuales
 
-Ver `docs/PROJECT_STATUS.md`. Resumen: sin física, audio, animación, prefabs, importación de modelos ni UI de juego (solo `Screen.text`).
+Ver `docs/AUDITORIA.md` (problemas con su causa) y `docs/PROJECT_STATUS.md`.
 Nada se ha probado aún en un dispositivo Android real.

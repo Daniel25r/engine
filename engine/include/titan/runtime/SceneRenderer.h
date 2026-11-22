@@ -4,6 +4,7 @@
 #include <functional>
 #include <vector>
 
+#include "titan/core/Bounds.h"
 #include "titan/core/Scene.h"
 #include "titan/render/Renderer.h"
 
@@ -16,8 +17,20 @@ struct SceneView {
     bool perspective = false;
 };
 
+// Cuántos objetos había y cuántos se han dibujado de verdad en el último render.
+struct CullStats {
+    int meshes = 0, meshesVisible = 0;       // pasada principal
+    int shadowCasters = 0, shadowCastersVisible = 0;
+    int sprites = 0, spritesVisible = 0;
+    int posesComputed = 0;                   // esqueletos calculados (solo los que se ven o dan sombra)
+};
+
 class SceneRenderer {
 public:
+    // Descartar lo que queda fuera de la cámara (y de la zona de sombras). Solo se apaga para depurar o medir.
+    bool culling = true;
+    const CullStats& cullStats() const { return stats_; }
+
     using TextureResolver = std::function<TextureHandle(AssetRef)>;
     using ModelResolver = std::function<int(AssetRef)>; // -1 = sin modelo
 
@@ -46,7 +59,15 @@ private:
         const Mat4* world;
         const SpriteRenderer* sprite;
     };
-    std::vector<MeshItem> opaque_, transparent_;
+    struct Candidate {
+        MeshItem item;
+        AABB bounds;     // en el mundo
+        bool skinned;
+        Entity entity;
+    };
+    std::vector<Candidate> candidates_;
+    std::vector<MeshItem> opaque_, transparent_, casters_;
+    CullStats stats_;
     std::vector<SpriteItem> sprites_;
 };
 

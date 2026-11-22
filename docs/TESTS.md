@@ -10,7 +10,7 @@
 
 Arnés propio y mínimo (`tests/Test.h`), sin dependencias. Las pruebas que tocan disco usan carpetas temporales nuevas.
 
-## Resultado actual (2026-11-21, Linux x86_64, GCC, Release)
+## Resultado actual (2026-11-22, Linux x86_64, GCC, Release)
 
 ```
 [ OK ] math: Euler <-> cuaternión ida y vuelta
@@ -74,8 +74,11 @@ Arnés propio y mínimo (`tests/Test.h`), sin dependencias. Las pruebas que toca
 [ OK ] ui: joystick virtual con dirección, límite y zona muerta
 [ OK ] ui: UTF-8
 [ OK ] ui: fuente TTF del motor con acentos, eñe y signos de apertura
+[ OK ] culling: caja transformada con giro, escala y traslación
+[ OK ] culling: frustum de perspectiva (delante, detrás, a los lados, lejos)
+[ OK ] culling: frustum de una cámara movida y de una ortográfica (2D y sombras)
 
-61 pruebas, 0 fallidas (319.0 ms)
+64 pruebas, 0 fallidas (408.9 ms)
 ```
 
 ## Pruebas de integración ejecutadas a mano en esta sesión
@@ -106,6 +109,24 @@ Arnés propio y mínimo (`tests/Test.h`), sin dependencias. Las pruebas que toca
 |---|---|
 | Crear › Interfaz: Barra de vida, Texto, Joystick y Botón en un proyecto 3D | Se dibujan en la vista con su sitio por defecto; el botón seleccionado muestra su rectángulo y su ancla |
 | Jugar con un script que lee el joystick y el botón | Arrastrar el joystick mueve el cubo; dos toques en "Saltar" dan "Saltos: 2" y el cubo salta; la barra baja con el tiempo; "¡Ñandú!" se ve con sus tildes |
+
+## Culling (sesión 0.11.0, reproductor de escritorio)
+
+Escena: plantilla 3D con 1600 cubos creados por un script en una rejilla de 120 × 120 m alrededor de la cámara.
+`TITAN_SIZE=1280x720 TITAN_FRAMES=150 TITAN_BENCH=1 TITAN_CULLING=0|1 titan_player paquete` (medias de los fotogramas
+30 a 150). Render por software (llvmpipe) en un contenedor sin GPU: **las cifras de tiempo no representan a un
+teléfono**; los draw calls sí son los mismos en cualquier dispositivo.
+
+| | Sin culling | Con culling |
+|---|---|---|
+| Mallas dibujadas | 1602 / 1602 | 561 / 1602 |
+| Objetos en la pasada de sombras | 1602 | 387 |
+| Draw calls (sombras incluidas) | 3206 | 950 |
+| Triángulos (pasada principal) | 20 022 | 7 510 |
+| Fotograma (dos ejecuciones) | 17,9 y 18,8 ms | 13,7 y 14,9 ms |
+
+Las dos capturas son idénticas píxel a píxel salvo el recuadro de estadísticas. El zorro y CesiumMan del proyecto de
+animación siguen viéndose animados y con sombra.
 
 ## Mediciones
 

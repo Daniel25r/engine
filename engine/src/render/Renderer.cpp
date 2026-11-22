@@ -694,6 +694,8 @@ void Renderer::beginFrame(const Viewport& vp, Color clear) {
     if (viewport_.width < 1) viewport_.width = 1;
     if (viewport_.height < 1) viewport_.height = 1;
     stats_ = {};
+    stats_.drawCalls = stats_.shadowDrawCalls = shadowDrawCalls_;
+    shadowDrawCalls_ = 0;
     glViewport(vp.x, vp.y, viewport_.width, viewport_.height);
     glEnable(GL_SCISSOR_TEST);
     glScissor(vp.x, vp.y, viewport_.width, viewport_.height);
@@ -718,6 +720,7 @@ void Renderer::setCamera(const Mat4& view, const Mat4& projection) {
 
 void Renderer::beginShadowPass(const Mat4& lightVP) {
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo_);
+    shadowDrawStart_ = stats_.drawCalls;
     glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
     glViewport(0, 0, kShadowMapSize, kShadowMapSize);
     glDisable(GL_SCISSOR_TEST);
@@ -743,6 +746,7 @@ void Renderer::drawShadowCaster(MeshPrimitive type, const Mat4& world) {
 }
 
 void Renderer::endShadowPass() {
+    shadowDrawCalls_ += stats_.drawCalls - shadowDrawStart_;
     glBindVertexArray(0);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo_));

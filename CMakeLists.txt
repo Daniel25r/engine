@@ -32,6 +32,7 @@ target_compile_options(titan_lua PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fexce
 
 add_library(titan_core STATIC
     engine/src/core/Math.cpp
+    engine/src/core/Bounds.cpp
     engine/src/core/Log.cpp
     engine/src/core/Uuid.cpp
     engine/src/core/FileIO.cpp
@@ -180,6 +181,7 @@ else()
             tests/test_physics.cpp
             tests/test_audio.cpp
             tests/test_ui.cpp
+            tests/test_bounds.cpp
         )
         target_compile_definitions(titan_tests PRIVATE TITAN_ENGINE_ASSETS_DIR="${CMAKE_SOURCE_DIR}/engine/assets")
         target_link_libraries(titan_tests PRIVATE titan_core titan_scripting titan_physics titan_audio titan_ui)

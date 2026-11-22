@@ -1,5 +1,27 @@
 # Registro de cambios
 
+## 0.11.0 — 2026-11-22 · Auditoría y culling
+
+Añadido
+- `docs/AUDITORIA.md`: auditoría técnica completa (estado real de cada sistema, problemas con su causa en el código,
+  madurez, arquitectura propuesta, hoja de ruta por dependencias). `docs/ROADMAP.md` reescrito a partir de ella.
+- Culling por frustum (`titan/core/Bounds.h`: AABB, transformación exacta de cajas, frustum de Gribb-Hartmann):
+  - pasada principal: solo se dibujan las mallas y sprites que tocan el campo de visión de la cámara;
+  - sombras: solo los objetos dentro de la caja de la luz (lo de fuera tampoco aparecería en el mapa de sombras);
+  - esqueletos: la pose solo se calcula para los personajes que se ven o dan sombra;
+  - personajes animados: su caja se amplía un 50 % por lado porque la animación los saca de la pose de reposo.
+- Estadísticas de visibilidad (`SceneRenderer::cullStats`): en pantalla durante el juego y en la vista del editor.
+- Reproductor de escritorio: `TITAN_CULLING=0` (dibujar todo) y `TITAN_BENCH=1` (medias al terminar) para medir.
+- 3 pruebas nuevas (cajas y frustum): 64 en total.
+
+Corregido
+- Los draw calls de la pasada de sombras no se contaban (se borraban al empezar la pasada principal). Ahora se suman
+  y además se informa aparte (`RenderStats::shadowDrawCalls`).
+
+Medida (PC, render por software llvmpipe, 1280×720, 1600 cubos alrededor de la cámara; no representa un teléfono):
+draw calls de 3206 a 950, fotograma de 17,9–18,8 ms a 13,7–14,9 ms. Imagen idéntica píxel a píxel salvo el texto de
+estadísticas.
+
 ## 0.10.0 — 2026-11-21 · Interfaz de juego
 
 Añadido

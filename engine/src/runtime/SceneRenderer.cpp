@@ -73,34 +73,38 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     });
     if (anyLight && !haveSun) L.sunColor = {0, 0, 0, 1};
 
-    // ---- Recoger mallas.
+    // ---- Recoger mallas con su caja en el mundo.
     const Mat4 camWorld = view.view.inverted();
     const Vec3 camPos = camWorld.translation();
+    stats_ = {};
+    candidates_.clear();
     opaque_.clear();
     transparent_.clear();
+    casters_.clear();
     poseCount_ = 0;
+    const AABB unitBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}}; // todas las primitivas caben en ella
+    bool anyCaster = false;
     scene.world().each<MeshRenderer, Transform>([&](Entity e, MeshRenderer& m, Transform& t) {
         if (!m.visible || !scene.isActiveInHierarchy(e)) return;
         const Vec3 d = t.worldPosition() - camPos;
         const int model = (!m.model.isNull() && models) ? models(m.model) : -1;
-        int pose = -1;
-        if (model >= 0 && renderer.modelHasSkin(model)) {
-            // Pose del esqueleto: la del Animator si lo hay; si no, la de reposo.
-            const Animator* an = scene.world().get<Animator>(e);
-            if (poseCount_ >= poses_.size()) poses_.emplace_back();
-            const int clip = an ? renderer.modelAnimationIndex(model, an->clip) : -1;
-            const int from = an && an->fromWeight > 0 ? renderer.modelAnimationIndex(model, an->fromClip) : -1;
-            if (renderer.computeBlendedPose(model, clip, an ? an->time : 0.0f, from, an ? an->fromTime : 0.0f,
-                                            an ? an->fromWeight : 0.0f, an ? an->loop : true, poses_[poseCount_]))
-                pose = static_cast<int>(poseCount_++);
+        AABB local = unitBox;
+        bool skinned = false;
+        if (model >= 0) {
+            renderer.modelBounds(model, local.min, local.max);
+            // Un personaje animado sale de su pose de reposo (brazos, piernas): margen del 50 % por lado.
+            skinned = renderer.modelHasSkin(model);
+            if (skinned) local = local.inflated(0.5f);
         }
-        MeshItem item{&m, &t.worldMatrix(), textures(m.texture), dot(d, d), model, pose};
-        (m.color.a < 0.999f ? transparent_ : opaque_).push_back(item);
+        candidates_.push_back({{&m, &t.worldMatrix(), textures(m.texture), dot(d, d), model, -1},
+                               transformAABB(local, t.worldMatrix()), skinned, e});
+        anyCaster = anyCaster || (m.castShadows && !m.unlit && m.color.a >= 0.999f);
     });
+    stats_.meshes = static_cast<int>(candidates_.size());
 
     // ---- Sombras del sol: un mapa ortográfico centrado delante de la cámara, alineado a sus texels
     // para que las sombras no "tiemblen" al mover la cámara.
-    L.shadows = L.env.shadows && haveSun && !opaque_.empty() && view.perspective;
+    L.shadows = L.env.shadows && haveSun && anyCaster && view.perspective;
     if (L.shadows) {
         const float radius = std::max(5.0f, L.env.shadowDistance * 0.5f);
         const Vec3 forward = camWorld.transformDirection({0, 0, -1}).normalized();
@@ -112,12 +116,49 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
         const Vec3 snapped{std::floor(ls.x / texel) * texel, std::floor(ls.y / texel) * texel, ls.z};
         lightView = Mat4::translate(snapped - ls) * lightView;
         L.lightViewProjection = Mat4::ortho(-radius, radius, -radius, radius, 0.1f, radius * 6.0f) * lightView;
-        renderer.beginShadowPass(L.lightViewProjection);
-        for (const MeshItem& m : opaque_)
-            if (m.mesh->castShadows && !m.mesh->unlit) {
-                if (m.model >= 0) renderer.drawModelShadow(m.model, *m.world, m.pose >= 0 ? &poses_[m.pose] : nullptr);
-                else renderer.drawShadowCaster(m.mesh->mesh, *m.world);
+    }
+
+    // ---- Visibilidad: frustum de la cámara para la pasada principal; caja de la luz para las sombras
+    // (lo que queda fuera de ella tampoco aparecería en el mapa de sombras).
+    const Frustum camFrustum = Frustum::fromMatrix(view.projection * view.view);
+    const Frustum lightFrustum = Frustum::fromMatrix(L.lightViewProjection);
+    for (Candidate& c : candidates_) {
+        const MeshRenderer& m = *c.item.mesh;
+        const bool opaque = m.color.a >= 0.999f;
+        const bool caster = L.shadows && opaque && m.castShadows && !m.unlit;
+        const bool inView = !culling || camFrustum.intersects(c.bounds);
+        const bool inShadow = caster && (!culling || lightFrustum.intersects(c.bounds));
+        if (caster) stats_.shadowCasters++;
+        if (!inView && !inShadow) continue;
+        if (c.skinned) {
+            // Pose del esqueleto: la del Animator si lo hay; si no, la de reposo. Solo de lo que se dibuja.
+            const Animator* an = scene.world().get<Animator>(c.entity);
+            const int model = c.item.model;
+            if (poseCount_ >= poses_.size()) poses_.emplace_back();
+            const int clip = an ? renderer.modelAnimationIndex(model, an->clip) : -1;
+            const int from = an && an->fromWeight > 0 ? renderer.modelAnimationIndex(model, an->fromClip) : -1;
+            if (renderer.computeBlendedPose(model, clip, an ? an->time : 0.0f, from, an ? an->fromTime : 0.0f,
+                                            an ? an->fromWeight : 0.0f, an ? an->loop : true, poses_[poseCount_])) {
+                c.item.pose = static_cast<int>(poseCount_++);
+                stats_.posesComputed++;
             }
+        }
+        if (inView) {
+            stats_.meshesVisible++;
+            (opaque ? opaque_ : transparent_).push_back(c.item);
+        }
+        if (inShadow) {
+            stats_.shadowCastersVisible++;
+            casters_.push_back(c.item);
+        }
+    }
+
+    if (L.shadows) {
+        renderer.beginShadowPass(L.lightViewProjection);
+        for (const MeshItem& m : casters_) {
+            if (m.model >= 0) renderer.drawModelShadow(m.model, *m.world, m.pose >= 0 ? &poses_[m.pose] : nullptr);
+            else renderer.drawShadowCaster(m.mesh->mesh, *m.world);
+        }
         renderer.endShadowPass();
     }
 
@@ -139,6 +180,13 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     sprites_.clear();
     scene.world().each<SpriteRenderer, Transform>([&](Entity e, SpriteRenderer& sp, Transform& t) {
         if (!sp.visible || !scene.isActiveInHierarchy(e)) return;
+        stats_.sprites++;
+        if (culling) {
+            const AABB quad{{-sp.pivot.x * sp.size.x, -sp.pivot.y * sp.size.y, 0},
+                            {(1 - sp.pivot.x) * sp.size.x, (1 - sp.pivot.y) * sp.size.y, 0}};
+            if (!camFrustum.intersects(transformAABB(quad, t.worldMatrix()))) return;
+        }
+        stats_.spritesVisible++;
         sprites_.push_back({sp.sortingOrder, textures(sp.texture), &t.worldMatrix(), &sp});
     });
     std::stable_sort(sprites_.begin(), sprites_.end(), [](const SpriteItem& a, const SpriteItem& b) {

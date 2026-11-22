@@ -116,6 +116,11 @@ int main(int argc, char** argv) {
             else gRuntime->pause();
         });
 
+        // Diagnóstico: TITAN_CULLING=0 dibuja todo; TITAN_BENCH=1 imprime medias al terminar (con TITAN_FRAMES).
+        const bool bench = std::getenv("TITAN_BENCH") != nullptr;
+        if (const char* c = std::getenv("TITAN_CULLING")) runtime.sceneRenderer().culling = std::atoi(c) != 0;
+        double sumFrame = 0, sumRender = 0;
+        long measured = 0;
         if (!runtime.start(files)) {
             exitCode = 1;
         } else {
@@ -129,6 +134,11 @@ int main(int argc, char** argv) {
                 int fw, fh;
                 glfwGetFramebufferSize(window, &fw, &fh);
                 runtime.frame(fw, fh);
+                if (bench && frames >= 30) { // se descartan los primeros fotogramas (carga)
+                    sumFrame += runtime.profile().frameMs;
+                    sumRender += runtime.profile().renderMs;
+                    ++measured;
+                }
                 if (maxFrames && ++frames >= maxFrames) {
                     if (screenshot) saveScreenshot(screenshot, fw, fh);
                     break;
@@ -137,6 +147,14 @@ int main(int argc, char** argv) {
                 glfwSwapBuffers(window);
             }
             exitCode = runtime.scripts().errors().empty() ? 0 : 3;
+            if (bench && measured > 0) {
+                const titan::CullStats& cs = runtime.sceneRenderer().cullStats();
+                const titan::RenderStats& rs = runtime.renderer().stats();
+                std::printf("BENCH culling=%d fotogramas=%ld fotograma=%.2f ms render=%.2f ms draw_calls=%d "
+                            "(sombras %d) mallas=%d/%d sombras=%d/%d triangulos=%d\n",
+                            runtime.sceneRenderer().culling ? 1 : 0, measured, sumFrame / measured, sumRender / measured,
+                            rs.drawCalls, rs.shadowDrawCalls, cs.meshesVisible, cs.meshes, cs.shadowCastersVisible, cs.shadowCasters, rs.triangles);
+            }
         }
         runtime.shutdown();
     }

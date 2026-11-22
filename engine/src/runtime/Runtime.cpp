@@ -338,14 +338,18 @@ void Runtime::render(const Viewport& viewport) {
     scriptTexts_.clear();
     if (showStats) {
         const RenderStats& rs = renderer_.stats();
-        char text[512];
+        const CullStats& cs = sceneRenderer_.cullStats();
+        char text[640];
         std::snprintf(text, sizeof(text),
                       "%.0f FPS  %.2f ms (scripts %.2f, transform %.2f, render %.2f)\n"
                       "%zu entidades  %d draw calls  %d mallas  %d sprites  %d triangulos\n"
-                      "%zu scripts  Lua %.0f KB  %zu errores  %zu cuerpos",
+                      "%zu scripts  Lua %.0f KB  %zu errores  %zu cuerpos\n"
+                      "visibles: %d/%d mallas  %d/%d sombras  %d/%d sprites  %d esqueletos",
                       fps_, profile_.frameMs, profile_.scriptMs, profile_.transformMs, profile_.renderMs,
                       scene_->entityCount(), rs.drawCalls, rs.meshes, rs.sprites, rs.triangles,
-                      scripts_->instanceCount(), scripts_->memoryUsed() / 1024.0, scripts_->errors().size(), physics_.bodyCount());
+                      scripts_->instanceCount(), scripts_->memoryUsed() / 1024.0, scripts_->errors().size(), physics_.bodyCount(),
+                      cs.meshesVisible, cs.meshes, cs.shadowCastersVisible, cs.shadowCasters, cs.spritesVisible, cs.sprites,
+                      cs.posesComputed);
         // Arriba a la derecha: a la izquierda y abajo suele ir la interfaz del propio juego.
         const float h = std::max(12.0f, std::min(screen_.x, screen_.y) * 0.022f);
         const float width = renderer_.measureText(0, h, text).x;

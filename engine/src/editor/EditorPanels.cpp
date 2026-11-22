@@ -522,9 +522,11 @@ void Editor::Impl::drawViewportBar() {
 
     if (showStats && !runtime) {
         const RenderStats& rs = renderer.stats();
-        char text[200];
-        std::snprintf(text, sizeof(text), "%.0f FPS · %d draw calls · %d mallas · %d triángulos · %zu entidades",
-                      ImGui::GetIO().Framerate, rs.drawCalls, rs.meshes, rs.triangles, scene.entityCount());
+        const CullStats& cs = sceneRenderer.cullStats();
+        char text[256];
+        std::snprintf(text, sizeof(text),
+                      "%.0f FPS · %d draw calls · %d/%d mallas visibles · %d triángulos · %zu entidades",
+                      ImGui::GetIO().Framerate, rs.drawCalls, cs.meshesVisible, cs.meshes, rs.triangles, scene.entityCount());
         const ImVec2 ts = ImGui::CalcTextSize(text);
         ImGui::GetBackgroundDrawList()->AddText(ImVec2(vpMax.x - ts.x - 10 * scale, vpMin.y + 10 * scale),
                                                 IM_COL32(230, 230, 230, 220), text);

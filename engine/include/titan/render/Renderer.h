@@ -34,7 +34,8 @@ struct Viewport {
 };
 
 struct RenderStats {
-    int drawCalls = 0;
+    int drawCalls = 0;       // todas, incluidas las de la pasada de sombras
+    int shadowDrawCalls = 0;
     int sprites = 0;
     int meshes = 0;
     int triangles = 0;
@@ -245,6 +246,7 @@ private:
     const std::vector<Mat4>* currentJoints_ = nullptr;
     uint32_t jointTex_ = 0;
     int prevFbo_ = 0;
+    int shadowDrawStart_ = 0, shadowDrawCalls_ = 0; // la pasada de sombras va antes de beginFrame
     uint32_t skyProgram_ = 0, skyVao_ = 0;
     int uSkyInvVP_ = -1, uSkyCam_ = -1, uSkyZ_ = -1, uSkyH_ = -1, uSkyG_ = -1, uSkySun_ = -1, uSkySunColor_ = -1;
     SceneLighting lighting_;
