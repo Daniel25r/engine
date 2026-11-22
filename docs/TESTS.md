@@ -128,6 +128,21 @@ teléfono**; los draw calls sí son los mismos en cualquier dispositivo.
 Las dos capturas son idénticas píxel a píxel salvo el recuadro de estadísticas. El zorro y CesiumMan del proyecto de
 animación siguen viéndose animados y con sombra.
 
+## Jugar con recursos compartidos (sesión 0.12.0, editor de escritorio)
+
+`titan_editor --open Canon --play-at 30 --stop-at 60` (proyecto con CesiumMan.glb, Fox.glb, 2 sonidos y UI de texto),
+tres ejecuciones; se mide desde que se pulsa Jugar hasta que termina el primer fotograma del juego.
+
+| | Antes (0.11.0) | Ahora (0.12.0) |
+|---|---|---|
+| Primer fotograma de Jugar | 324, 285 y 343 ms | 22, 22 y 23 ms |
+| Recursos recargados al pulsar Jugar | fuente + 2 modelos (y sus texturas) | ninguno |
+
+Comprobado también:
+- Jugar, detener y volver a jugar (`--play-at 5,60 --stop-at 40`) con el HUD: joystick, «Saltos: 2» y texto con tildes.
+- Tras detener, la vista del editor muestra la escena, los gizmos y los modelos animados.
+- El reproductor independiente da los mismos 950 draw calls en la prueba de 1600 objetos.
+
 ## Mediciones
 
 | Medida | Valor | Condiciones |

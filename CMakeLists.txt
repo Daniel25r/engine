@@ -102,7 +102,7 @@ endif()
 # ------------------------------------------------------------------ titan_runtime (bucle + sistemas)
 
 add_library(titan_runtime STATIC engine/src/runtime/Runtime.cpp engine/src/runtime/SceneRenderer.cpp
-    engine/src/runtime/UIRenderer.cpp)
+    engine/src/runtime/UIRenderer.cpp engine/src/runtime/ResourceCache.cpp)
 target_link_libraries(titan_runtime PUBLIC titan_core titan_render titan_scripting titan_physics titan_audio)
 target_compile_options(titan_runtime PRIVATE ${TITAN_WARNINGS})
 

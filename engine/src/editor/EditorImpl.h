@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 // Estado interno del editor, compartido por EditorCore.cpp, EditorPanels.cpp y EditorViewport.cpp.
 #include <deque>
 #include <memory>
@@ -14,6 +15,7 @@
 #include "titan/render/Renderer.h"
 #include "titan/runtime/Runtime.h"
 #include "titan/runtime/SceneRenderer.h"
+#include "titan/runtime/ResourceCache.h"
 #include "titan/runtime/UIRenderer.h"
 #include "titan/ui/UISystem.h"
 
@@ -52,12 +54,12 @@ struct Editor::Impl {
     Renderer renderer;
     SceneRenderer sceneRenderer;
     ProjectFiles files;
-    std::unordered_map<uint64_t, TextureHandle> textureCache;
-    std::unordered_map<uint64_t, int> modelCache;
-    std::unordered_map<uint64_t, int> fontCache;
+    ResourceCache resources;    // compartida con el modo Jugar (mismo Renderer)
     UISystem editorUI;          // interfaz de juego dibujada sobre la vista del editor
     bool showUI = true;
     bool movingUI = false;
+    std::chrono::steady_clock::time_point playStart; // para medir cuánto tarda en verse el primer fotograma
+    bool playFirstFrame = false;
     Vec2 uiMoveStart;
     ImVec2 uiGrab;
     std::string status;   // mensaje breve en la barra superior
@@ -171,9 +173,9 @@ struct Editor::Impl {
     void restore(const Snapshot& s);
     Entity selectedEntity();
     void select(Entity e);
-    TextureHandle editorTexture(AssetRef ref);
-    int editorModel(AssetRef ref);
-    int editorFont(AssetRef ref);
+    TextureHandle editorTexture(AssetRef ref) { return resources.texture(ref); }
+    int editorModel(AssetRef ref) { return resources.model(ref); }
+    int editorFont(AssetRef ref) { return resources.font(ref); }
     void drawUIOutlines(ImDrawList* dl);
     // Caja local del objeto (cubo unidad para primitivas, límites del modelo si lo tiene).
     bool localBounds(Entity e, Vec3& min, Vec3& max);

@@ -1,5 +1,26 @@
 # Registro de cambios
 
+## 0.12.0 — 2026-11-22 · Jugar instantáneo
+
+Cambiado
+- El modo Jugar del editor usa el mismo `Renderer` y la misma caché de recursos que el editor
+  (`titan/runtime/ResourceCache.h`, nueva):
+  - ya no recompila los shaders ni vuelve a leer y subir texturas, modelos y fuentes;
+  - cada recurso está una sola vez en la memoria de la GPU mientras se juega.
+- El juego exportado sigue igual: su Runtime crea y cierra su propio Renderer.
+- La caché de recursos era doble (una en el editor y otra en el runtime, con reglas distintas: el editor no respetaba
+  la opción `mipmaps` del .meta). Ahora es una sola clase con una sola regla.
+- El botón «Iluminado / Sin iluminación» de la vista ahora también funciona mientras se juega (antes no hacía nada en
+  ese modo).
+- `--play-at` y `--stop-at` del editor de escritorio admiten varios fotogramas (`--play-at 5,60`).
+
+Añadido
+- Registro «Jugar: primer fotograma en N ms».
+- Auditoría: comparación técnica con Unity, Unreal y Godot, y tabla de mejoras realizadas.
+
+Medida (PC, render por software): primer fotograma de Jugar con el proyecto de animación (2 modelos glTF, sonidos,
+fuente) de 285–343 ms a 18–23 ms. La prueba de regresión de 1600 objetos no cambia (950 draw calls).
+
 ## 0.11.0 — 2026-11-22 · Auditoría y culling
 
 Añadido

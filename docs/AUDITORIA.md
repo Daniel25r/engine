@@ -1,6 +1,6 @@
-# Auditoría técnica de Titán 0.10.0
+# Auditoría técnica de Titán
 
-Fecha: 2026-11-22. Revisión hecha sobre el código del repositorio (no sobre la lista de funciones anunciadas).
+Realizada sobre la 0.10.0 y actualizada en la 0.12.0. Fecha: 2026-11-22. Revisión hecha sobre el código del repositorio (no sobre la lista de funciones anunciadas).
 
 **Cómo leer las marcas:**
 
@@ -84,10 +84,10 @@ Todas se compilan desde el código fuente incluido en el repositorio. Ninguna es
 
 ### Rendimiento
 
-1. **No hay culling.** `SceneRenderer::render` dibuja todas las mallas activas, tanto en la pasada principal como en la de sombras, aunque estén detrás de la cámara. También calcula la pose de todos los personajes animados aunque no se vean. Este problema impide los mundos grandes, el terreno y el LOD.
+1. ~~**No hay culling.**~~ Resuelto en 0.11.0. `SceneRenderer::render` dibuja todas las mallas activas, tanto en la pasada principal como en la de sombras, aunque estén detrás de la cámara. También calcula la pose de todos los personajes animados aunque no se vean. Este problema impide los mundos grandes, el terreno y el LOD.
 2. **Una llamada de dibujo por malla, con unas 20 `glUniform` en cada una.** No hay instancing ni agrupación de mallas. Mil cubos son mil draw calls en la pasada principal, y otros mil en la de sombras.
 3. **`isActiveInHierarchy` recorre todos los padres** cada vez que se consulta, y se consulta para cada entidad en varios sistemas por fotograma. Coste O(n·profundidad).
-4. **Cada «Jugar» crea un Runtime y un Renderer nuevos.** Se recompilan los shaders y se recargan desde el disco todas las texturas, modelos y fuentes. Solo el atlas de una fuente tarda unos 0,25 s en PC. El arranque de Play se alarga con el tamaño del proyecto.
+4. ~~**Cada «Jugar» crea un Runtime y un Renderer nuevos.**~~ Resuelto en 0.12.0: Jugar usa el Renderer y la caché del editor. Se recompilan los shaders y se recargan desde el disco todas las texturas, modelos y fuentes. Solo el atlas de una fuente tarda unos 0,25 s en PC. El arranque de Play se alarga con el tamaño del proyecto.
 5. **Toda la carga es síncrona** y se hace en el hilo de render: texturas, glTF y atlas de fuentes. No hay sistema de tareas propio (solo el pool de hilos interno de Jolt).
 6. **Las texturas se suben sin comprimir** (RGBA8). Una de 2048×2048 con mipmaps ocupa unos 21 MB de memoria de GPU. No hay ETC2 ni ASTC.
 7. **La interfaz se recalcula dos veces por fotograma**, con `std::function` recursiva y vectores temporales. El coste es pequeño, pero evitable.
@@ -183,6 +183,40 @@ Se mantiene la división actual, que funciona, y se añaden piezas por debajo y 
 | 4 | Materiales v2 | Calidad visual de los modelos importados | Modelos glTF de referencia de Khronos con mapas normales; comparación visual |
 | 5 | Input Actions | El mismo juego funciona con dedo, teclado y mando | Pruebas automáticas de los mapas de entrada; juego de prueba en escritorio con teclado |
 
-## 9. Primera implementación: culling por frustum
+## 9. Mejoras realizadas desde la auditoría
 
-Detalles y resultados en `docs/CHANGELOG.md` (versión 0.11.0) y en `docs/TESTS.md`.
+| Versión | Mejora | Resultado medido (PC, ver `docs/TESTS.md`) |
+|---|---|---|
+| 0.11.0 | Culling por frustum | 1600 objetos: draw calls de 3206 a 950; imagen idéntica |
+| 0.12.0 | Jugar comparte el Renderer y la caché de recursos del editor | Primer fotograma de Jugar: de 285–343 ms a 18–23 ms; ninguna textura ni modelo duplicado en la GPU |
+
+Pendiente de la mejora 2: sistema de tareas y carga en segundo plano (hoy la primera carga de cada recurso sigue
+bloqueando un fotograma).
+
+## 10. Comparación técnica con motores profesionales
+
+No pretende decir quién es «mejor»: sitúa a Titán respecto a lo que esos motores ya resuelven. Unity, Unreal y Godot
+llevan décadas, o al menos años, con equipos grandes; la distancia es enorme en casi todo.
+
+| Área | Unity 6 (URP) | Unreal Engine 5 | Godot 4 | Titán 0.12 |
+|---|---|---|---|---|
+| API gráfica | Vulkan, GLES 3, Metal, DX12 | Vulkan, DX12, Metal (GLES solo en móvil) | Vulkan, GLES 3 (Compatibility) | GLES 3.0, sin capa de abstracción |
+| Pipeline | Forward+, deferred, render graph | Deferred, Nanite, Lumen, TSR | Forward+, móvil, compatibilidad | Forward propio con culling por frustum |
+| Iluminación global | Lightmaps, probes, APV | Lumen (tiempo real), lightmaps | SDFGI, VoxelGI, lightmaps | Ninguna (ambiente de cielo hemisférico) |
+| Posprocesado | Pila completa | Pila completa | Pila completa | Solo ACES en el shader |
+| Animación | Mecanim, Timeline, IK, retargeting | Control Rig, Motion Matching, IK | AnimationTree, IK | Esqueletos glTF, transiciones; sin máquina de estados |
+| Física | PhysX, Box2D | Chaos | Jolt (desde 4.4), Godot Physics | Jolt, solo lo básico |
+| Scripting | C# | C++, Blueprints | GDScript, C# | Lua 5.4 aislado |
+| Editor en el teléfono | No | No | Sí (Android, desde 4.2) | Sí, diseñado para el tacto |
+| Tamaño del proyecto | Cientos de MB | GB | Decenas de MB | Unos pocos MB, formatos JSON legibles |
+
+Ventajas propias que se pueden defender con hechos:
+
+- Editor pensado primero para el móvil, horizontal y táctil.
+- Formatos legibles y versionados, con migraciones.
+- Proyectos diminutos.
+- Lua con aislamiento real (sin `io`, `os` ni `require`; límites de tiempo y memoria).
+
+**Godot también tiene editor para Android**, así que la diferencia de Titán no puede ser solo «funciona en Android».
+Tiene que ser una experiencia táctil mejor y un ciclo de prueba más rápido, y eso habrá que medirlo con usuarios y en
+teléfonos reales.

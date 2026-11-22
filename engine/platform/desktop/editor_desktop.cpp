@@ -138,7 +138,18 @@ int main(int argc, char** argv) {
     platform.engine.root = TITAN_ENGINE_ASSETS;
     std::string openPath, newName, panel, selectName, createKinds, scriptPath, screenshot;
     int templ = 2;
-    long playAt = -1, stopAt = -1, frames = 0;
+    long frames = 0;
+    std::vector<long> playAt, stopAt; // admiten varias: --play-at 10,80
+    auto frameList = [](const std::string& s) {
+        std::vector<long> out;
+        for (size_t i = 0; i < s.size();) {
+            size_t e = s.find(',', i);
+            if (e == std::string::npos) e = s.size();
+            out.push_back(std::atol(s.substr(i, e - i).c_str()));
+            i = e + 1;
+        }
+        return out;
+    };
     int width = 1280, height = 800;
     std::vector<ScriptedTouch> scripted;
     for (int i = 1; i < argc; ++i) {
@@ -152,8 +163,8 @@ int main(int argc, char** argv) {
         else if (a == "--select") selectName = next();
         else if (a == "--create") createKinds = next();
         else if (a == "--script") scriptPath = next();
-        else if (a == "--play-at") playAt = std::atol(next().c_str());
-        else if (a == "--stop-at") stopAt = std::atol(next().c_str());
+        else if (a == "--play-at") playAt = frameList(next());
+        else if (a == "--stop-at") stopAt = frameList(next());
         else if (a == "--frames") frames = std::atol(next().c_str());
         else if (a == "--screenshot") screenshot = next();
         else if (a == "--size") std::sscanf(next().c_str(), "%dx%d", &width, &height);
@@ -254,8 +265,10 @@ int main(int argc, char** argv) {
                     if (d == 11) editor.onPointerUp(id, t.x2, t.y2);
                 }
             }
-            if (frame == playAt) editor.play();
-            if (frame == stopAt) editor.stop();
+            for (long f : playAt)
+                if (frame == f) editor.play();
+            for (long f : stopAt)
+                if (frame == f) editor.stop();
             const auto now = std::chrono::steady_clock::now();
             const float dt = std::chrono::duration<float>(now - last).count();
             last = now;

@@ -178,7 +178,8 @@ carpeta de proyectos, teclado en pantalla, selector de archivos, portapapeles, f
 - Android: `android/editor` (Kotlin: `GLSurfaceView`, `InputConnection`, SAF) + `editor_jni.cpp`.
 
 La escena que se edita es una `titan::Scene`. Jugar serializa la escena en memoria y la ejecuta con un `Runtime`
-aparte; al detener se descarta y la escena de edición queda como estaba. Deshacer y rehacer guardan, de momento,
+aparte; al detener se descarta y la escena de edición queda como estaba. Ese Runtime recibe el `Renderer` y la
+`ResourceCache` del editor (no los crea ni los cierra), así que no recarga nada; el juego exportado usa los suyos. Deshacer y rehacer guardan, de momento,
 instantáneas de la escena serializada (pendiente: comandos por operación).
 
 ## 13. Límites actuales

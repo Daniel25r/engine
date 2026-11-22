@@ -4,6 +4,6 @@ namespace titan {
 
 // Nombre visible del motor: cambiarlo aquí (y en android/app/build.gradle.kts) basta para renombrarlo.
 constexpr const char* kEngineName = "Titán";
-constexpr const char* kEngineVersion = "0.11.0";
+constexpr const char* kEngineVersion = "0.12.0";
 
 } // namespace titan

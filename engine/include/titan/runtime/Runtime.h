@@ -23,6 +23,7 @@
 #include "titan/audio/AudioEngine.h"
 #include "titan/physics/PhysicsWorld.h"
 #include "titan/render/Renderer.h"
+#include "titan/runtime/ResourceCache.h"
 #include "titan/runtime/SceneRenderer.h"
 #include "titan/scripting/ScriptSystem.h"
 #include "titan/ui/UISystem.h"
@@ -46,8 +47,11 @@ public:
     bool start(FileSource& files);
     // Modo Play del editor: ejecuta una escena en memoria (con sus cambios sin guardar) usando los
     // recursos del proyecto abierto. Los cambios que haga el juego no tocan la escena del editor.
+    // Con sharedRenderer y sharedCache usa el Renderer y la caché del editor: no recompila shaders ni vuelve
+    // a cargar texturas, modelos ni fuentes, y no las duplica en la GPU. El Runtime no los inicia ni los cierra.
     bool startEmbedded(FileSource& projectRoot, const AssetDatabase& assets, const std::string& sceneText,
-                       const std::string& sceneName);
+                       const std::string& sceneName, Renderer* sharedRenderer = nullptr,
+                       ResourceCache* sharedCache = nullptr);
     void frame(int width, int height) { frame(Viewport{0, 0, width, height}); }
     void frame(const Viewport& viewport);
     void pause();
@@ -57,7 +61,8 @@ public:
     bool running() const { return started_; }
     bool quitRequested() const { return quitRequested_; }
     Input& input() { return input_; }
-    Renderer& renderer() { return renderer_; }
+    Renderer& renderer() { return *renderer_; }
+    bool usesSharedRenderer() const { return renderer_ != &ownRenderer_; }
     EventBus& events() { return events_; }
     Scene* scene() { return scene_.get(); }
     ScriptSystem& scripts() { return *scripts_; }
@@ -94,9 +99,7 @@ private:
     bool activateScene(const std::string& text, const std::string& name);
     void applyPendingSceneLoad();
     void render(const Viewport& viewport);
-    TextureHandle textureFor(AssetRef ref);
-    int modelFor(AssetRef ref);
-    int fontFor(AssetRef ref);
+
 
     using Clock = std::chrono::steady_clock;
 
@@ -104,16 +107,16 @@ private:
     EventBus events_;
     ComponentRegistry registry_;
     AssetDatabase assets_;
-    Renderer renderer_;
+    Renderer ownRenderer_;              // el del juego exportado
+    Renderer* renderer_ = &ownRenderer_; // o el del editor, en el modo Jugar
+    ResourceCache ownCache_;
+    ResourceCache* cache_ = &ownCache_;
     Input input_;
     PhysicsWorld physics_;
     AudioEngine audio_;
     Subscription physicsDestroySub_;
     std::unique_ptr<Scene> scene_;
     std::unique_ptr<ScriptSystem> scripts_;
-    std::unordered_map<uint64_t, TextureHandle> textures_;
-    std::unordered_map<uint64_t, int> models_;
-    std::unordered_map<uint64_t, int> fonts_;
     UISystem ui_;
     std::vector<Entity> clicked_;
     std::string projectName_;

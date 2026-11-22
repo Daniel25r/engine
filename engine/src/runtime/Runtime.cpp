@@ -21,7 +21,8 @@ Runtime::~Runtime() { shutdown(); }
 
 bool Runtime::initSystems(FileSource& files) {
     files_ = &files;
-    if (!renderer_.init(files)) return false;
+    if (!usesSharedRenderer() && !renderer_->init(files)) return false;
+    if (cache_ == &ownCache_) cache_->bind(renderer_, &assets_); // la del editor ya apunta a su proyecto
     audio_.init(files, true); // sin tarjeta de sonido el juego sigue funcionando en silencio
     scripts_ = std::make_unique<ScriptSystem>(*this, registry_, [this](AssetRef id, std::string& name, std::string& src) {
         const AssetRecord* r = assets_.find(id);
@@ -61,8 +62,10 @@ bool Runtime::start(FileSource& files) {
 }
 
 bool Runtime::startEmbedded(FileSource& projectRoot, const AssetDatabase& assets, const std::string& sceneText,
-                            const std::string& sceneName) {
+                            const std::string& sceneName, Renderer* sharedRenderer, ResourceCache* sharedCache) {
     assets_ = assets;
+    if (sharedRenderer) renderer_ = sharedRenderer;
+    if (sharedRenderer && sharedCache) cache_ = sharedCache;
     if (!initSystems(projectRoot)) return false;
     if (!activateScene(sceneText, sceneName)) {
         shutdown();
@@ -281,41 +284,6 @@ void Runtime::frame(const Viewport& viewport) {
     applyPendingSceneLoad();
 }
 
-TextureHandle Runtime::textureFor(AssetRef ref) {
-    if (ref.isNull()) return kWhiteTexture;
-    auto it = textures_.find(ref.value);
-    if (it != textures_.end()) return it->second;
-    TextureHandle h = kWhiteTexture;
-    if (const AssetRecord* r = assets_.find(ref)) {
-        TextureOptions opt;
-        opt.nearest = r->importSettings.value("filter", "linear") == "nearest";
-        opt.mipmaps = r->importSettings.value("mipmaps", true);
-        h = renderer_.loadTexture("assets/" + r->path, opt);
-    } else {
-        TITAN_ERROR("render", "Textura %s no encontrada", ref.toString().c_str());
-    }
-    textures_[ref.value] = h; // también se cachean los fallos para no repetir el error
-    return h;
-}
-
-int Runtime::fontFor(AssetRef ref) {
-    auto it = fonts_.find(ref.value);
-    if (it != fonts_.end()) return it->second;
-    const AssetRecord* r = assets_.find(ref);
-    const int f = r ? renderer_.loadFont("assets/" + r->path) : -1;
-    fonts_[ref.value] = f;
-    return f;
-}
-
-int Runtime::modelFor(AssetRef ref) {
-    auto it = models_.find(ref.value);
-    if (it != models_.end()) return it->second;
-    const AssetRecord* r = assets_.find(ref);
-    const int m = r ? renderer_.loadModel("assets/" + r->path) : -1;
-    models_[ref.value] = m;
-    return m;
-}
-
 void Runtime::render(const Viewport& viewport) {
     const float aspect = screen_.x / screen_.y;
     SceneView view;
@@ -328,16 +296,17 @@ void Runtime::render(const Viewport& viewport) {
     }
     viewProj_ = view.projection * view.view;
     perspective_ = view.perspective;
-    sceneRenderer_.render(*scene_, renderer_, viewport, view, [this](AssetRef r) { return textureFor(r); },
-                          [this](AssetRef r) { return modelFor(r); });
+    sceneRenderer_.render(*scene_, *renderer_, viewport, view, [this](AssetRef r) { return cache_->texture(r); },
+                          [this](AssetRef r) { return cache_->model(r); });
 
     ui_.layout(*scene_, screen_); // los scripts pueden haber cambiado textos, tamaños o posiciones
-    drawUI(renderer_, *scene_, ui_, [this](AssetRef r) { return textureFor(r); }, [this](AssetRef r) { return fontFor(r); });
+    drawUI(*renderer_, *scene_, ui_, [this](AssetRef r) { return cache_->texture(r); },
+           [this](AssetRef r) { return cache_->font(r); });
 
-    for (const auto& t : scriptTexts_) renderer_.drawText({t.x, t.y}, t.size, t.text, t.color);
+    for (const auto& t : scriptTexts_) renderer_->drawText({t.x, t.y}, t.size, t.text, t.color);
     scriptTexts_.clear();
     if (showStats) {
-        const RenderStats& rs = renderer_.stats();
+        const RenderStats& rs = renderer_->stats();
         const CullStats& cs = sceneRenderer_.cullStats();
         char text[640];
         std::snprintf(text, sizeof(text),
@@ -352,10 +321,10 @@ void Runtime::render(const Viewport& viewport) {
                       cs.posesComputed);
         // Arriba a la derecha: a la izquierda y abajo suele ir la interfaz del propio juego.
         const float h = std::max(12.0f, std::min(screen_.x, screen_.y) * 0.022f);
-        const float width = renderer_.measureText(0, h, text).x;
-        renderer_.drawText({std::max(h * 0.5f, screen_.x - width - h * 0.6f), h * 0.6f}, h, text, Color{1, 1, 1, 0.75f});
+        const float width = renderer_->measureText(0, h, text).x;
+        renderer_->drawText({std::max(h * 0.5f, screen_.x - width - h * 0.6f), h * 0.6f}, h, text, Color{1, 1, 1, 0.75f});
     }
-    renderer_.endFrame();
+    renderer_->endFrame();
 }
 
 void Runtime::scriptDrawText(float x, float y, float size, const std::string& text, Color color) {
@@ -410,10 +379,10 @@ void Runtime::shutdown() {
         scene_.reset();
     }
     scripts_.reset();
-    textures_.clear();
-    models_.clear();
-    fonts_.clear();
-    renderer_.shutdown();
+    cache_->clear();
+    if (!usesSharedRenderer()) renderer_->shutdown(); // el del editor lo cierra el editor
+    renderer_ = &ownRenderer_;
+    cache_ = &ownCache_;
     TITAN_INFO("runtime", "Runtime detenido");
 }
 

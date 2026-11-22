@@ -85,6 +85,11 @@ void Editor::Impl::renderViewport() {
     const Viewport vp{x, fbHeight - static_cast<int>(vpMax.y), std::max(w, 1), std::max(h, 1)};
     if (runtime) {
         runtime->frame(vp);
+        if (playFirstFrame) {
+            playFirstFrame = false;
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - playStart).count();
+            TITAN_INFO("editor", "Jugar: primer fotograma en %.0f ms", ms);
+        }
         return;
     }
     TransformSystem::update(scene);

@@ -229,9 +229,8 @@ bool Editor::Impl::openProject(const std::string& path) {
     }
     project = std::move(p);
     files.root = project->root();
-    textureCache.clear();
-    modelCache.clear();
-    fontCache.clear();
+    resources.clear();
+    resources.bind(&renderer, &project->assets());
     undoStack.clear();
     redoStack.clear();
     codePath.clear();
@@ -258,6 +257,8 @@ bool Editor::Impl::openProject(const std::string& path) {
 void Editor::Impl::closeProject() {
     if (runtime) stop();
     if (project) save();
+    resources.clear();
+    resources.bind(&renderer, nullptr); // la base de datos de recursos se va con el proyecto
     project.reset();
     scene.clear();
     sceneId = {};
@@ -333,40 +334,6 @@ void Editor::Impl::exportPackage() {
 Entity Editor::Impl::selectedEntity() { return selected.isNull() ? Entity{} : scene.findById(selected); }
 
 void Editor::Impl::select(Entity e) { selected = scene.isValid(e) ? scene.info(e).id : UUID{}; }
-
-TextureHandle Editor::Impl::editorTexture(AssetRef ref) {
-    if (ref.isNull() || !project) return kWhiteTexture;
-    auto it = textureCache.find(ref.value);
-    if (it != textureCache.end()) return it->second;
-    TextureHandle h = kWhiteTexture;
-    if (const AssetRecord* r = project->assets().find(ref)) {
-        TextureOptions opt;
-        opt.nearest = r->importSettings.value("filter", "linear") == "nearest";
-        h = renderer.loadTexture("assets/" + r->path, opt);
-    }
-    textureCache[ref.value] = h;
-    return h;
-}
-
-int Editor::Impl::editorModel(AssetRef ref) {
-    if (ref.isNull() || !project) return -1;
-    auto it = modelCache.find(ref.value);
-    if (it != modelCache.end()) return it->second;
-    const AssetRecord* r = project->assets().find(ref);
-    const int m = r ? renderer.loadModel("assets/" + r->path) : -1;
-    modelCache[ref.value] = m;
-    return m;
-}
-
-int Editor::Impl::editorFont(AssetRef ref) {
-    if (ref.isNull() || !project) return -1;
-    auto it = fontCache.find(ref.value);
-    if (it != fontCache.end()) return it->second;
-    const AssetRecord* r = project->assets().find(ref);
-    const int f = r ? renderer.loadFont("assets/" + r->path) : -1;
-    fontCache[ref.value] = f;
-    return f;
-}
 
 bool Editor::Impl::localBounds(Entity e, Vec3& min, Vec3& max) {
     const MeshRenderer* mr = scene.world().get<MeshRenderer>(e);
@@ -748,12 +715,15 @@ void Editor::Impl::importFile(const std::string& path, const std::string& name) 
 void Editor::Impl::play() {
     if (!project || runtime) return;
     saveCode(); // los scripts se leen del disco
+    playStart = std::chrono::steady_clock::now();
+    playFirstFrame = true;
     runtime = std::make_unique<Runtime>();
     const std::string text = serializeScene(scene, registry);
     const AssetRecord* r = project->assets().find(sceneId);
     const size_t errorsBefore = logs.size();
     (void)errorsBefore;
-    if (!runtime->startEmbedded(files, project->assets(), text, r ? r->path : scene.name())) {
+    // Mismo Renderer y misma caché que el editor: Jugar no recarga nada de lo que ya se ve en la vista.
+    if (!runtime->startEmbedded(files, project->assets(), text, r ? r->path : scene.name(), &renderer, &resources)) {
         runtime.reset();
         setStatus("No se pudo ejecutar la escena (ver Consola)");
         return;
@@ -922,7 +892,7 @@ void Editor::onResume() {
 void Editor::onContextLost() {
     Impl& m = *impl_;
     m.renderer.onContextLost();
-    if (m.runtime) m.runtime->renderer().onContextLost();
+    if (m.runtime && !m.runtime->usesSharedRenderer()) m.runtime->renderer().onContextLost();
     // El backend de ImGui guarda objetos del contexto anterior: se descarta y se vuelve a crear.
     ImGui::GetIO().BackendRendererUserData = nullptr;
     ImGui::GetIO().BackendRendererName = nullptr;
@@ -932,7 +902,7 @@ void Editor::onContextRestored() {
     Impl& m = *impl_;
     ImGui_ImplOpenGL3_Init("#version 300 es");
     m.renderer.onContextRestored();
-    if (m.runtime) m.runtime->renderer().onContextRestored();
+    if (m.runtime && !m.runtime->usesSharedRenderer()) m.runtime->renderer().onContextRestored();
 }
 
 bool Editor::onBack() {

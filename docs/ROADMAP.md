@@ -5,8 +5,8 @@ Cada paso se cierra con código, pruebas, documentación y un informe de lo que 
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| 0 | Auditoría completa | ✅ 0.11.0 |
-| 1 | Arquitectura y estabilidad: **culling** ✅; recursos compartidos entre el editor y Play; sistema de tareas y carga asíncrona; deshacer por comandos | En curso |
+| 0 | Auditoría completa | ✅ 0.11.0 (actualizada en 0.12.0) |
+| 1 | Arquitectura y estabilidad: **culling** ✅; **recursos compartidos entre el editor y Play** ✅; sistema de tareas y carga asíncrona; deshacer por comandos | En curso |
 | 2 | Render: render targets, HDR, posproceso y perfiles de calidad con detección de capacidades; materiales v2 (normal, ORM, alpha clip, tiling); focos; sombras en cascada; instancing | Pendiente |
 | 3 | Entrada: Input Actions (táctil, teclado, mando) | Pendiente |
 | 4 | Física v2 (capas, controlador de personaje, consultas, mallas, heightfield, joints) y animación v2 (máquinas de estados, blend trees, IK, root motion) | Pendiente |

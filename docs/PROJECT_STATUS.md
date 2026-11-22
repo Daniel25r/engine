@@ -1,4 +1,4 @@
-# Estado del proyecto — Titán 0.11.0
+# Estado del proyecto — Titán 0.12.0
 
 Fecha: 2026-11-21 · Generaciones 1 (Fundación) y 2 (Editor) en curso; primeros pasos de la 5 (3D)
 
@@ -97,6 +97,8 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 | Interpolación de render entre pasos fijos | [PENDIENTE] (cuando haya física) |
 | Culling por frustum (mallas, sprites, sombras, esqueletos) | [COMPLETADO Y PROBADO] (3 pruebas; medido en PC con 1600 objetos; imagen idéntica) |
 | LOD, occlusion culling, instancing | [PENDIENTE] |
+| Jugar con el Renderer y los recursos del editor (sin recargas) | [COMPLETADO Y PROBADO] (PC: jugar, detener y volver a jugar; HUD y modelos animados) |
+| Carga de recursos en segundo plano | [PENDIENTE] |
 
 ## Scripts (Lua 5.4.7)
 
