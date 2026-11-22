@@ -38,7 +38,7 @@ public:
     void read(const char* key, Color& v);
     void read(const char* key, Rect& v);
     void readAsset(const char* key, AssetRef& v);
-    // Copia un objeto JSON tal cual, como texto.
+    // Copia un objeto o una lista JSON tal cual, como texto.
     void readRaw(const char* key, std::string& v);
     template <class E>
     void readEnum(const char* key, E& v, std::initializer_list<std::pair<const char*, E>> names) {
@@ -108,6 +108,16 @@ Entity instantiatePrefab(const std::string& text, Scene& scene, Entity parent, c
                          LoadReport* report = nullptr);
 
 std::string serializeScene(Scene& scene, const ComponentRegistry& registry);
+
+// Máquina de estados de animación (campo "machine" del Animator).
+Json machineToJson(const AnimStateMachine& m);
+void machineFromJson(const Json& j, AnimStateMachine& m);
+
+// Materiales (.mat): los campos de material de un MeshRenderer (color, mapas, tiling...), en JSON versionado.
+void writeMaterialFields(const MeshRenderer& m, Json& j);
+void readMaterialFields(MeshRenderer& m, FieldReader& rd);
+std::string serializeMaterial(const MeshRenderer& m);
+LoadReport parseMaterial(const std::string& text, MeshRenderer& out); // solo cambia los campos de material
 // Vacía la escena y la rellena desde el texto. Si hay errores la escena queda vacía.
 LoadReport deserializeScene(const std::string& text, Scene& scene, const ComponentRegistry& registry);
 

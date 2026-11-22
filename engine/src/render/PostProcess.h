@@ -1,0 +1,50 @@
+#pragma once
+// Posprocesado (interno del módulo render): la escena se dibuja en un render target a la resolución elegida
+// (escala de render) y después se compone en pantalla con bloom, FXAA, corrección de color y viñeta.
+// Funciona sobre la imagen ya mapeada a LDR (RGBA8): es compatible con cualquier GPU OpenGL ES 3.0,
+// a cambio de que el bloom se calcule sobre colores ya limitados a 1 (umbral sobre la imagen final).
+#include <cstdint>
+
+namespace titan {
+
+struct PostSettings {
+    bool fxaa = false;
+    bool bloom = false;
+    float bloomIntensity = 0.5f;
+    float bloomThreshold = 0.8f;
+    float vignette = 0;
+    float contrast = 1;
+    float saturation = 1;
+    float temperature = 0; // -1 frío .. 1 cálido
+};
+
+class PostProcessor {
+public:
+    bool init();
+    void shutdown();
+    void onContextLost(); // olvida los objetos (el contexto ya no existe)
+    // Crea (si hace falta) y activa el render target de la escena. Devuelve false si no se puede.
+    bool begin(int width, int height);
+    int width() const { return width_; }
+    int height() const { return height_; }
+    // Compone en el framebuffer "target", dentro del rectángulo (x, y, w, h) en píxeles de OpenGL.
+    void resolve(uint32_t target, int x, int y, int w, int h, const PostSettings& s);
+    int lastPasses() const { return passes_; }
+
+private:
+    static constexpr int kBloomLevels = 5;
+    bool createTargets(int width, int height);
+    void destroyTargets();
+    void drawFullscreen();
+
+    uint32_t vao_ = 0;
+    uint32_t composite_ = 0, down_ = 0, up_ = 0;
+    uint32_t sceneFbo_ = 0, sceneColor_ = 0, sceneDepth_ = 0;
+    uint32_t bloomFbo_[kBloomLevels] = {}, bloomTex_[kBloomLevels] = {};
+    int bloomW_[kBloomLevels] = {}, bloomH_[kBloomLevels] = {};
+    int bloomLevels_ = 0;
+    int width_ = 0, height_ = 0;
+    int passes_ = 0;
+};
+
+} // namespace titan

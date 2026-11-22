@@ -13,6 +13,7 @@
 namespace titan {
 
 class FileSource;
+class Input;
 
 class EditorPlatform {
 public:
@@ -77,6 +78,8 @@ public:
     void play();
     void stop();
     bool isPlaying() const;
+    // Entrada del juego mientras se juega en el editor (teclado y mando físicos); nulo si no se está jugando.
+    Input* playInput();
     void selectEntity(const std::string& name);
     // Crea un objeto como el menú Crear ("Cubo", "Botón", "Joystick"...).
     void createEntity(const std::string& kind);

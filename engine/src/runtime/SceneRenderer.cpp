@@ -1,5 +1,8 @@
 #include "titan/runtime/SceneRenderer.h"
 
+#include "titan/core/Particles.h"
+#include "titan/core/TerrainTools.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -40,7 +43,8 @@ Mat4 lookAt(const Vec3& eye, const Vec3& target) {
 } // namespace
 
 void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& viewport, const SceneView& view,
-                           const TextureResolver& textures, const ModelResolver& models) {
+                           const TextureResolver& textures, const ModelResolver& models,
+                           const MaterialResolver& materials) {
     // ---- Ambiente: el primer Environment activo, o valores por defecto.
     SceneLighting L;
     bool hasEnv = false;
@@ -67,8 +71,17 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
             haveSun = true;
             L.sunDirection = t.forward();
             L.sunColor = c;
-        } else if (l.type == Light::Type::Point && L.points.size() < Renderer::kMaxPointLights) {
-            L.points.push_back({t.worldPosition(), l.range, c});
+        } else if (l.type != Light::Type::Directional &&
+                   L.points.size() < static_cast<size_t>(std::min(Renderer::kMaxPointLights, renderer.quality().maxPointLights))) {
+            PointLightData p{t.worldPosition(), l.range, c};
+            if (l.type == Light::Type::Spot) {
+                const float half = std::clamp(l.spotAngle, 1.0f, 179.0f) * 0.5f * kDegToRad;
+                p.spot = true;
+                p.direction = t.forward();
+                p.cosOuter = std::cos(half);
+                p.cosInner = std::cos(half * (1.0f - std::clamp(l.spotSoftness, 0.0f, 1.0f)));
+            }
+            L.points.push_back(p);
         }
     });
     if (anyLight && !haveSun) L.sunColor = {0, 0, 0, 1};
@@ -78,14 +91,27 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     const Vec3 camPos = camWorld.translation();
     stats_ = {};
     candidates_.clear();
+    effective_.clear();
     opaque_.clear();
     transparent_.clear();
     casters_.clear();
     poseCount_ = 0;
     const AABB unitBox{{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}}; // todas las primitivas caben en ella
     bool anyCaster = false;
-    scene.world().each<MeshRenderer, Transform>([&](Entity e, MeshRenderer& m, Transform& t) {
-        if (!m.visible || !scene.isActiveInHierarchy(e)) return;
+    scene.world().each<MeshRenderer, Transform>([&](Entity e, MeshRenderer& own, Transform& t) {
+        if (!own.visible || !scene.isActiveInHierarchy(e)) return;
+        const MeshRenderer* shared = (!own.material.isNull() && materials) ? materials(own.material) : nullptr;
+        const MeshRenderer* src = &own;
+        if (shared) { // material compartido: sus campos de material, y lo propio del objeto (malla, sombras...)
+            MeshRenderer& eff = effective_.emplace_back(*shared);
+            eff.mesh = own.mesh;
+            eff.model = own.model;
+            eff.material = own.material;
+            eff.castShadows = own.castShadows;
+            eff.visible = own.visible;
+            src = &eff;
+        }
+        const MeshRenderer& m = *src;
         const Vec3 d = t.worldPosition() - camPos;
         const int model = (!m.model.isNull() && models) ? models(m.model) : -1;
         AABB local = unitBox;
@@ -96,22 +122,38 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
             skinned = renderer.modelHasSkin(model);
             if (skinned) local = local.inflated(0.5f);
         }
-        candidates_.push_back({{&m, &t.worldMatrix(), textures(m.texture), dot(d, d), model, -1},
+        const MaterialTextures maps{textures(m.texture), textures(m.normalMap), textures(m.metallicRoughnessMap),
+                                    textures(m.emissionMap), textures(m.occlusionMap)};
+        candidates_.push_back({{&m, &t.worldMatrix(), maps, dot(d, d), model, -1},
                                transformAABB(local, t.worldMatrix()), skinned, e});
-        anyCaster = anyCaster || (m.castShadows && !m.unlit && m.color.a >= 0.999f);
+        anyCaster = anyCaster || (m.castShadows && !m.unlit && (m.color.a >= 0.999f || m.alphaClip));
     });
     stats_.meshes = static_cast<int>(candidates_.size());
 
+    // ---- Terrenos: malla en la GPU (rehecha solo si se editó) y caja para el culling.
+    terrains_.clear();
+    scene.world().each<Terrain, Transform>([&](Entity e, Terrain& t, Transform& tr) {
+        if (!scene.isActiveInHierarchy(e)) return;
+        const uint64_t key = (reinterpret_cast<uintptr_t>(&scene) * 1000003ull) ^ ((uint64_t(e.generation) << 32) | e.index);
+        Terrain* tp = &t;
+        const int handle = renderer.terrainMesh(key, t.revision, [tp] { return buildTerrainMesh(*tp); });
+        TextureHandle layers[4];
+        for (int i = 0; i < 4; ++i) layers[i] = textures(t.layerTextures[i]);
+        terrains_.push_back({handle, &tr.worldMatrix(), tp, transformAABB(terrainBounds(t), tr.worldMatrix()),
+                             {layers[0], layers[1], layers[2], layers[3]}});
+        anyCaster = true;
+    });
+
     // ---- Sombras del sol: un mapa ortográfico centrado delante de la cámara, alineado a sus texels
     // para que las sombras no "tiemblen" al mover la cámara.
-    L.shadows = L.env.shadows && haveSun && anyCaster && view.perspective;
+    L.shadows = L.env.shadows && renderer.quality().shadows && haveSun && anyCaster && view.perspective;
     if (L.shadows) {
         const float radius = std::max(5.0f, L.env.shadowDistance * 0.5f);
         const Vec3 forward = camWorld.transformDirection({0, 0, -1}).normalized();
         Vec3 focus = camPos + forward * radius * 0.8f;
         const Vec3 dir = L.sunDirection.normalized();
         Mat4 lightView = lookAt(focus - dir * radius * 3.0f, focus);
-        const float texel = 2.0f * radius / Renderer::kShadowMapSize;
+        const float texel = 2.0f * radius / renderer.shadowMapSize();
         Vec3 ls = lightView.transformPoint(focus);
         const Vec3 snapped{std::floor(ls.x / texel) * texel, std::floor(ls.y / texel) * texel, ls.z};
         lightView = Mat4::translate(snapped - ls) * lightView;
@@ -124,7 +166,7 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     const Frustum lightFrustum = Frustum::fromMatrix(L.lightViewProjection);
     for (Candidate& c : candidates_) {
         const MeshRenderer& m = *c.item.mesh;
-        const bool opaque = m.color.a >= 0.999f;
+        const bool opaque = m.color.a >= 0.999f || m.alphaClip;
         const bool caster = L.shadows && opaque && m.castShadows && !m.unlit;
         const bool inView = !culling || camFrustum.intersects(c.bounds);
         const bool inShadow = caster && (!culling || lightFrustum.intersects(c.bounds));
@@ -136,9 +178,20 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
             const int model = c.item.model;
             if (poseCount_ >= poses_.size()) poses_.emplace_back();
             const int clip = an ? renderer.modelAnimationIndex(model, an->clip) : -1;
-            const int from = an && an->fromWeight > 0 ? renderer.modelAnimationIndex(model, an->fromClip) : -1;
-            if (renderer.computeBlendedPose(model, clip, an ? an->time : 0.0f, from, an ? an->fromTime : 0.0f,
-                                            an ? an->fromWeight : 0.0f, an ? an->loop : true, poses_[poseCount_])) {
+            // Segundo clip: la transición si la hay; si no, la mezcla 1D de la máquina de estados.
+            int from = -1;
+            float fromTime = 0, fromWeight = 0;
+            if (an && an->fromWeight > 0) {
+                from = renderer.modelAnimationIndex(model, an->fromClip);
+                fromTime = an->fromTime;
+                fromWeight = an->fromWeight;
+            } else if (an && an->blendWeight > 0) {
+                from = renderer.modelAnimationIndex(model, an->blendClip);
+                fromTime = an->blendTime;
+                fromWeight = an->blendWeight;
+            }
+            if (renderer.computeBlendedPose(model, clip, an ? an->time : 0.0f, from, fromTime, fromWeight,
+                                            an ? an->loop : true, poses_[poseCount_])) {
                 c.item.pose = static_cast<int>(poseCount_++);
                 stats_.posesComputed++;
             }
@@ -155,6 +208,8 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
 
     if (L.shadows) {
         renderer.beginShadowPass(L.lightViewProjection);
+        for (const TerrainItem& t : terrains_)
+            if (!culling || lightFrustum.intersects(t.bounds)) renderer.drawTerrainShadow(t.handle, *t.world);
         for (const MeshItem& m : casters_) {
             if (m.model >= 0) renderer.drawModelShadow(m.model, *m.world, m.pose >= 0 ? &poses_[m.pose] : nullptr);
             else renderer.drawShadowCaster(m.mesh->mesh, *m.world);
@@ -171,9 +226,15 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     std::sort(opaque_.begin(), opaque_.end(), [](const MeshItem& a, const MeshItem& b) { return a.depth < b.depth; });
     std::sort(transparent_.begin(), transparent_.end(), [](const MeshItem& a, const MeshItem& b) { return a.depth > b.depth; });
     auto draw = [&](const MeshItem& m) {
-        if (m.model >= 0) renderer.drawModel(m.model, *m.world, *m.mesh, m.texture, m.pose >= 0 ? &poses_[m.pose] : nullptr);
-        else renderer.drawMesh(m.mesh->mesh, *m.world, *m.mesh, m.texture);
+        if (m.model >= 0) renderer.drawModel(m.model, *m.world, *m.mesh, m.maps, m.pose >= 0 ? &poses_[m.pose] : nullptr);
+        else renderer.drawMesh(m.mesh->mesh, *m.world, *m.mesh, m.maps);
     };
+    for (const TerrainItem& t : terrains_) {
+        stats_.meshes++;
+        if (culling && !camFrustum.intersects(t.bounds)) continue;
+        stats_.meshesVisible++;
+        renderer.drawTerrain(t.handle, *t.world, *t.terrain, t.layers);
+    }
     for (const MeshItem& m : opaque_) draw(m);
     for (const MeshItem& m : transparent_) draw(m);
 
@@ -194,6 +255,40 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     });
     for (const SpriteItem& s : sprites_)
         renderer.drawSprite(s.texture, *s.world, s.sprite->size, s.sprite->pivot, s.sprite->uv, s.sprite->color);
+
+    // ---- Partículas: cuadrados hacia la cámara; las de mezcla alfa, de lejos a cerca.
+    scene.world().each<ParticleSystem, Transform>([&](Entity e, ParticleSystem& ps, Transform& t) {
+        if (!ps.state || ps.state->particles.empty() || !scene.isActiveInHierarchy(e)) return;
+        stats_.particleSystems++;
+        if (culling && !camFrustum.intersects(ps.state->bounds)) return;
+        stats_.particleSystemsVisible++;
+        const TextureHandle tex = ps.texture.isNull() ? renderer.softParticleTexture() : textures(ps.texture);
+        const Mat4& world = t.worldMatrix();
+        const auto& parts = ps.state->particles;
+        particleOrder_.clear();
+        for (int k = 0; k < static_cast<int>(parts.size()); ++k) {
+            const Vec3 w = ps.worldSpace ? parts[k].position : world.transformPoint(parts[k].position);
+            const Vec3 d = w - camPos;
+            particleOrder_.push_back({dot(d, d), k});
+        }
+        if (!ps.additive)
+            std::sort(particleOrder_.begin(), particleOrder_.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+        const int cols = std::max(1, ps.sheetColumns), rows = std::max(1, ps.sheetRows), frames = cols * rows;
+        for (const auto& [depth, k] : particleOrder_) {
+            const Particle& p = parts[k];
+            const float f = std::clamp(p.age / p.life, 0.0f, 1.0f);
+            const float size = ps.sizeStart + (ps.sizeEnd - ps.sizeStart) * f;
+            const Color c{ps.colorStart.r + (ps.colorEnd.r - ps.colorStart.r) * f,
+                          ps.colorStart.g + (ps.colorEnd.g - ps.colorStart.g) * f,
+                          ps.colorStart.b + (ps.colorEnd.b - ps.colorStart.b) * f,
+                          ps.colorStart.a + (ps.colorEnd.a - ps.colorStart.a) * f};
+            const int frame = std::min(frames - 1, static_cast<int>(f * frames));
+            const Rect uv{static_cast<float>(frame % cols) / cols, static_cast<float>(frame / cols) / rows, 1.0f / cols, 1.0f / rows};
+            const Vec3 w = ps.worldSpace ? p.position : world.transformPoint(p.position);
+            renderer.drawBillboard(tex, w, size, p.rotation, uv, c, ps.additive);
+            stats_.particlesDrawn++;
+        }
+    });
 }
 
 } // namespace titan

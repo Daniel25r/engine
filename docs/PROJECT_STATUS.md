@@ -1,4 +1,4 @@
-# Estado del proyecto — Titán 0.12.0
+# Estado del proyecto — Titán 0.13.0
 
 Fecha: 2026-11-21 · Generaciones 1 (Fundación) y 2 (Editor) en curso; primeros pasos de la 5 (3D)
 
@@ -99,6 +99,16 @@ Probado en escritorio con el mismo código que en Android, manejado de forma aut
 | LOD, occlusion culling, instancing | [PENDIENTE] |
 | Jugar con el Renderer y los recursos del editor (sin recargas) | [COMPLETADO Y PROBADO] (PC: jugar, detener y volver a jugar; HUD y modelos animados) |
 | Carga de recursos en segundo plano | [PENDIENTE] |
+| Posprocesado (escala, FXAA, bloom, color, viñeta) | [COMPLETADO Y PROBADO] en PC (capturas); [PENDIENTE DE PRUEBA REAL] |
+| Perfiles de calidad y detección de capacidades | [COMPLETADO Y PROBADO] (2 pruebas; medidos los 5 perfiles en PC) |
+| Materiales v2 (normal, metal/rugosidad, emisión, oclusión, recorte, repetición, .mat) | [COMPLETADO Y PROBADO] (3 pruebas; modelo DamagedHelmet de Khronos) |
+| Focos | [COMPLETADO Y PROBADO] (visual) |
+| Partículas | [COMPLETADO Y PROBADO] (3 pruebas + captura) |
+| Terreno: esculpido, capas, colisión, generación, mapa de alturas | [COMPLETADO Y PROBADO] (4 pruebas + personaje caminando) |
+| Input Actions (teclado, mando, táctil) | [COMPLETADO Y PROBADO] en PC con teclado simulado; mando y teclado en Android [IMPLEMENTADO, PENDIENTE DE PRUEBA REAL] |
+| Controlador de personaje, capas, consultas, uniones | [COMPLETADO Y PROBADO] (3 pruebas + juego con teclado) |
+| Máquina de estados de animación con mezcla 1D y eventos | [COMPLETADO Y PROBADO] (3 pruebas + editor) |
+| Partida guardada (Save) | [COMPLETADO Y PROBADO] (1 prueba con archivo real) |
 
 ## Scripts (Lua 5.4.7)
 

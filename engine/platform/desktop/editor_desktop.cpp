@@ -7,6 +7,8 @@
 #define GLFW_INCLUDE_ES3
 #include <GLFW/glfw3.h>
 
+#include "GlfwInput.h"
+
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
@@ -227,6 +229,8 @@ int main(int argc, char** argv) {
             gEditor->onText(s);
         });
         glfwSetKeyCallback(window, [](GLFWwindow*, int key, int, int action, int) {
+            if (titan::Input* in = gEditor->playInput(); in && action != GLFW_REPEAT)
+                in->setKey(titan::glfwinput::keyFromGlfw(key), action == GLFW_PRESS); // el juego también recibe la tecla
             bool ok;
             const titan::EditorKey k = mapKey(key, ok);
             if (ok && action != GLFW_REPEAT) gEditor->onKey(k, action == GLFW_PRESS);
@@ -253,6 +257,7 @@ int main(int argc, char** argv) {
         long frame = 0;
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
+            if (titan::Input* in = editor.playInput()) titan::glfwinput::pollGamepad(*in);
             for (const ScriptedTouch& t : scripted) {
                 const int id = 50;
                 if (!t.drag) {

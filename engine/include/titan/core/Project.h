@@ -19,7 +19,7 @@
 
 namespace titan {
 
-enum class AssetType { Unknown, Scene, Texture, Script, Audio, Model, Font, Data, Prefab };
+enum class AssetType { Unknown, Scene, Texture, Script, Audio, Model, Font, Data, Prefab, Material };
 
 const char* assetTypeName(AssetType type);
 AssetType assetTypeFromName(const std::string& name);

@@ -9,6 +9,7 @@
 #include <iterator>
 
 #include "EditorImpl.h"
+#include "titan/core/TerrainTools.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "imgui_internal.h"
 #include "lauxlib.h"
@@ -62,6 +63,8 @@ bool Editor::Impl::init() {
 
     files.engine = &platform.engineFiles();
     if (!renderer.init(files)) return false;
+    editorQuality = QualitySettings::preset(recommendedQuality(renderer.caps()));
+    renderer.setQuality(editorQuality);
 
     logSink = Log::addSink([this](const LogMessage& m) {
         logs.push_back(m);
@@ -230,7 +233,7 @@ bool Editor::Impl::openProject(const std::string& path) {
     project = std::move(p);
     files.root = project->root();
     resources.clear();
-    resources.bind(&renderer, &project->assets());
+    resources.bind(&renderer, &project->assets(), &files);
     undoStack.clear();
     redoStack.clear();
     codePath.clear();
@@ -394,6 +397,27 @@ void Editor::Impl::savePrefab(Entity e) {
     project->assets().import(rel);
     TITAN_INFO("editor", "Prefab guardado: %s (úsalo con Scene.instantiate(\"%s\", x, y, z))", rel.c_str(), base.c_str());
     setStatus("Prefab guardado: " + rel);
+}
+
+void Editor::Impl::saveMaterial(Entity e) {
+    MeshRenderer* m = project && !e.isNull() ? scene.world().get<MeshRenderer>(e) : nullptr;
+    if (!m) return;
+    std::string base;
+    for (char c : scene.info(e).name) base += (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-') ? c : '_';
+    if (base.empty()) base = "material";
+    std::string rel = "materiales/" + base + ".mat";
+    for (int i = 2; project->assets().findByPath(rel); ++i) rel = "materiales/" + base + "_" + std::to_string(i) + ".mat";
+    std::string err;
+    if (!fileio::writeAtomic(project->assetsDir() + "/" + rel, serializeMaterial(*m), true, &err)) {
+        TITAN_ERROR("editor", "No se pudo guardar el material: %s", err.c_str());
+        return;
+    }
+    project->assets().import(rel);
+    if (const AssetRecord* r = project->assets().findByPath(rel)) {
+        pushUndo();
+        m->material = r->id;
+    }
+    setStatus("Material guardado: " + rel + " (asígnalo a otros objetos en Detalles)");
 }
 
 void Editor::Impl::instantiatePrefabAsset(const AssetRecord& r) {
@@ -564,6 +588,23 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
         scene.world().add<Collider>(e);
         fitCollider(e);
         scene.world().add<Rigidbody>(e);
+    } else if (kind == "Terreno") {
+        Terrain t;
+        terrainEnsureData(t);
+        generateTerrain(t, 7, 0.25f); // colinas suaves para empezar; se esculpe con las herramientas de Detalles
+        scene.transform(e).setPosition({0, 0, 0});
+        scene.world().add<Terrain>(e, t);
+    } else if (kind == "Personaje") {
+        // Controlador de personaje con una cápsula visible de hijo (el origen de la entidad son los pies).
+        scene.transform(e).setPosition({spawnPoint().x, 0, spawnPoint().z});
+        scene.world().add<CharacterController>(e);
+        Entity body = scene.createEntity("Cuerpo", e);
+        scene.transform(body).setPosition({0, 0.9f, 0});
+        scene.transform(body).setScale({0.7f, 1.8f, 0.7f});
+        MeshRenderer mr;
+        mr.mesh = MeshPrimitive::Capsule;
+        mr.color = Color::hex(0x3C8DE0);
+        scene.world().add<MeshRenderer>(body, mr);
     } else if (kind == "Zona trigger") {
         Collider c;
         c.size = {3, 2, 3};
@@ -636,6 +677,54 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
             w.add<UIRect>(e, rect({0, 1}, {48, -48}, {230, 230}));
             w.add<UIJoystick>(e);
         }
+    } else if (kind == "Fuego" || kind == "Humo" || kind == "Chispas" || kind == "Lluvia" || kind == "Nieve" ||
+               kind == "Explosión" || kind == "Magia") {
+        // Efectos de partida: valores pensados para verse bien a escala humana (1 unidad = 1 metro).
+        ParticleSystem p;
+        if (kind == "Fuego") {
+            p.rate = 60; p.lifetimeMin = 0.5f; p.lifetimeMax = 1.1f; p.speedMin = 0.8f; p.speedMax = 1.8f; p.spread = 12;
+            p.shape = 1; p.shapeSize = {0.25f, 0.25f, 0.25f}; p.sizeStart = 0.7f; p.sizeEnd = 0.15f;
+            p.colorStart = {1, 0.5f, 0.12f, 0.55f}; p.colorEnd = {0.9f, 0.1f, 0.02f, 0}; p.additive = true;
+            p.acceleration = {0, 1.0f, 0}; p.rotationSpeed = 90;
+        } else if (kind == "Humo") {
+            p.rate = 12; p.lifetimeMin = 3; p.lifetimeMax = 5; p.speedMin = 0.4f; p.speedMax = 0.9f; p.spread = 15;
+            p.sizeStart = 0.6f; p.sizeEnd = 2.4f; p.colorStart = {0.55f, 0.55f, 0.58f, 0.55f}; p.colorEnd = {0.7f, 0.7f, 0.72f, 0};
+            p.acceleration = {0.2f, 0.15f, 0}; p.rotationSpeed = 30; p.drag = 0.2f;
+        } else if (kind == "Chispas") {
+            p.rate = 40; p.lifetimeMin = 0.4f; p.lifetimeMax = 0.9f; p.speedMin = 3; p.speedMax = 6; p.spread = 40;
+            p.sizeStart = 0.08f; p.sizeEnd = 0.02f; p.colorStart = {1, 0.85f, 0.4f, 1}; p.colorEnd = {1, 0.4f, 0.1f, 0};
+            p.acceleration = {0, -9.8f, 0}; p.additive = true;
+        } else if (kind == "Lluvia") {
+            p.rate = 400; p.maxParticles = 1500; p.lifetimeMin = p.lifetimeMax = 1.2f; p.speedMin = 9; p.speedMax = 11;
+            p.spread = 3; p.shape = 2; p.shapeSize = {20, 0.1f, 20}; p.sizeStart = p.sizeEnd = 0.05f;
+            p.colorStart = p.colorEnd = {0.7f, 0.8f, 0.95f, 0.5f};
+            scene.transform(e).setPosition(spawnPoint() + Vec3{0, 12, 0});
+            scene.transform(e).setEulerDegrees({180, 0, 0}); // emite hacia abajo
+        } else if (kind == "Nieve") {
+            p.rate = 120; p.maxParticles = 1500; p.lifetimeMin = 6; p.lifetimeMax = 9; p.speedMin = 0.6f; p.speedMax = 1.2f;
+            p.spread = 20; p.shape = 2; p.shapeSize = {20, 0.1f, 20}; p.sizeStart = p.sizeEnd = 0.1f;
+            p.colorStart = {1, 1, 1, 0.9f}; p.colorEnd = {1, 1, 1, 0.6f}; p.acceleration = {0.3f, 0, 0};
+            scene.transform(e).setPosition(spawnPoint() + Vec3{0, 10, 0});
+            scene.transform(e).setEulerDegrees({180, 0, 0});
+        } else if (kind == "Explosión") {
+            p.rate = 0; p.burst = 120; p.duration = 2; p.lifetimeMin = 0.4f; p.lifetimeMax = 1.0f; p.speedMin = 4;
+            p.speedMax = 9; p.spread = 180; p.sizeStart = 0.8f; p.sizeEnd = 0.1f; p.colorStart = {1, 0.75f, 0.3f, 1};
+            p.colorEnd = {0.6f, 0.1f, 0.05f, 0}; p.drag = 3; p.additive = true;
+        } else { // Magia
+            p.rate = 50; p.lifetimeMin = 1; p.lifetimeMax = 2; p.speedMin = 0.2f; p.speedMax = 0.6f; p.spread = 180;
+            p.shape = 1; p.shapeSize = {0.8f, 0.8f, 0.8f}; p.sizeStart = 0.15f; p.sizeEnd = 0.0f;
+            p.colorStart = {0.4f, 0.7f, 1, 1}; p.colorEnd = {0.8f, 0.3f, 1, 0}; p.acceleration = {0, 0.6f, 0}; p.additive = true;
+        }
+        if (kind != "Lluvia" && kind != "Nieve") scene.transform(e).setPosition(spawnPoint() + Vec3{0, 0.5f, 0});
+        scene.world().add<ParticleSystem>(e, p);
+    } else if (kind == "Foco") {
+        Light l;
+        l.type = Light::Type::Spot;
+        l.range = 15;
+        l.intensity = 2;
+        scene.transform(e).setPosition(spawnPoint() + Vec3{0, 4, 0});
+        scene.transform(e).setEulerDegrees({-90, 0, 0}); // apuntando hacia abajo
+        scene.world().add<Light>(e, l);
     } else if (kind == "Luz puntual") {
         Light l;
         l.type = Light::Type::Point;
@@ -645,6 +734,32 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
     select(e);
     dirty = true;
     return e;
+}
+
+void Editor::Impl::focusSelected() {
+    Entity e = selectedEntity();
+    if (e.isNull()) return;
+    const Mat4 world = scene.computeWorldMatrix(e);
+    Vec3 mn, mx;
+    float radius = 1.0f;
+    Vec3 center = world.translation();
+    if (localBounds(e, mn, mx)) {
+        const AABB box = transformAABB(AABB{mn, mx}, world);
+        center = box.center();
+        radius = std::max(0.25f, box.extents().length());
+    } else if (const Terrain* t = scene.world().get<Terrain>(e)) {
+        const AABB box = transformAABB(terrainBounds(*t), world);
+        center = box.center();
+        radius = box.extents().length();
+    }
+    if (threeD()) {
+        cam3Target = center;
+        cam3Dist = std::clamp(radius * 2.6f, 1.5f, 1500.0f); // que quepa en la vista con algo de margen
+    } else {
+        cam2Center = {center.x, center.y};
+        cam2Size = std::clamp(radius * 1.4f, 0.5f, 500.0f);
+    }
+    setStatus("Enfocado: " + scene.info(e).name);
 }
 
 void Editor::Impl::deleteSelected() {
@@ -722,6 +837,12 @@ void Editor::Impl::play() {
     const AssetRecord* r = project->assets().find(sceneId);
     const size_t errorsBefore = logs.size();
     (void)errorsBefore;
+    // La partida de prueba se guarda fuera de assets/ (no va en el paquete del juego).
+    {
+        std::error_code ec;
+        std::filesystem::create_directories(project->root() + "/.titan", ec);
+        runtime->setSavePath(project->root() + "/.titan/partida.json");
+    }
     // Mismo Renderer y misma caché que el editor: Jugar no recarga nada de lo que ya se ve en la vista.
     if (!runtime->startEmbedded(files, project->assets(), text, r ? r->path : scene.name(), &renderer, &resources)) {
         runtime.reset();
@@ -739,6 +860,7 @@ void Editor::Impl::stop() {
     if (!runtime) return;
     runtime->shutdown();
     runtime.reset();
+    renderer.setQuality(editorQuality); // por si el juego cambió la calidad con Quality.set
     setStatus("Juego detenido");
 }
 
@@ -757,6 +879,7 @@ void Editor::Impl::handleShortcuts() {
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D, false)) duplicateSelected();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_P, false)) runtime ? stop() : play();
     if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Delete, false)) deleteSelected();
+    if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false) && !runtime) focusSelected();
     if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Q, false)) tool = Tool::Select;
     if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_W, false)) tool = Tool::Translate;
     if (!io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E, false)) tool = Tool::Rotate;
@@ -938,6 +1061,7 @@ bool Editor::createProject(const std::string& name, bool threeD, bool) {
 void Editor::play() { impl_->play(); }
 void Editor::stop() { impl_->stop(); }
 bool Editor::isPlaying() const { return impl_->runtime != nullptr; }
+Input* Editor::playInput() { return impl_->runtime ? &impl_->runtime->input() : nullptr; }
 
 void Editor::createEntity(const std::string& kind) { impl_->createEntityOfKind(kind); }
 
@@ -954,6 +1078,9 @@ void Editor::showPanel(const std::string& name) {
     else if (name == "proyectos") m.showBrowser = true;
     else if (name == "rotar") m.tool = Tool::Rotate;
     else if (name == "escalar") m.tool = Tool::Scale;
+    else if (name == "esculpir") m.terrainTool = 0;
+    else if (name == "pintar") m.terrainTool = 4;
+    else if (name == "maquina" && !m.selected.isNull()) { m.machineEditorFor = m.selected; m.showMachineEditor = true; }
 }
 
 void Editor::openScript(const std::string& rel) { impl_->openScriptFile(rel); }

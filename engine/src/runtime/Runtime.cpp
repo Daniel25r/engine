@@ -1,5 +1,7 @@
 #include "titan/runtime/Runtime.h"
 #include "titan/runtime/UIRenderer.h"
+#include "titan/core/AnimationGraph.h"
+#include "titan/core/Particles.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -21,8 +23,16 @@ Runtime::~Runtime() { shutdown(); }
 
 bool Runtime::initSystems(FileSource& files) {
     files_ = &files;
-    if (!usesSharedRenderer() && !renderer_->init(files)) return false;
-    if (cache_ == &ownCache_) cache_->bind(renderer_, &assets_); // la del editor ya apunta a su proyecto
+    actions_.addDefaults();
+    if (!usesSharedRenderer()) {
+        if (!renderer_->init(files)) return false;
+        // Juego exportado: perfil según lo que se puede medir de este dispositivo (el juego puede cambiarlo).
+        const DeviceCaps& c = renderer_->caps();
+        TITAN_INFO("render", "GPU: %s (%s), %s, textura máx. %d, memoria %d MB", c.renderer.c_str(), c.vendor.c_str(),
+                   c.version.c_str(), c.maxTextureSize, c.memoryMB);
+        renderer_->setQuality(QualitySettings::preset(recommendedQuality(c)));
+    }
+    if (cache_ == &ownCache_) cache_->bind(renderer_, &assets_, &files); // la del editor ya apunta a su proyecto
     audio_.init(files, true); // sin tarjeta de sonido el juego sigue funcionando en silencio
     scripts_ = std::make_unique<ScriptSystem>(*this, registry_, [this](AssetRef id, std::string& name, std::string& src) {
         const AssetRecord* r = assets_.find(id);
@@ -210,6 +220,7 @@ void Runtime::frame(const Viewport& viewport) {
     clicked_.clear();
     if (simulate) {
         ui_.update(*scene_, input_, &clicked_);
+        actions_.update(input_, scene_.get()); // después de la UI: los botones y joysticks ya tienen su estado
         for (Entity e : clicked_) scripts_->dispatchEvent(e, "onClick");
         scene_->flushDestroyed();
     }
@@ -241,8 +252,22 @@ void Runtime::frame(const Viewport& viewport) {
     profile_.scriptMs = msSince(t);
 
     // Animación: avanza el tiempo de cada Animator que esté reproduciendo.
-    if (!paused)
-        scene_->world().each<Animator>([&](Entity, Animator& a) { advanceAnimator(a, dt); });
+    if (!paused) {
+        // Animación: máquinas de estados (con la duración real de cada clip) y eventos para los scripts.
+        std::vector<std::pair<Entity, std::string>> animEvents;
+        World& w = scene_->world();
+        w.each<Animator>([&](Entity e, Animator& a) {
+            const MeshRenderer* mr = w.get<MeshRenderer>(e);
+            const int model = mr && !mr->model.isNull() ? cache_->model(mr->model) : -1;
+            updateAnimator(a, dt, [&](const std::string& c) {
+                return renderer_->modelAnimationDuration(model, renderer_->modelAnimationIndex(model, c));
+            });
+            for (const std::string& ev : a.machine.firedEvents) animEvents.emplace_back(e, ev);
+        });
+        for (const auto& [e, ev] : animEvents) scripts_->dispatchEvent(e, "onAnimationEvent", ev.c_str());
+        TransformSystem::update(*scene_); // los emisores necesitan su posición actual
+        updateParticles(*scene_, dt);
+    }
 
     // Audio: el oyente es la cámara activa; las voces 3D siguen a su entidad.
     {
@@ -297,7 +322,8 @@ void Runtime::render(const Viewport& viewport) {
     viewProj_ = view.projection * view.view;
     perspective_ = view.perspective;
     sceneRenderer_.render(*scene_, *renderer_, viewport, view, [this](AssetRef r) { return cache_->texture(r); },
-                          [this](AssetRef r) { return cache_->model(r); });
+                          [this](AssetRef r) { return cache_->model(r); },
+                          [this](AssetRef r) { return cache_->material(r); });
 
     ui_.layout(*scene_, screen_); // los scripts pueden haber cambiado textos, tamaños o posiciones
     drawUI(*renderer_, *scene_, ui_, [this](AssetRef r) { return cache_->texture(r); },
@@ -325,6 +351,16 @@ void Runtime::render(const Viewport& viewport) {
         renderer_->drawText({std::max(h * 0.5f, screen_.x - width - h * 0.6f), h * 0.6f}, h, text, Color{1, 1, 1, 0.75f});
     }
     renderer_->endFrame();
+}
+
+bool Runtime::scriptSetQuality(const std::string& name) {
+    QualityLevel l;
+    if (!parseQuality(name, l)) {
+        TITAN_ERROR("runtime", "Quality.set: perfil desconocido '%s' (muy bajo, bajo, medio, alto, muy alto)", name.c_str());
+        return false;
+    }
+    renderer_->setQuality(QualitySettings::preset(l));
+    return true;
 }
 
 void Runtime::scriptDrawText(float x, float y, float size, const std::string& text, Color color) {
@@ -356,6 +392,8 @@ bool Runtime::scriptScreenToWorld(Vec2 px, Vec3& world) const {
 
 void Runtime::pause() {
     input_.cancelAll();
+    // Android puede cerrar la app en segundo plano: la partida pendiente se escribe ya.
+    if (scripts_ && scripts_->saveDirty()) scripts_->writeSave();
     audio_.setPaused(true);
     events_.emit(AppPausedEvent{});
 }
@@ -370,6 +408,7 @@ void Runtime::resume() {
 void Runtime::shutdown() {
     if (!started_) return;
     started_ = false;
+    if (scripts_ && scripts_->saveDirty()) scripts_->writeSave();
     if (scripts_) scripts_->detach();
     physicsDestroySub_.reset();
     physics_.clear();

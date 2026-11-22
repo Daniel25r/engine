@@ -7,7 +7,7 @@ using namespace titan;
 
 namespace {
 
-class FakeHost final : public ScriptHost {
+class FakeHost : public ScriptHost {
 public:
     Input input;
     std::string requestedScene;
@@ -295,4 +295,65 @@ TEST("scripts: los toques sobre la interfaz no cuentan como toques del juego") {
     CHECK(f.scripts.runString("assert(Input.touchCount() == 1 and Input.touch(1).id == 2 and Input.tapped())"));
     f.host.input.captureForUI(2);
     CHECK(f.scripts.runString("assert(Input.touchCount() == 0 and not Input.tapped())"));
+}
+
+TEST("scripts: Input.action, Input.axis, Input.define y Input.key") {
+    Fixture f;
+    InputActions actions;
+    actions.addDefaults();
+    struct Host : FakeHost {
+        InputActions* a = nullptr;
+        InputActions* scriptActions() override { return a; }
+    };
+    // El Fixture usa FakeHost: se prueba la API a través de un ScriptSystem con un host que sí tiene acciones.
+    Host host;
+    host.a = &actions;
+    ComponentRegistry reg = ComponentRegistry::createDefault();
+    ScriptSystem scripts(host, reg, [](AssetRef, std::string&, std::string&) { return false; });
+    host.input.setKey(Key::D, true);
+    host.input.setKey(Key::Space, true);
+    actions.update(host.input, nullptr);
+    CHECK(scripts.runString("local x, y = Input.axis('Mover') assert(x == 1 and y == 0, x)"));
+    CHECK(scripts.runString("assert(Input.action('Saltar') and Input.pressed('Saltar') and Input.key('Space'))"));
+    CHECK(scripts.runString("Input.define('Bailar', 'boton', {'key:B', 'pad:Y'})"));
+    CHECK(!scripts.runString("Input.define('Roto', 'boton', {'key:Inventada'})"));
+    CHECK(scripts.runString("assert(Input.gamepad() == false and Input.action('NoExiste') == false)"));
+}
+
+TEST("scripts: Save guarda tablas, números y textos en un archivo y los recupera") {
+    struct SaveHost : FakeHost {
+        std::string path;
+        std::string scriptSavePath() const override { return path; }
+    };
+    SaveHost host;
+    host.path = titan_test::tempDir("partida") + "/partida.json";
+    ComponentRegistry reg = ComponentRegistry::createDefault();
+    {
+        ScriptSystem s(host, reg, [](AssetRef, std::string&, std::string&) { return false; });
+        CHECK(s.runString(R"(
+            assert(Save.get('nivel', 1) == 1)             -- por defecto
+            Save.set('nivel', 3)
+            Save.set('nombre', 'Ana')
+            Save.set('inventario', {'espada', 'poción'})
+            Save.set('ajustes', {musica = 0.5, vibrar = true})
+            assert(Save.has('nivel') and Save.write())
+        )"));
+    }
+    { // otra sesión: lo lee del archivo
+        ScriptSystem s(host, reg, [](AssetRef, std::string&, std::string&) { return false; });
+        CHECK(s.runString(R"(
+            assert(Save.get('nivel') == 3 and Save.get('nombre') == 'Ana')
+            local inv = Save.get('inventario')
+            assert(#inv == 2 and inv[2] == 'poción')
+            local a = Save.get('ajustes')
+            assert(a.musica == 0.5 and a.vibrar == true)
+            Save.delete('nombre')
+            assert(not Save.has('nombre'))
+        )"));
+        CHECK(!s.runString("Save.set('f', function() end)")); // las funciones no se guardan
+        CHECK(!s.runString("Save.set('grande', string.rep('x', 2 * 1024 * 1024))")); // límite de 1 MB
+    }
+    FakeHost noDisk; // sin ruta: funciona en memoria y write() dice por qué no guarda
+    ScriptSystem s(noDisk, reg, [](AssetRef, std::string&, std::string&) { return false; });
+    CHECK(s.runString("Save.set('x', 1) local ok, err = Save.write() assert(not ok and err ~= nil and Save.get('x') == 1)"));
 }

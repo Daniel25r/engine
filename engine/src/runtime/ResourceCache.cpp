@@ -1,6 +1,8 @@
 #include "titan/runtime/ResourceCache.h"
 
+#include "titan/core/FileSource.h"
 #include "titan/core/Log.h"
+#include "titan/core/Serialization.h"
 
 namespace titan {
 
@@ -41,7 +43,29 @@ int ResourceCache::font(AssetRef ref) {
     return f;
 }
 
+const MeshRenderer* ResourceCache::material(AssetRef ref) {
+    if (ref.isNull() || !assets_ || !files_) return nullptr;
+    auto it = materials_.find(ref.value);
+    if (it != materials_.end()) return it->second.get();
+    std::unique_ptr<MeshRenderer> m;
+    const AssetRecord* r = assets_->find(ref);
+    std::string text;
+    if (r && files_->readText("assets/" + r->path, text)) {
+        m = std::make_unique<MeshRenderer>();
+        const LoadReport rep = parseMaterial(text, *m);
+        for (const auto& e : rep.errors) TITAN_ERROR("render", "Material %s: %s", r->path.c_str(), e.c_str());
+        for (const auto& w : rep.warnings) TITAN_WARN("render", "Material %s: %s", r->path.c_str(), w.c_str());
+        if (!rep.ok()) m.reset();
+    } else {
+        TITAN_ERROR("render", "Material %s no encontrado", ref.toString().c_str());
+    }
+    const MeshRenderer* out = m.get();
+    materials_[ref.value] = std::move(m);
+    return out;
+}
+
 void ResourceCache::clear() {
+    materials_.clear();
     textures_.clear();
     models_.clear();
     fonts_.clear();

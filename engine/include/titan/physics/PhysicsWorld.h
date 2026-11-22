@@ -47,11 +47,24 @@ public:
                  Entity ignore = {}) const override;
     void setGravity(const Vec3& g) override;
     Vec3 gravity() const override;
+    void setLayerCollision(int a, int b, bool collide) override;
+    bool layersCollide(int a, int b) const override;
+    bool raycastMasked(const Vec3& origin, const Vec3& direction, float maxDistance, RaycastHit& hit, uint32_t layerMask,
+                       Entity ignore = {}) const override;
+    bool sphereCast(const Vec3& origin, float radius, const Vec3& direction, float maxDistance, RaycastHit& hit,
+                    uint32_t layerMask = 0xFFFF, Entity ignore = {}) const override;
+    std::vector<Entity> overlapSphere(const Vec3& center, float radius, uint32_t layerMask = 0xFFFF) const override;
+    std::vector<Entity> overlapBox(const Vec3& center, const Vec3& halfExtents, const Quat& rotation,
+                                   uint32_t layerMask = 0xFFFF) const override;
+    bool isCharacter(Entity e) const override;
 
     struct Impl;
 
 private:
     void createBodies(Scene& scene, const std::vector<Entity>& list);
+    void createCharacter(Scene& scene, Entity e, const CharacterController& cc);
+    void createJoints(Scene& scene);
+    void createTerrainBody(Scene& scene, Entity e, const Terrain& t);
     std::unique_ptr<Impl> impl_;
 };
 

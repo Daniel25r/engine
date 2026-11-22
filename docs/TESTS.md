@@ -61,11 +61,16 @@ Arnés propio y mínimo (`tests/Test.h`), sin dependencias. Las pruebas que toca
 [ OK ] scripts: props del script con valores cambiados en el editor
 [ OK ] scripts: interfaz de juego (texto, barra, botón, joystick, color) y onClick
 [ OK ] scripts: los toques sobre la interfaz no cuentan como toques del juego
+[ OK ] scripts: Input.action, Input.axis, Input.define y Input.key
+[ OK ] scripts: Save guarda tablas, números y textos en un archivo y los recupera
 [ OK ] geometría: primitivas cerradas, antihorarias y con normales hacia fuera
 [ OK ] física: un cubo cae por gravedad y se apoya en el suelo
 [ OK ] física: eventos de colisión al empezar y terminar
 [ OK ] física: sensores (triggers) detectan sin frenar
 [ OK ] física: raycast, impulsos y gravedad
+[ OK ] física: el personaje cae, se apoya, camina, sube un escalón y salta
+[ OK ] física: capas de colisión, sphereCast y overlaps
+[ OK ] física: bisagra sujeta al mundo y cuerda entre dos cuerpos
 [ OK ] audio: decodifica un WAV, lo mezcla y termina solo
 [ OK ] audio: bucle, volumen y voces que siguen a su entidad
 [ OK ] ui: anclajes, pivote, estirado y escala con la altura de pantalla
@@ -77,8 +82,26 @@ Arnés propio y mínimo (`tests/Test.h`), sin dependencias. Las pruebas que toca
 [ OK ] culling: caja transformada con giro, escala y traslación
 [ OK ] culling: frustum de perspectiva (delante, detrás, a los lados, lejos)
 [ OK ] culling: frustum de una cámara movida y de una ortográfica (2D y sombras)
+[ OK ] calidad: cada perfil cambia opciones reales y en orden creciente
+[ OK ] calidad: nombres y recomendación según capacidades medibles
+[ OK ] materiales: .mat ida y vuelta con mapas, repetición y recorte
+[ OK ] materiales: archivos ajenos o futuros se rechazan; escenas antiguas cargan con valores por defecto
+[ OK ] luces: focos se guardan y cargan
+[ OK ] partículas: ritmo de emisión, vida y máximo
+[ OK ] partículas: ráfaga, sin repetir, parar y emisión puntual
+[ OK ] partículas: gravedad, dirección, espacio del mundo y emisión por distancia
+[ OK ] entrada: teclas, nombres y bordes de pulsación
+[ OK ] entrada: acciones por defecto con teclado, mando y diagonal normalizada
+[ OK ] entrada: acciones con botones y joystick de la UI, y definiciones propias
+[ OK ] animación: estados, condiciones, trigger y salida al terminar el clip
+[ OK ] animación: mezcla 1D sincronizada y eventos
+[ OK ] animación: la máquina se guarda y se carga; sin estados, el Animator funciona como antes
+[ OK ] terreno: base64 ida y vuelta
+[ OK ] terreno: esculpir sube, baja, aplana y suaviza con caída suave
+[ OK ] terreno: pintura de capas, rayo, montañas, mapa de alturas y cambio de resolución
+[ OK ] terreno: se guarda con la escena y tiene colisión
 
-64 pruebas, 0 fallidas (408.9 ms)
+87 pruebas, 0 fallidas (697.8 ms)
 ```
 
 ## Pruebas de integración ejecutadas a mano en esta sesión
@@ -142,6 +165,31 @@ Comprobado también:
 - Jugar, detener y volver a jugar (`--play-at 5,60 --stop-at 40`) con el HUD: joystick, «Saltos: 2» y texto con tildes.
 - Tras detener, la vista del editor muestra la escena, los gizmos y los modelos animados.
 - El reproductor independiente da los mismos 950 draw calls en la prueba de 1600 objetos.
+
+## Versión 0.13.0 (PC, editor y reproductor de escritorio; nada en un teléfono)
+
+| Prueba | Resultado |
+|---|---|
+| Perfiles de calidad con la escena de 1600 objetos | ver tabla siguiente; capturas de "muy bajo" (sin sombras, 60 % de resolución) y "alto" (sombras, FXAA) |
+| Bloom y viñeta en el editor jugando | El cubo emisivo brilla; la UI se ve nítida encima. Primer intento con 5 niveles sin normalizar: cielo blanco; corregido |
+| Modelo DamagedHelmet (Khronos, CC-BY 4.0) | Se ven el relieve del mapa normal, rayas, metal y la emisión; un foco ilumina el suelo |
+| Fuego, humo, chispas y magia en el editor | Los 4 efectos se simulan y se dibujan |
+| Teclado simulado (`TITAN_KEYS="D@10-70;Space@20"`) | El cubo se mueve a x = 10,8 con `Input.axis("Mover")` |
+| Personaje con teclado | Camina de x = −3 a x = 5,1 y salta (y = 1,1 en el aire) |
+| Máquina de estados del zorro | El editor muestra parámetros, estados (mezcla Walk/Run) y transiciones; estado actual "Mover" |
+| Terreno con personaje | El personaje cae y camina por las colinas a la altura exacta del terreno (y = 1,54 = altura del terreno) |
+
+Escena de 1600 objetos, 1280×720, render por software (llvmpipe), máquina sin otras tareas. **Los tiempos no
+representan a un teléfono**; los draw calls sí.
+
+| Perfil | Resolución de la escena | Sombras | Draw calls | Fotograma |
+|---|---|---|---|---|
+| Muy bajo | 768×432 | no | 563 | 10,3 ms |
+| Bajo | 960×540 | 1024 | 950 | 21,0 ms |
+| Medio | 1152×648 | 1024 | 950 | 24,6 ms |
+| Alto | 1280×720 | 2048 | 950 | 32,2 ms |
+| Muy alto | 1280×720 | 4096 | 951 | 48,7 ms |
+| Alto sin culling | 1280×720 | 2048 | 3206 | 37,6 ms |
 
 ## Mediciones
 

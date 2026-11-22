@@ -14,6 +14,8 @@ object NativeBridge {
     @JvmStatic external fun nativeTouch(action: Int, id: Int, x: Float, y: Float)
     @JvmStatic external fun nativeText(text: String)
     @JvmStatic external fun nativeKey(key: Int, down: Boolean)
+    @JvmStatic external fun nativeGameKey(keyCode: Int, down: Boolean)
+    @JvmStatic external fun nativeGameAxes(x: Float, y: Float, z: Float, rz: Float, lt: Float, rt: Float)
     @JvmStatic external fun nativeScroll(x: Float, y: Float, amount: Float)
     @JvmStatic external fun nativePause()
     @JvmStatic external fun nativeResume()

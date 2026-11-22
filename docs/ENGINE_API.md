@@ -35,6 +35,7 @@ return Nave
 | `onCollisionEnter(otro)` / `onCollisionExit(otro)` | Empieza / termina un choque físico |
 | `onTriggerEnter(otro)` / `onTriggerExit(otro)` | Algo entra / sale de un Collider marcado como trigger |
 | `onClick()` | Se ha pulsado el UIButton de esta entidad |
+| `onAnimationEvent(nombre)` | El Animator de esta entidad pasó por un evento de su máquina de estados |
 
 Variables editables en Detalles: `local Clase = { props = { velocidad = 5, activo = true, nombre = "x" } }`.
 Cada entidad puede cambiar esos valores en el editor; en el script se leen como `self.velocidad`.
@@ -68,6 +69,10 @@ Si un método lanza un error, el error se registra y esa instancia deja de ejecu
 | `isPressed()`, `wasClicked()`, `setInteractable(b)` | Su UIButton: se mantiene pulsado / se pulsó y soltó encima en este fotograma |
 | `getJoystick()` → x, y | Su UIJoystick, de −1 a 1 (Y positiva = arriba) |
 | `getUIPosition()`, `setUIPosition(x, y)`, `setUISize(w, h)` | Su UIRect, en píxeles de referencia |
+| `move(x, z)`, `jump([velocidad=5])`, `isGrounded()` | Su CharacterController: velocidad horizontal en m/s (se mantiene hasta el siguiente `move`), salto, si pisa suelo |
+| `setAnimParam(nombre, valor)`, `setAnimTrigger(nombre)`, `getAnimParam(nombre)`, `getAnimState()` | Máquina de estados de su Animator (valor numérico o booleano) |
+| `playParticles()`, `stopParticles([quitarLasVivas])`, `emitParticles(n)`, `particleCount()` | Su ParticleSystem |
+| `terrainHeight(x, z)` → y | Altura de su Terrain en ese punto del mundo (para colocar cosas o pegar al suelo) |
 
 Las funciones que devuelven vectores devuelven varios valores: `local x, y, z = e:getPosition()`.
 
@@ -78,8 +83,16 @@ Las funciones que devuelven vectores devuelven varios valores: `local x, y, z = 
 | `Entity.find(nombre)`, `Entity.get(id)`, `Entity.create(nombre [, padre])` | Buscar y crear entidades |
 | `Scene.load(nombre o ruta)`, `Scene.name()` | Cambiar de escena (se aplica al final del fotograma) |
 | `Scene.instantiate(prefab, x, y, z)` → entidad | Crear una copia de un prefab con sus scripts y su física |
-| `Physics.raycast(ox,oy,oz, dx,dy,dz [, distancia, ignorar])` → entidad, x, y, z, distancia | Rayo contra los colliders |
+| `Physics.raycast(ox,oy,oz, dx,dy,dz [, distancia, ignorar, máscara])` → entidad, x, y, z, distancia, nx, ny, nz | Rayo contra los colliders (y la normal de la superficie) |
+| `Physics.sphereCast(ox,oy,oz, radio, dx,dy,dz [, distancia, ignorar, máscara])` → igual que raycast | Lanza una esfera |
+| `Physics.overlapSphere(x,y,z, radio [, máscara])`, `Physics.overlapBox(x,y,z, mx,my,mz [, máscara])` → lista de entidades | Qué hay dentro de una zona |
+| `Physics.setLayerCollision(a, b, choca)`, `Physics.layersCollide(a, b)` | Capas de colisión 0..15 (máscara: bit i = capa i; por defecto todas) |
 | `Physics.setGravity(x,y,z)`, `Physics.getGravity()` | Gravedad del mundo |
+| `Input.action(nombre)`, `Input.pressed(nombre)`, `Input.released(nombre)`, `Input.axis(nombre)` → x, y | Acciones: el mismo código vale para dedo, teclado y mando (ver más abajo) |
+| `Input.define(nombre, "boton"/"eje", {enlaces})` | Crear o cambiar una acción |
+| `Input.key(nombre)`, `Input.keyPressed(nombre)`, `Input.gamepad()` | Teclado ("Space", "W", "LeftShift"...) y si hay un mando conectado |
+| `Quality.set("muy bajo"/"bajo"/"medio"/"alto"/"muy alto")`, `Quality.get()`, `Quality.recommended()`, `Quality.device()` | Calidad gráfica y datos medidos del dispositivo (para un menú de ajustes) |
+| `Save.set(clave, valor)`, `Save.get(clave [, defecto])`, `Save.has`, `Save.delete`, `Save.clear`, `Save.write()` | Partida guardada: números, textos, booleanos y tablas; máx. 1 MB; se escribe sola al pausar o cerrar |
 | `Audio.play(sonido [, volumen])`, `Audio.playAt(sonido, x, y, z [, volumen])`, `Audio.setVolume(v)` | Sonidos sueltos (por ruta o por nombre) |
 | `Time.delta()`, `Time.fixedDelta()`, `Time.time()`, `Time.frame()` | Tiempo |
 | `Input.touchCount()`, `Input.touch(i)` → `{id, x, y, phase}`, `Input.touchWorld(i)` → x,y,z (plano z = 0 en 2D; suelo y = 0 con cámara en perspectiva), `Input.tapped()` | Táctil; `i` empieza en 1; `phase` es "began" o "held". Los dedos que están usando un botón o joystick de la interfaz no aparecen |
@@ -122,6 +135,49 @@ function Jugador:onUpdate(dt)
     self.vida:setFill(self.salud / 100)
 end
 return Jugador
+```
+
+### Acciones de entrada (Input Actions)
+
+Acciones que existen desde el principio:
+
+| Acción | Tipo | Enlaces por defecto |
+|---|---|---|
+| `Mover` | eje | WASD, flechas, stick izquierdo, cualquier UIJoystick |
+| `Mirar` | eje | stick derecho |
+| `Saltar` | botón | Espacio, A del mando, UIButton llamado "Saltar" |
+| `Atacar` | botón | J, X, gatillo derecho, UIButton "Atacar" |
+| `Interactuar` | botón | E, Y, UIButton "Interactuar" |
+| `Correr` | botón | Shift izquierdo, LB, UIButton "Correr" |
+| `Pausa` | botón | Escape, Start, UIButton "Pausa" |
+
+Enlaces posibles: `key:Space`, `pad:A` (A, B, X, Y, LB, RB, Back, Start, DpadUp...), `pad:LeftTrigger`, `ui:NombreDelBotón`,
+`touch` (cualquier toque del juego), y para ejes `keys:WASD`, `keys:Arrows`, `pad:LeftStick`, `pad:RightStick`,
+`uijoy:NombreDelJoystick` (o `uijoy:*`). Los sticks tienen zona muerta (0,15) y el teclado en diagonal no va más rápido.
+
+```lua
+function Jugador:onUpdate(dt)
+    local x, y = Input.axis("Mover")
+    self.entity:move(x * 5, -y * 5)                  -- CharacterController
+    if Input.pressed("Saltar") then self.entity:jump(6) end
+end
+```
+
+### Personaje, partículas, animación y guardado
+
+```lua
+-- Máquina de estados del Animator (se crea en Detalles › Animator › Estados)
+self.entity:setAnimParam("velocidad", velocidad)     -- mezcla 1D Walk/Run
+if Input.pressed("Atacar") then self.entity:setAnimTrigger("atacar") end
+function Jugador:onAnimationEvent(nombre) if nombre == "paso" then Audio.play("paso") end end
+
+-- Partículas
+Entity.find("Chispas"):emitParticles(30)           -- ráfaga en un impacto
+
+-- Partida guardada
+Save.set("nivel", 3)
+Save.set("inventario", {"espada", "poción"})
+local nivel = Save.get("nivel", 1)
 ```
 
 ## C++ (para el motor, las herramientas y el futuro editor)

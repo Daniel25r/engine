@@ -12,6 +12,7 @@
 #include "titan/core/FileSource.h"
 #include "titan/core/Log.h"
 #include "titan/editor/Editor.h"
+#include "AndroidInput.h"
 
 namespace {
 
@@ -164,6 +165,15 @@ JNIEXPORT void JNICALL BRIDGE(nativeText)(JNIEnv* e, jclass, jstring text) {
 JNIEXPORT void JNICALL BRIDGE(nativeKey)(JNIEnv*, jclass, jint key, jboolean down) {
     if (gEditor && key >= 0 && key <= static_cast<int>(titan::EditorKey::R))
         gEditor->onKey(static_cast<titan::EditorKey>(key), down);
+}
+
+// Teclado físico y mando mientras se juega en el editor (códigos de android.view.KeyEvent).
+JNIEXPORT void JNICALL BRIDGE(nativeGameKey)(JNIEnv*, jclass, jint keycode, jboolean down) {
+    if (titan::Input* in = gEditor ? gEditor->playInput() : nullptr) titan::androidinput::applyKey(*in, keycode, down);
+}
+
+JNIEXPORT void JNICALL BRIDGE(nativeGameAxes)(JNIEnv*, jclass, jfloat x, jfloat y, jfloat z, jfloat rz, jfloat lt, jfloat rt) {
+    if (titan::Input* in = gEditor ? gEditor->playInput() : nullptr) titan::androidinput::applyAxes(*in, x, y, z, rz, lt, rt);
 }
 
 JNIEXPORT void JNICALL BRIDGE(nativeScroll)(JNIEnv*, jclass, jfloat x, jfloat y, jfloat amount) {

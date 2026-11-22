@@ -260,11 +260,16 @@ bool Renderer::buildModel(Model& m) {
                                   toSrgb(pbr.base_color_factor[2]), pbr.base_color_factor[3]};
                     part.metallic = pbr.metallic_factor;
                     part.roughness = pbr.roughness_factor;
-                    part.texture = textureOf(pbr.base_color_texture.texture);
+                    part.maps.base = textureOf(pbr.base_color_texture.texture);
+                    part.maps.metallicRoughness = textureOf(pbr.metallic_roughness_texture.texture);
                 }
+                part.maps.normal = textureOf(mat->normal_texture.texture);
+                part.maps.emission = textureOf(mat->emissive_texture.texture);
+                part.maps.occlusion = textureOf(mat->occlusion_texture.texture);
                 part.emission = {toSrgb(mat->emissive_factor[0]), toSrgb(mat->emissive_factor[1]), toSrgb(mat->emissive_factor[2]), 1};
                 part.doubleSided = mat->double_sided;
-                if (mat->alpha_mode != cgltf_alpha_mode_blend) part.color.a = 1; // MASK aún se trata como opaco
+                if (mat->alpha_mode == cgltf_alpha_mode_mask) part.alphaCutoff = mat->alpha_cutoff;
+                if (mat->alpha_mode != cgltf_alpha_mode_blend) part.color.a = 1;
             }
             m.triangles += part.mesh.indexCount / 3;
             m.parts.push_back(part);
@@ -290,16 +295,28 @@ int Renderer::modelTriangles(int model) const {
     return model < 0 || model >= static_cast<int>(models_.size()) ? 0 : models_[model].triangles;
 }
 
-void Renderer::drawModel(int model, const Mat4& world, const MeshRenderer& mat, TextureHandle overrideTex,
+void Renderer::drawModel(int model, const Mat4& world, const MeshRenderer& mat, const MaterialTextures& o,
                          const std::vector<Mat4>* joints) {
     if (model < 0 || model >= static_cast<int>(models_.size())) return;
+    auto pick = [](TextureHandle over, TextureHandle own) { return over != kWhiteTexture ? over : own; };
     for (const ModelPart& p : models_[model].parts) {
         currentJoints_ = p.skinned ? joints : nullptr;
-        const Color c{p.color.r * mat.color.r, p.color.g * mat.color.g, p.color.b * mat.color.b, p.color.a * mat.color.a};
-        const Color e{std::max(p.emission.r, mat.emission.r), std::max(p.emission.g, mat.emission.g),
+        Surface s;
+        s.color = {p.color.r * mat.color.r, p.color.g * mat.color.g, p.color.b * mat.color.b, p.color.a * mat.color.a};
+        s.metallic = p.metallic;
+        s.roughness = p.roughness;
+        s.emission = {std::max(p.emission.r, mat.emission.r), std::max(p.emission.g, mat.emission.g),
                       std::max(p.emission.b, mat.emission.b), 1};
-        drawSurface(p.mesh.vao, p.mesh.indexCount, true, world, c, p.metallic, p.roughness, e, mat.prototypeGrid, mat.unlit,
-                    overrideTex != kWhiteTexture ? overrideTex : p.texture, p.doubleSided);
+        s.grid = mat.prototypeGrid;
+        s.unlit = mat.unlit;
+        s.doubleSided = p.doubleSided || mat.doubleSided;
+        s.maps = {pick(o.base, p.maps.base), pick(o.normal, p.maps.normal), pick(o.metallicRoughness, p.maps.metallicRoughness),
+                  pick(o.emission, p.maps.emission), pick(o.occlusion, p.maps.occlusion)};
+        s.tiling = mat.tiling;
+        s.offset = mat.offset;
+        s.alphaCutoff = mat.alphaClip ? mat.alphaCutoff : p.alphaCutoff;
+        s.normalStrength = mat.normalStrength;
+        drawSurface(p.mesh.vao, p.mesh.indexCount, true, world, s);
     }
     currentJoints_ = nullptr;
 }

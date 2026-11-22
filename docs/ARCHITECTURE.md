@@ -22,12 +22,12 @@ Lo que aún no existe está marcado como tal.
 
 | Módulo | Depende de | No puede depender de | Contenido |
 |---|---|---|---|
-| `titan_core` | biblioteca estándar, nlohmann/json | GPU, plataforma, Lua | Todo lo que define un juego como datos; cajas y frustum |
+| `titan_core` | biblioteca estándar, nlohmann/json | GPU, plataforma, Lua | Todo lo que define un juego como datos; cajas y frustum; perfiles de calidad; partículas, terreno, máquinas de estados de animación y acciones de entrada (lógica sin GPU, con pruebas) |
 | `titan_ui` | core, stb_truetype | GPU | Atlas de fuentes SDF, diseño de la UI, botones y joystick |
 | `titan_scripting` | core, Lua | GPU, plataforma | Intérprete aislado y API de scripts |
 | `titan_physics` | core, Jolt | GPU | Mundo físico construido a partir de la escena |
 | `titan_audio` | core, miniaudio | GPU | Voces, mezcla y sonido 3D |
-| `titan_render` | core, ui, OpenGL ES 3.0, cgltf, stb_image | escenas, entidades | Mallas, modelos, sprites, texto, sombras |
+| `titan_render` | core, ui, OpenGL ES 3.0, cgltf, stb_image | escenas, entidades | Mallas, modelos, sprites, texto, sombras, terreno, partículas; `PostProcess.*` (render target, bloom, FXAA, color) |
 | `titan_runtime` | todos los sistemas | plataforma, editor | Bucle de juego; SceneRenderer (escena → lista de dibujo con culling) |
 | `titan_editor` | runtime y sistemas, ImGui | plataforma | Editor; no va en los juegos exportados |
 | plataforma | runtime / editor | — | Ventana, contexto GL, entrada, archivos |
@@ -156,6 +156,9 @@ Detalles y API en `docs/ENGINE_API.md`. Aislamiento:
 | D8 | Editor en C++ con Dear ImGui sobre el renderizador propio; Kotlin solo para la actividad, el teclado y los archivos | Un único editor para Android y escritorio que se puede ejecutar y probar de forma automática; la vista de escena y el modo Play comparten contexto GL con la interfaz | Interfaz Kotlin/Compose + JNI (decisión anterior: duplicaba la interfaz por plataforma y no se podía probar sin dispositivo) |
 
 ## 11b. Pipeline gráfico 3D (v0.4)
+
+Pipeline actual (0.13): sombras → render target a la escala del perfil → cielo, terreno, opacos, transparentes,
+sprites, partículas → posprocesado (bloom, FXAA, color, viñeta) a resolución completa → interfaz del juego → texto.
 
 0. Visibilidad: cada malla tiene una caja en el mundo (`transformAABB` de su caja local; ×2 para personajes
    animados). Se compara con el frustum de la cámara (pasada principal) y con la caja ortográfica de la luz

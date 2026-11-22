@@ -11,6 +11,8 @@
 #define GLFW_INCLUDE_ES3
 #include <GLFW/glfw3.h>
 
+#include "GlfwInput.h"
+
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
@@ -78,6 +80,15 @@ int main(int argc, char** argv) {
             if (std::sscanf(p, "%f,%f@%ld", &t.x, &t.y, &t.frame) == 3) taps.push_back(t);
         }
 
+    struct KeyPress { titan::Key key; long from, to; };
+    std::vector<KeyPress> keyScript;
+    if (const char* s = std::getenv("TITAN_KEYS"))
+        for (const char* p = s; p && *p; p = std::strchr(p, ';') ? std::strchr(p, ';') + 1 : nullptr) {
+            char name[32] = {};
+            long a = 0, b = -1;
+            const int n = std::sscanf(p, "%31[^@]@%ld-%ld", name, &a, &b);
+            if (n >= 2) keyScript.push_back({titan::keyFromName(name), a, n == 3 ? b : a + 2});
+        }
     if (!glfwInit()) {
         TITAN_ERROR("player", "No se pudo iniciar GLFW");
         return 1;
@@ -115,18 +126,29 @@ int main(int argc, char** argv) {
             if (focused) gRuntime->resume();
             else gRuntime->pause();
         });
+        glfwSetKeyCallback(window, [](GLFWwindow*, int key, int, int action, int) {
+            if (action == GLFW_REPEAT) return;
+            gRuntime->input().setKey(titan::glfwinput::keyFromGlfw(key), action == GLFW_PRESS);
+        });
 
         // Diagnóstico: TITAN_CULLING=0 dibuja todo; TITAN_BENCH=1 imprime medias al terminar (con TITAN_FRAMES).
         const bool bench = std::getenv("TITAN_BENCH") != nullptr;
         if (const char* c = std::getenv("TITAN_CULLING")) runtime.sceneRenderer().culling = std::atoi(c) != 0;
         double sumFrame = 0, sumRender = 0;
         long measured = 0;
+        runtime.setSavePath(std::getenv("TITAN_SAVE") ? std::getenv("TITAN_SAVE") : std::string(argv[1]) + "/partida.json");
         if (!runtime.start(files)) {
             exitCode = 1;
         } else {
+            if (const char* q = std::getenv("TITAN_QUALITY")) runtime.scriptSetQuality(q); // "bajo", "alto"...
             long frames = 0;
             while (!glfwWindowShouldClose(window) && !runtime.quitRequested()) {
                 glfwPollEvents();
+                titan::glfwinput::pollGamepad(runtime.input());
+                for (const KeyPress& k : keyScript) { // TITAN_KEYS="D@40-90;Space@60": teclas simuladas para pruebas
+                    if (frames == k.from) runtime.input().setKey(k.key, true);
+                    if (frames == k.to) runtime.input().setKey(k.key, false);
+                }
                 for (const Tap& t : taps) {
                     if (frames == t.frame) runtime.input().touchBegan(99, {t.x, t.y});
                     if (frames == t.frame + 2) runtime.input().touchEnded(99, {t.x, t.y});
@@ -151,9 +173,10 @@ int main(int argc, char** argv) {
                 const titan::CullStats& cs = runtime.sceneRenderer().cullStats();
                 const titan::RenderStats& rs = runtime.renderer().stats();
                 std::printf("BENCH culling=%d fotogramas=%ld fotograma=%.2f ms render=%.2f ms draw_calls=%d "
-                            "(sombras %d) mallas=%d/%d sombras=%d/%d triangulos=%d\n",
+                            "(sombras %d) mallas=%d/%d sombras=%d/%d triangulos=%d posproceso=%d escena=%dx%d calidad=%s\n",
                             runtime.sceneRenderer().culling ? 1 : 0, measured, sumFrame / measured, sumRender / measured,
-                            rs.drawCalls, rs.shadowDrawCalls, cs.meshesVisible, cs.meshes, cs.shadowCastersVisible, cs.shadowCasters, rs.triangles);
+                            rs.drawCalls, rs.shadowDrawCalls, cs.meshesVisible, cs.meshes, cs.shadowCastersVisible, cs.shadowCasters, rs.triangles,
+                            rs.postPasses, rs.sceneWidth, rs.sceneHeight, runtime.scriptQuality().c_str());
             }
         }
         runtime.shutdown();

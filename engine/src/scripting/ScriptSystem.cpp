@@ -9,27 +9,17 @@
 #include "lauxlib.h"
 #include "lua.h"
 #include "lualib.h"
+#include "titan/core/FileIO.h"
 #include "titan/core/Log.h"
+#include "ScriptInternal.h"
 
 namespace titan {
 
+using namespace script_detail;
+
 namespace {
 
-const char* kEntityMeta = "Titan.Entity";
-
 double now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
-
-ScriptSystem& sys(lua_State* L) {
-    void* ud = nullptr;
-    lua_getallocf(L, &ud);
-    return *static_cast<ScriptSystem*>(ud);
-}
-
-Scene& scene(lua_State* L) {
-    Scene* s = sys(L).scene();
-    if (!s) luaL_error(L, "no hay ninguna escena cargada");
-    return *s;
-}
 
 void* luaAlloc(void* ud, void* ptr, size_t osize, size_t nsize) {
     return static_cast<ScriptSystem*>(ud)->allocate(ptr, osize, nsize);
@@ -48,44 +38,6 @@ int traceback(lua_State* L) {
 }
 
 // ---------------------------------------------------------------- Entity
-
-struct LuaEntity {
-    uint32_t index;
-    uint32_t generation;
-};
-
-void pushEntity(lua_State* L, Entity e) {
-    if (e.isNull()) {
-        lua_pushnil(L);
-        return;
-    }
-    auto* u = static_cast<LuaEntity*>(lua_newuserdatauv(L, sizeof(LuaEntity), 0));
-    *u = {e.index, e.generation};
-    luaL_setmetatable(L, kEntityMeta);
-}
-
-Entity toEntity(lua_State* L, int idx) {
-    auto* u = static_cast<LuaEntity*>(luaL_checkudata(L, idx, kEntityMeta));
-    return {u->index, u->generation};
-}
-
-Entity live(lua_State* L, int idx) {
-    const Entity e = toEntity(L, idx);
-    if (!scene(L).isValid(e)) luaL_error(L, "la entidad ya no existe (fue destruida)");
-    return e;
-}
-
-int push3(lua_State* L, const Vec3& v) {
-    lua_pushnumber(L, v.x);
-    lua_pushnumber(L, v.y);
-    lua_pushnumber(L, v.z);
-    return 3;
-}
-
-Vec3 check3(lua_State* L, int first, const Vec3& def) {
-    return {static_cast<float>(luaL_optnumber(L, first, def.x)), static_cast<float>(luaL_optnumber(L, first + 1, def.y)),
-            static_cast<float>(luaL_optnumber(L, first + 2, def.z))};
-}
 
 SpriteRenderer& sprite(lua_State* L, Entity e) {
     SpriteRenderer* sp = scene(L).world().get<SpriteRenderer>(e);
@@ -458,14 +410,16 @@ int p_raycast(lua_State* L) {
     const Vec3 d{float(luaL_checknumber(L, 4)), float(luaL_checknumber(L, 5)), float(luaL_checknumber(L, 6))};
     RaycastHit hit;
     const Entity ignore = lua_isnoneornil(L, 8) ? Entity{} : toEntity(L, 8);
-    if (!physics(L).raycast(o, d, float(luaL_optnumber(L, 7, 1000)), hit, ignore) || !scene(L).isValid(hit.entity)) {
+    const uint32_t mask = static_cast<uint32_t>(luaL_optinteger(L, 9, 0xFFFF)); // capas que puede tocar
+    if (!physics(L).raycastMasked(o, d, float(luaL_optnumber(L, 7, 1000)), hit, mask, ignore) || !scene(L).isValid(hit.entity)) {
         lua_pushnil(L);
         return 1;
     }
     pushEntity(L, hit.entity);
     push3(L, hit.point);
     lua_pushnumber(L, hit.distance);
-    return 5;
+    push3(L, hit.normal);
+    return 8;
 }
 int p_setGravity(lua_State* L) { physics(L).setGravity(check3(L, 1, {})); return 0; }
 int p_getGravity(lua_State* L) { return push3(L, physics(L).gravity()); }
@@ -483,11 +437,6 @@ int a_playAt(lua_State* L) {
 int a_setVolume(lua_State* L) { sys(L).host().scriptSetVolume(float(luaL_checknumber(L, 1))); return 0; }
 const luaL_Reg kAudioGlobals[] = {{"play", a_play}, {"playAt", a_playAt}, {"setVolume", a_setVolume}, {nullptr, nullptr}};
 
-void setGlobalTable(lua_State* L, const char* name, const luaL_Reg* fns) {
-    lua_newtable(L);
-    luaL_setfuncs(L, fns, 0);
-    lua_setglobal(L, name);
-}
 
 } // namespace
 
@@ -525,6 +474,7 @@ void ScriptSystem::registerApi() {
     luaL_newmetatable(L_, kEntityMeta);
     lua_newtable(L_);
     luaL_setfuncs(L_, kEntityMethods, 0);
+    registerWorldEntityMethods(L_);
     lua_setfield(L_, -2, "__index");
     lua_pushcfunction(L_, e_eq);
     lua_setfield(L_, -2, "__eq");
@@ -540,6 +490,7 @@ void ScriptSystem::registerApi() {
     setGlobalTable(L_, "Debug", kDebugGlobals);
     setGlobalTable(L_, "Physics", kPhysicsGlobals);
     setGlobalTable(L_, "Audio", kAudioGlobals);
+    registerWorldGlobals(L_);
     lua_pushcfunction(L_, d_log);
     lua_setglobal(L_, "print");
 }
@@ -656,7 +607,8 @@ void ScriptSystem::createInstance(Entity e, const Script& component) {
     instances_.push_back(std::move(inst));
 }
 
-bool ScriptSystem::call(Instance& inst, const char* method, int nargs, const float* arg, const Entity* entityArg) {
+bool ScriptSystem::call(Instance& inst, const char* method, int nargs, const float* arg, const Entity* entityArg,
+                        const char* stringArg) {
     lua_pushcfunction(L_, traceback);
     const int handler = lua_gettop(L_);
     lua_rawgeti(L_, LUA_REGISTRYINDEX, inst.ref);
@@ -667,6 +619,7 @@ bool ScriptSystem::call(Instance& inst, const char* method, int nargs, const flo
     }
     lua_insert(L_, -2); // función, self
     if (entityArg) pushEntity(L_, *entityArg);
+    else if (stringArg) lua_pushstring(L_, stringArg);
     else if (nargs) lua_pushnumber(L_, *arg);
     armDeadline();
     const int status = lua_pcall(L_, 1 + nargs, 0, handler);
@@ -767,12 +720,41 @@ void ScriptSystem::dispatchContact(Entity self, Entity other, bool begin, bool t
         call(inst, method, 1, nullptr, &other);
     }
 }
-void ScriptSystem::dispatchEvent(Entity self, const char* method) {
+Json& ScriptSystem::saveData() {
+    if (!saveLoaded_) {
+        saveLoaded_ = true;
+        save_ = Json::object();
+        const std::string path = host_.scriptSavePath();
+        std::string text;
+        if (!path.empty() && fileio::readText(path, text)) {
+            Json j = Json::parse(text, nullptr, false);
+            if (j.is_object() && j.value("format", "") == "titan.save" && j.contains("data") && j["data"].is_object())
+                save_ = j["data"];
+            else
+                TITAN_WARN("script", "La partida guardada '%s' no es válida: se empieza una nueva", path.c_str());
+        }
+    }
+    return save_;
+}
+
+bool ScriptSystem::writeSave(std::string* error) {
+    const std::string path = host_.scriptSavePath();
+    if (path.empty()) {
+        if (error) *error = "esta plataforma no tiene dónde guardar";
+        return false;
+    }
+    const Json doc{{"format", "titan.save"}, {"version", 1}, {"data", saveData()}};
+    if (!fileio::writeAtomic(path, doc.dump(2), true, error)) return false;
+    saveDirty_ = false;
+    return true;
+}
+
+void ScriptSystem::dispatchEvent(Entity self, const char* method, const char* arg) {
     if (!scene_ || !scene_->isValid(self)) return;
     for (size_t i = 0; i < instances_.size(); ++i) {
         Instance& inst = instances_[i];
         if (!inst.alive || inst.failed || inst.entity != self) continue;
-        call(inst, method, 0, nullptr);
+        call(inst, method, arg ? 1 : 0, nullptr, nullptr, arg);
     }
 }
 void ScriptSystem::update(float dt) { callAll("onUpdate", dt); }

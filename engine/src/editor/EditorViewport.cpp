@@ -4,6 +4,8 @@
 #include <cmath>
 
 #include "EditorImpl.h"
+#include "titan/core/AnimationGraph.h"
+#include "titan/core/Particles.h"
 
 namespace titan {
 
@@ -95,7 +97,15 @@ void Editor::Impl::renderViewport() {
     TransformSystem::update(scene);
     // Vista previa de animaciones en el editor (como el Animator de Unity con "Preview").
     const float dt = ImGui::GetIO().DeltaTime;
-    scene.world().each<Animator>([&](Entity, Animator& a) { advanceAnimator(a, dt); });
+    scene.world().each<Animator>([&](Entity e, Animator& a) {
+        const MeshRenderer* mr = scene.world().get<MeshRenderer>(e);
+        const int model = mr && !mr->model.isNull() ? editorModel(mr->model) : -1;
+        updateAnimator(a, dt, [&](const std::string& c) {
+            return renderer.modelAnimationDuration(model, renderer.modelAnimationIndex(model, c));
+        });
+    });
+    updateParticles(scene, dt); // vista previa de los efectos mientras se edita
+    applySculpt(dt);
     updateEditorCamera(float(vp.width) / float(vp.height));
     SceneView view;
     view.view = editorView;
@@ -106,8 +116,10 @@ void Editor::Impl::renderViewport() {
     SceneView gameView;
     view.clearColor = SceneRenderer::cameraView(scene, 1.0f, gameView) ? gameView.clearColor : Color::hex(0x1B2230);
     sceneRenderer.render(scene, renderer, vp, view, [this](AssetRef r) { return editorTexture(r); },
-                         [this](AssetRef r) { return editorModel(r); });
+                         [this](AssetRef r) { return editorModel(r); },
+                         [this](AssetRef r) { return resources.material(r); });
     drawGizmos();
+    drawBrushGizmo();
     if (showUI) {
         editorUI.layout(scene, {float(vp.width), float(vp.height)});
         titan::drawUI(renderer, scene, editorUI, [this](AssetRef r) { return editorTexture(r); },
@@ -192,6 +204,19 @@ void Editor::Impl::drawGizmos() {
         renderer.drawLine(o - Vec3{0, s, 0}, o + Vec3{0, s, 0}, col);
         renderer.drawLine(o - Vec3{0, 0, s}, o + Vec3{0, 0, s}, col);
         if (l.type == Light::Type::Directional) renderer.drawLine(o, o + t.forward() * (s * 4), col);
+        if (l.type == Light::Type::Spot) { // cono del foco hasta su alcance
+            const float half = std::clamp(l.spotAngle, 1.0f, 179.0f) * 0.5f * kDegToRad;
+            const float len = std::min(l.range, 6.0f), rad = std::tan(half) * len;
+            const Vec3 f = t.forward(), r = t.right(), u = t.up();
+            Vec3 prev = o + f * len + r * rad;
+            for (int i = 1; i <= 16; ++i) {
+                const float a = i * 6.2831853f / 16;
+                const Vec3 p = o + f * len + r * (std::cos(a) * rad) + u * (std::sin(a) * rad);
+                renderer.drawLine(prev, p, col);
+                if (i % 4 == 0) renderer.drawLine(o, p, col);
+                prev = p;
+            }
+        }
     });
 
     // Colliders en verde (como en los editores profesionales); los triggers, en cian.
@@ -337,7 +362,9 @@ void Editor::Impl::viewportPointerDown(int id, ImVec2 p) {
     }
     if (touches.size() != 1) return;
 
-    // 0) Un elemento de la interfaz ya seleccionado se arrastra con el dedo (con cualquier herramienta).
+    // 0) Esculpir o pintar el terreno seleccionado.
+    if (terrainPointerDown(p)) return;
+    // 0b) Un elemento de la interfaz ya seleccionado se arrastra con el dedo (con cualquier herramienta).
     if (Entity sel = selectedEntity(); !sel.isNull() && scene.world().has<UIRect>(sel) && pick(p) == sel) {
         movingUI = true;
         uiGrab = p;
@@ -385,6 +412,15 @@ void Editor::Impl::viewportPointerMove(int id, ImVec2 p) {
     if (runtime) {
         runtime->input().touchMoved(id, {p.x - vpMin.x, p.y - vpMin.y});
         return;
+    }
+    if (sculpting) {
+        brushScreen = p;
+        if (touches.size() > 1) { // un segundo dedo cancela el trazo y pasa a mover la cámara
+            sculpting = false;
+            commitEdit();
+        } else {
+            return;
+        }
     }
     if (pdist(t->start, p) > 8 * scale) gestureMoved = true;
     if (!gestureMoved) return;
@@ -465,6 +501,11 @@ void Editor::Impl::viewportPointerUp(int id, ImVec2 p) {
         gizmoAxis = -1;
         if (gestureMoved) commitEdit();
         else pendingEdit.clear();
+        return;
+    }
+    if (sculpting) {
+        sculpting = false;
+        commitEdit(); // un trazo = un paso de deshacer
         return;
     }
     if (movingUI && touches.empty()) {

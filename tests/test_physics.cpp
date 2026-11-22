@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "Test.h"
 #include "titan/physics/PhysicsWorld.h"
 
@@ -106,4 +108,89 @@ TEST("física: raycast, impulsos y gravedad") {
     CHECK(y > 0.7f);
     simulate(w, s, 1.0f);
     CHECK_NEAR(s.transform(box).position().y, y, 0.01); // sin gravedad se queda flotando
+}
+
+TEST("física: el personaje cae, se apoya, camina, sube un escalón y salta") {
+    Scene s;
+    floorOf(s);
+    Entity step = s.createEntity("Escalón"); // 0,25 m de alto, de x = 3 a x = 7
+    s.transform(step).setPosition({5, 0.125f, 0});
+    s.transform(step).setScale({4, 0.25f, 4});
+    s.world().add<Collider>(step);
+    Entity hero = s.createEntity("Héroe");
+    s.transform(hero).setPosition({0, 2, 0});
+    s.world().add<CharacterController>(hero, {});
+    PhysicsWorld w;
+    w.build(s);
+    CHECK(w.isCharacter(hero));
+    simulate(w, s, 1.5f);
+    CharacterController& cc = *s.world().get<CharacterController>(hero);
+    CHECK(cc.grounded);
+    CHECK_NEAR(s.transform(hero).position().y, 0, 0.05);
+    cc.desiredVelocity = {4, 0, 0};
+    simulate(w, s, 1.5f); // 6 m: pasa por encima del escalón
+    CHECK(s.transform(hero).position().x > 4.5f);
+    CHECK_NEAR(s.transform(hero).position().y, 0.25, 0.06);
+    cc.desiredVelocity = {};
+    cc.jumpSpeed = 5;
+    simulate(w, s, 0.25f);
+    CHECK(s.transform(hero).position().y > 0.8f); // en el aire
+    CHECK(!cc.grounded);
+    simulate(w, s, 2);
+    CHECK(cc.grounded);
+}
+
+TEST("física: capas de colisión, sphereCast y overlaps") {
+    Scene s;
+    floorOf(s);
+    Entity a = boxAt(s, "A", {0, 3, 0});
+    s.world().get<Collider>(a)->layer = 3;
+    Entity b = boxAt(s, "B", {0, 1, 0}); // capa 0, debajo de A
+    PhysicsWorld w;
+    w.setLayerCollision(3, 0, false); // A atraviesa la capa 0 (B y el suelo)
+    CHECK(!w.layersCollide(0, 3) && w.layersCollide(0, 0));
+    w.build(s);
+    simulate(w, s, 2);
+    CHECK(s.transform(a).position().y < -2.0f);    // cayó a través de todo
+    CHECK_NEAR(s.transform(b).position().y, 0.5, 0.05); // B sí se apoya en el suelo
+
+    RaycastHit hit;
+    CHECK(w.sphereCast({-5, 0.5f, 0}, 0.25f, {1, 0, 0}, 20, hit));
+    CHECK(hit.entity == b);
+    CHECK_NEAR(hit.distance, 4.25, 0.05); // superficie de B en x = -0,5, menos el radio
+    CHECK(!w.sphereCast({-5, 0.5f, 0}, 0.25f, {1, 0, 0}, 20, hit, 1u << 5)); // solo capa 5: nada
+    const auto near = w.overlapSphere({0, 0.5f, 0}, 0.2f);
+    CHECK(std::find(near.begin(), near.end(), b) != near.end());
+    const auto inBox = w.overlapBox({0, 0.5f, 0}, {3, 0.2f, 3}, Quat{}, 1u << 0);
+    CHECK(std::find(inBox.begin(), inBox.end(), b) != inBox.end());
+    CHECK(std::find(inBox.begin(), inBox.end(), a) == inBox.end());
+}
+
+TEST("física: bisagra sujeta al mundo y cuerda entre dos cuerpos") {
+    Scene s;
+    Entity door = boxAt(s, "Puerta", {1, 5, 0}); // cuelga de una bisagra en (0, 5, 0) con eje Z
+    Joint hinge;
+    hinge.type = Joint::Type::Hinge;
+    hinge.anchor = {-1, 0, 0};
+    hinge.axis = {0, 0, 1};
+    s.world().add<Joint>(door, hinge);
+    Entity ball = boxAt(s, "Bola", {5, 5, 0});
+    Entity anchorBox = s.createEntity("Ancla");
+    s.transform(anchorBox).setPosition({5, 8, 0});
+    s.world().add<Collider>(anchorBox); // estático
+    Joint rope;
+    rope.type = Joint::Type::Distance;
+    rope.connected = s.info(anchorBox).id;
+    rope.minDistance = 0;
+    rope.maxDistance = 3;
+    s.world().add<Joint>(ball, rope);
+    PhysicsWorld w;
+    w.build(s);
+    simulate(w, s, 3);
+    const Vec3 dp = s.transform(door).position();
+    CHECK_NEAR((dp - Vec3{0, 5, 0}).length(), 1, 0.05); // gira alrededor de la bisagra a 1 m
+    CHECK(dp.y < 4.5f);                                // y ha caído colgando
+    const Vec3 bp = s.transform(ball).position();
+    CHECK((bp - Vec3{5, 8, 0}).length() < 3.05f);      // la cuerda no deja que caiga más
+    CHECK(bp.y < 5.5f && bp.y > 4.5f);
 }

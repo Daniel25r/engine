@@ -1,9 +1,13 @@
 #include "titan/render/Renderer.h"
 
+#include "PostProcess.h"
+
 #include <GLES3/gl3.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
 
 #include "stb_image.h"
 #include "titan/core/FileSource.h"
@@ -57,11 +61,13 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aUV;
 layout(location = 3) in vec4 aJoints;
 layout(location = 4) in vec4 aWeights;
+layout(location = 5) in vec4 aSplat; // terreno: peso de cada capa
 uniform mat4 uViewProj;
 uniform mat4 uModel;
 uniform mat3 uNormalMat;
 uniform mat4 uLightVP;
 uniform int uSkinned;
+uniform vec4 uUVTransform; // xy = repetición, zw = desplazamiento
 uniform highp sampler2D uJointTex; // 4 texels RGBA32F por hueso (columnas de su matriz)
 mat4 jointMatrix(float i) {
     int r = int(i);
@@ -72,7 +78,9 @@ out vec3 vWorld;
 out vec3 vNormal;
 out vec2 vUV;
 out vec4 vShadow;
+out vec4 vSplat;
 void main() {
+    vSplat = aSplat;
     vec4 local = vec4(aPos, 1.0);
     vec3 normal = aNormal;
     if (uSkinned == 1) {
@@ -85,7 +93,7 @@ void main() {
     vec4 w = uModel * local;
     vWorld = w.xyz;
     vNormal = normalize(uNormalMat * normal);
-    vUV = aUV;
+    vUV = aUV * uUVTransform.xy + uUVTransform.zw;
     // Desplazar el punto un poco por la normal evita el "acné" de sombras.
     vShadow = uLightVP * vec4(w.xyz + vNormal * 0.04, 1.0);
     gl_Position = uViewProj * w;
@@ -99,7 +107,24 @@ in vec3 vWorld;
 in vec3 vNormal;
 in vec2 vUV;
 in vec4 vShadow;
+in vec4 vSplat;
+uniform int uTerrain;
+uniform sampler2D uLayer0;
+uniform sampler2D uLayer1;
+uniform sampler2D uLayer2;
+uniform sampler2D uLayer3;
+uniform vec3 uLayerColor[4];
+uniform float uLayerTiling;
 uniform sampler2D uTex;
+uniform sampler2D uNormalTex;
+uniform sampler2D uMRTex;
+uniform sampler2D uEmissiveTex;
+uniform sampler2D uOcclusionTex;
+uniform int uHasNormal;
+uniform int uHasMR;
+uniform int uHasOcclusion;
+uniform float uNormalStrength;
+uniform float uAlphaCutoff; // < 0: sin recorte
 uniform sampler2DShadow uShadowMap;
 uniform vec4 uColor;
 uniform float uMetallic;
@@ -110,8 +135,10 @@ uniform int uUnlit;
 uniform vec3 uDirDir;
 uniform vec3 uDirColor;
 uniform int uPointCount;
-uniform vec4 uPointPosRange[4];
-uniform vec3 uPointColor[4];
+uniform vec4 uPointPosRange[8];
+uniform vec3 uPointColor[8];
+uniform vec4 uSpot[8]; // xyz = dirección del foco, w = coseno del borde exterior (-2 = luz puntual)
+uniform float uSpotInner[8]; // coseno donde empieza a difuminarse
 uniform vec3 uCameraPos;
 uniform vec3 uSkyZenith;
 uniform vec3 uSkyHorizon;
@@ -167,35 +194,76 @@ float gridLines(vec3 n) {
     return max(l1 * 0.18, l5 * 0.35);
 }
 
+// Base tangente calculada por píxel con derivadas (Schüler, "Normal mapping without precomputed tangents"):
+// sirve para cualquier malla con UV, sin tener que generar ni guardar tangentes.
+mat3 cotangentFrame(vec3 n, vec3 p, vec2 uv) {
+    vec3 dp1 = dFdx(p), dp2 = dFdy(p);
+    vec2 duv1 = dFdx(uv), duv2 = dFdy(uv);
+    vec3 dp2perp = cross(dp2, n), dp1perp = cross(n, dp1);
+    vec3 t = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 b = dp2perp * duv1.y + dp1perp * duv2.y;
+    float invmax = inversesqrt(max(max(dot(t, t), dot(b, b)), 1e-12));
+    return mat3(t * invmax, b * invmax, n);
+}
+
 void main() {
     vec4 tex = texture(uTex, vUV);
     vec3 albedo = toLinear(tex.rgb * uColor.rgb);
     float alpha = tex.a * uColor.a;
+    if (uTerrain == 1) {
+        // Terreno: mezcla de 4 capas pintadas; las texturas se repiten en el plano XZ del mundo.
+        vec2 wuv = vWorld.xz / max(uLayerTiling, 0.01);
+        vec4 w = vSplat / max(vSplat.x + vSplat.y + vSplat.z + vSplat.w, 1e-4);
+        vec3 c = texture(uLayer0, wuv).rgb * uLayerColor[0] * w.x + texture(uLayer1, wuv).rgb * uLayerColor[1] * w.y +
+                 texture(uLayer2, wuv).rgb * uLayerColor[2] * w.z + texture(uLayer3, wuv).rgb * uLayerColor[3] * w.w;
+        albedo = toLinear(c);
+        alpha = 1.0;
+    }
+    if (uAlphaCutoff >= 0.0) {
+        if (alpha < uAlphaCutoff) discard;
+        alpha = 1.0;
+    }
     vec3 n = normalize(gl_FrontFacing ? vNormal : -vNormal);
+    if (uHasNormal == 1) {
+        vec3 tn = texture(uNormalTex, vUV).xyz * 2.0 - 1.0;
+        tn.xy *= uNormalStrength;
+        n = normalize(cotangentFrame(n, vWorld, vUV) * tn);
+    }
     if (uGrid == 1) albedo *= 1.0 - gridLines(n);
     if (uUnlit == 1) { outColor = vec4(pow(albedo, vec3(1.0 / 2.2)), alpha); return; }
 
+    float metal = uMetallic, rough = uRoughness;
+    if (uHasMR == 1) {
+        vec4 mr = texture(uMRTex, vUV);
+        rough *= mr.g;
+        metal *= mr.b;
+    }
+    float ao = uHasOcclusion == 1 ? texture(uOcclusionTex, vUV).r : 1.0;
     vec3 v = normalize(uCameraPos - vWorld);
-    float rough = clamp(uRoughness, 0.04, 1.0);
-    vec3 color = brdf(n, v, normalize(-uDirDir), albedo, uMetallic, rough, uDirColor * 2.4) * shadowFactor();
-    for (int i = 0; i < 4; ++i) {
+    rough = clamp(rough, 0.04, 1.0);
+    vec3 color = brdf(n, v, normalize(-uDirDir), albedo, metal, rough, uDirColor * 2.4) * shadowFactor();
+    for (int i = 0; i < 8; ++i) {
         if (i >= uPointCount) break;
         vec3 toLight = uPointPosRange[i].xyz - vWorld;
         float dist = length(toLight);
+        vec3 l = toLight / max(dist, 1e-4);
         float att = clamp(1.0 - dist / uPointPosRange[i].w, 0.0, 1.0);
-        color += brdf(n, v, toLight / max(dist, 1e-4), albedo, uMetallic, rough, uPointColor[i] * 3.0 * att * att);
+        att *= att;
+        if (uSpot[i].w > -1.5) // foco: cono con borde suave
+            att *= smoothstep(uSpot[i].w, uSpotInner[i], dot(-l, uSpot[i].xyz));
+        color += brdf(n, v, l, albedo, metal, rough, uPointColor[i] * 3.0 * att);
     }
     // Ambiente: cielo arriba, suelo abajo; reflejo especular aproximado del cielo.
     vec3 sky = toLinear(uSkyZenith), horizon = toLinear(uSkyHorizon), ground = toLinear(uGround);
     vec3 hemi = mix(ground, mix(horizon, sky, max(n.y, 0.0)), n.y * 0.5 + 0.5);
     hemi = mix(vec3(dot(hemi, vec3(0.3, 0.59, 0.11))), hemi, 0.45); // luz ambiental menos saturada
-    vec3 F0 = mix(vec3(0.04), albedo, uMetallic);
+    vec3 F0 = mix(vec3(0.04), albedo, metal);
     float ndv = max(dot(n, v), 0.0);
     vec3 F = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - ndv, 5.0);
     vec3 r = reflect(-v, n);
     vec3 env = mix(ground, mix(horizon, sky, max(r.y, 0.0)), r.y * 0.5 + 0.5);
-    color += (hemi * albedo * (1.0 - uMetallic) * (1.0 - F) * 0.45 + env * F * (1.0 - rough * 0.7)) * uAmbientI;
-    color += toLinear(uEmission) * 2.0;
+    color += (hemi * albedo * (1.0 - metal) * (1.0 - F) * 0.45 + env * F * (1.0 - rough * 0.7)) * uAmbientI * ao;
+    color += toLinear(uEmission * texture(uEmissiveTex, vUV).rgb) * 2.0;
 
     color = pow(aces(color * uExposure), vec3(1.0 / 2.2));
     float fog = 1.0 - exp(-uFogDensity * length(uCameraPos - vWorld));
@@ -306,11 +374,46 @@ uint8_t toByte(float v) { return static_cast<uint8_t>(std::fmin(std::fmax(v, 0.0
 
 // ---------------------------------------------------------------- Ciclo de vida
 
+Renderer::Renderer() : post_(std::make_unique<PostProcessor>()) {}
+Renderer::~Renderer() = default;
+
+void Renderer::setQuality(const QualitySettings& q) {
+    quality_ = q;
+    quality_.renderScale = std::fmin(std::fmax(q.renderScale, 0.25f), 1.0f);
+    int size = std::max(256, std::min(q.shadowMapSize, caps_.maxTextureSize > 0 ? caps_.maxTextureSize : 2048));
+    if (size != shadowSize_) {
+        shadowSize_ = size;
+        if (shadowFbo_) createShadowMap(); // ya hay contexto: se recrea ahora
+    }
+    TITAN_INFO("render", "Calidad '%s': escala %.0f %%, sombras %s %d, FXAA %s, bloom %s, %d luces",
+               qualityName(quality_.level), quality_.renderScale * 100, quality_.shadows ? "sí" : "no", shadowSize_,
+               quality_.fxaa ? "sí" : "no", quality_.bloom ? "permitido" : "no", quality_.maxPointLights);
+}
+
 bool Renderer::init(FileSource& files) {
     files_ = &files;
     textures_.clear();
     textures_.push_back({}); // textura blanca
     vertices_.resize(kMaxQuads * 4);
+    // Capacidades medibles de la GPU (para recomendar un perfil de calidad).
+    auto str = [](GLenum e) { const GLubyte* s = glGetString(e); return s ? std::string(reinterpret_cast<const char*>(s)) : std::string(); };
+    caps_.vendor = str(GL_VENDOR);
+    caps_.renderer = str(GL_RENDERER);
+    caps_.version = str(GL_VERSION);
+    glGetIntegerv(GL_MAJOR_VERSION, &caps_.glesMajor);
+    glGetIntegerv(GL_MINOR_VERSION, &caps_.glesMinor);
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &caps_.maxTextureSize);
+    GLint extCount = 0;
+    glGetIntegerv(GL_NUM_EXTENSIONS, &extCount);
+    for (GLint i = 0; i < extCount; ++i) {
+        const char* e = reinterpret_cast<const char*>(glGetStringi(GL_EXTENSIONS, static_cast<GLuint>(i)));
+        if (!e) continue;
+        if (!std::strcmp(e, "GL_KHR_texture_compression_astc_ldr")) caps_.astc = true;
+        if (!std::strcmp(e, "GL_EXT_color_buffer_half_float") || !std::strcmp(e, "GL_EXT_color_buffer_float"))
+            caps_.halfFloatTargets = true;
+    }
+    caps_.memoryMB = systemMemoryMB();
+    shadowSize_ = std::min(std::max(256, quality_.shadowMapSize), caps_.maxTextureSize);
     if (!createGpuObjects()) return false;
     fonts_.clear();
     if (loadFont("engine/fonts/Outfit-Regular.ttf") != 0) TITAN_ERROR("render", "No se pudo cargar la fuente del motor");
@@ -326,9 +429,46 @@ bool Renderer::init(FileSource& files) {
                 px[(y * N + x) * 4 + 3] = static_cast<uint8_t>(a * 255.0f + 0.5f);
             }
         disc_ = createTexture(N, N, 4, px.data());
+        // Punto suave (partículas): blanco con alfa que cae como una campana desde el centro.
+        constexpr int S = 64;
+        std::vector<uint8_t> dot(S * S * 4, 255);
+        for (int y = 0; y < S; ++y)
+            for (int x = 0; x < S; ++x) {
+                const float dx = (x + 0.5f) / S * 2 - 1, dy = (y + 0.5f) / S * 2 - 1;
+                const float d = std::fmin(1.0f, std::sqrt(dx * dx + dy * dy));
+                const float a = (1 - d) * (1 - d);
+                dot[(y * S + x) * 4 + 3] = static_cast<uint8_t>(a * 255.0f + 0.5f);
+            }
+        softDot_ = createTexture(S, S, 4, dot.data());
     }
     TITAN_INFO("render", "OpenGL listo: %s | %s", glGetString(GL_RENDERER), glGetString(GL_VERSION));
     return true;
+}
+
+void Renderer::createShadowMap() {
+    if (shadowFbo_) glDeleteFramebuffers(1, &shadowFbo_);
+    if (shadowTex_) glDeleteTextures(1, &shadowTex_);
+    shadowFbo_ = shadowTex_ = 0;
+    // Mapa de sombras: textura de profundidad con comparación por hardware (PCF 2x2 gratis).
+    glGenTextures(1, &shadowTex_);
+    glBindTexture(GL_TEXTURE_2D, shadowTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadowSize_, shadowSize_, 0, GL_DEPTH_COMPONENT,
+                 GL_UNSIGNED_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    glGenFramebuffers(1, &shadowFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex_, 0);
+    const GLenum none = GL_NONE;
+    glDrawBuffers(1, &none);
+    glReadBuffer(GL_NONE);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) TITAN_WARN("render", "Mapa de sombras incompleto");
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 }
 
 bool Renderer::createGpuObjects() {
@@ -350,6 +490,12 @@ bool Renderer::createGpuObjects() {
     uAmbientI_ = u("uAmbientI"); uFogColor_ = u("uFogColor"); uFogDensity_ = u("uFogDensity");
     uExposure_ = u("uExposure"); uLightVP_ = u("uLightVP"); uShadowMap_ = u("uShadowMap"); uShadowsOn_ = u("uShadowsOn");
     uSkinned_ = u("uSkinned"); uJoints_ = u("uJointTex");
+    uUVTransform_ = u("uUVTransform"); uNormalTex_ = u("uNormalTex"); uMRTex_ = u("uMRTex");
+    uEmissiveTex_ = u("uEmissiveTex"); uOcclusionTex_ = u("uOcclusionTex"); uHasNormal_ = u("uHasNormal");
+    uHasMR_ = u("uHasMR"); uHasOcclusion_ = u("uHasOcclusion"); uNormalStrength_ = u("uNormalStrength");
+    uAlphaCutoff_ = u("uAlphaCutoff"); uSpot_ = u("uSpot"); uSpotInner_ = u("uSpotInner");
+    uTerrain_ = u("uTerrain"); uLayerColor_ = u("uLayerColor"); uLayerTiling_ = u("uLayerTiling");
+    for (int i = 0; i < 4; ++i) uLayers_[i] = u(("uLayer" + std::to_string(i)).c_str());
     uShadowSkinned_ = glGetUniformLocation(shadowProgram_, "uSkinned");
     uShadowJoints_ = glGetUniformLocation(shadowProgram_, "uJointTex");
     // Textura de huesos: 4 x kMaxJoints texels RGBA32F, leída con texelFetch (sin filtrado).
@@ -369,25 +515,7 @@ bool Renderer::createGpuObjects() {
     uSkySunColor_ = glGetUniformLocation(skyProgram_, "uSunColor");
     glGenVertexArrays(1, &skyVao_);
 
-    // Mapa de sombras: textura de profundidad con comparación por hardware (PCF 2x2 gratis).
-    glGenTextures(1, &shadowTex_);
-    glBindTexture(GL_TEXTURE_2D, shadowTex_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, kShadowMapSize, kShadowMapSize, 0, GL_DEPTH_COMPONENT,
-                 GL_UNSIGNED_INT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-    glGenFramebuffers(1, &shadowFbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex_, 0);
-    const GLenum none = GL_NONE;
-    glDrawBuffers(1, &none);
-    glReadBuffer(GL_NONE);
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) TITAN_WARN("render", "Mapa de sombras incompleto");
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    createShadowMap();
 
     // Sprites: búfer dinámico + índices fijos.
     glGenVertexArrays(1, &spriteVao_);
@@ -562,10 +690,31 @@ Vec2 Renderer::measureText(int f, float size, std::string_view text) {
     return a ? a->measure(text, size) : Vec2{};
 }
 
+void Renderer::resolveScene() {
+    if (!sceneInTarget_) return;
+    flushSprites();
+    flushLines();
+    sceneInTarget_ = false;
+    const Environment& e = lighting_.env;
+    PostSettings s;
+    s.fxaa = quality_.fxaa;
+    s.bloom = quality_.bloom && e.bloom;
+    s.bloomIntensity = e.bloomIntensity;
+    s.bloomThreshold = e.bloomThreshold;
+    s.vignette = e.vignette;
+    s.contrast = e.contrast;
+    s.saturation = e.saturation;
+    s.temperature = e.temperature;
+    post_->resolve(static_cast<uint32_t>(targetFbo_), viewport_.x, viewport_.y, viewport_.width, viewport_.height, s);
+    stats_.postPasses = post_->lastPasses();
+    glUseProgram(0);
+}
+
 void Renderer::beginOverlay() {
     if (inOverlay_) return;
     flushSprites();
     flushLines();
+    resolveScene(); // la interfaz va encima de la imagen final y a resolución completa
     overlaySavedViewProj_ = viewProj_;
     viewProj_ = Mat4::ortho(0.0f, float(viewport_.width), float(viewport_.height), 0.0f, -1.0f, 1.0f);
     glDisable(GL_DEPTH_TEST);
@@ -581,6 +730,7 @@ void Renderer::endOverlay() {
 }
 
 void Renderer::drawRect(TextureHandle tex, const Rect& r, const Rect& uv, Color color) {
+    if (batchAdditive_) flushSprites();
     const Vec3 c[4] = {{r.x, r.y, 0}, {r.x + r.w, r.y, 0}, {r.x + r.w, r.y + r.h, 0}, {r.x, r.y + r.h, 0}};
     pushQuad(tex, c, uv, color);
 }
@@ -632,6 +782,8 @@ Vec2 Renderer::textureSize(TextureHandle id) const {
 }
 
 void Renderer::onContextLost() {
+    post_->onContextLost();
+    for (TerrainGpu& t : terrains_) t = {t.key, 0, {}, t.lastUsed}; // se vuelve a subir en el siguiente dibujo
     spriteProgram_ = meshProgram_ = spriteVao_ = spriteVbo_ = spriteIbo_ = lineVao_ = lineVbo_ = 0;
     shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = jointTex_ = 0;
     for (auto& m : meshes_) m = {};
@@ -654,6 +806,13 @@ bool Renderer::onContextRestored() {
 
 void Renderer::shutdown() {
     fonts_.clear();
+    for (TerrainGpu& t : terrains_) {
+        if (t.mesh.vbo) glDeleteBuffers(1, &t.mesh.vbo);
+        if (t.mesh.ibo) glDeleteBuffers(1, &t.mesh.ibo);
+        if (t.mesh.vao) glDeleteVertexArrays(1, &t.mesh.vao);
+    }
+    terrains_.clear();
+    post_->shutdown();
     for (auto& t : textures_)
         if (t.gl) glDeleteTextures(1, &t.gl);
     textures_.clear();
@@ -696,9 +855,27 @@ void Renderer::beginFrame(const Viewport& vp, Color clear) {
     stats_ = {};
     stats_.drawCalls = stats_.shadowDrawCalls = shadowDrawCalls_;
     shadowDrawCalls_ = 0;
-    glViewport(vp.x, vp.y, viewport_.width, viewport_.height);
-    glEnable(GL_SCISSOR_TEST);
-    glScissor(vp.x, vp.y, viewport_.width, viewport_.height);
+    // Con posprocesado la escena se dibuja en un render target (a la escala del perfil) y se compone al final.
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &targetFbo_);
+    sceneInTarget_ = false;
+    if (quality_.postProcess) {
+        const int sw = std::max(1, static_cast<int>(viewport_.width * quality_.renderScale + 0.5f));
+        const int sh = std::max(1, static_cast<int>(viewport_.height * quality_.renderScale + 0.5f));
+        sceneInTarget_ = post_->begin(sw, sh);
+        if (!sceneInTarget_) glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(targetFbo_));
+    }
+    if (sceneInTarget_) {
+        stats_.sceneWidth = post_->width();
+        stats_.sceneHeight = post_->height();
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(0, 0, post_->width(), post_->height());
+    } else {
+        stats_.sceneWidth = viewport_.width;
+        stats_.sceneHeight = viewport_.height;
+        glViewport(vp.x, vp.y, viewport_.width, viewport_.height);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(vp.x, vp.y, viewport_.width, viewport_.height);
+    }
     glClearColor(clear.r, clear.g, clear.b, clear.a);
     glDepthMask(GL_TRUE);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -715,14 +892,17 @@ void Renderer::setCamera(const Mat4& view, const Mat4& projection) {
     flushSprites();
     flushLines();
     viewProj_ = projection * view;
-    cameraPos_ = view.inverted().translation();
+    const Mat4 camWorld = view.inverted();
+    cameraPos_ = camWorld.translation();
+    camRight_ = camWorld.transformDirection({1, 0, 0}).normalized();
+    camUp_ = camWorld.transformDirection({0, 1, 0}).normalized();
 }
 
 void Renderer::beginShadowPass(const Mat4& lightVP) {
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo_);
     shadowDrawStart_ = stats_.drawCalls;
     glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
-    glViewport(0, 0, kShadowMapSize, kShadowMapSize);
+    glViewport(0, 0, shadowSize_, shadowSize_);
     glDisable(GL_SCISSOR_TEST);
     glDepthMask(GL_TRUE);
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -761,16 +941,24 @@ void Renderer::setLighting(const SceneLighting& l) {
     glUniform3f(uDirColor_, l.sunColor.r, l.sunColor.g, l.sunColor.b);
     float posRange[kMaxPointLights * 4] = {};
     float colors[kMaxPointLights * 3] = {};
+    float spot[kMaxPointLights * 4] = {};
+    float spotInner[kMaxPointLights] = {};
     const int n = static_cast<int>(std::min<size_t>(l.points.size(), kMaxPointLights));
     for (int i = 0; i < n; ++i) {
         const PointLightData& p = l.points[i];
         posRange[i * 4] = p.position.x; posRange[i * 4 + 1] = p.position.y; posRange[i * 4 + 2] = p.position.z;
         posRange[i * 4 + 3] = std::max(p.range, 0.001f);
         colors[i * 3] = p.color.r; colors[i * 3 + 1] = p.color.g; colors[i * 3 + 2] = p.color.b;
+        const Vec3 d = p.direction.normalized();
+        spot[i * 4] = d.x; spot[i * 4 + 1] = d.y; spot[i * 4 + 2] = d.z;
+        spot[i * 4 + 3] = p.spot ? p.cosOuter : -2.0f;
+        spotInner[i] = p.spot ? std::max(p.cosInner, p.cosOuter + 1e-4f) : 1.0f;
     }
     glUniform1i(uPointCount_, n);
     glUniform4fv(uPointPosRange_, kMaxPointLights, posRange);
     glUniform3fv(uPointColor_, kMaxPointLights, colors);
+    glUniform4fv(uSpot_, kMaxPointLights, spot);
+    glUniform1fv(uSpotInner_, kMaxPointLights, spotInner);
     glUniform3f(uSkyZenith_, e.skyZenith.r, e.skyZenith.g, e.skyZenith.b);
     glUniform3f(uSkyHorizon_, e.skyHorizon.r, e.skyHorizon.g, e.skyHorizon.b);
     glUniform3f(uGround_, e.ground.r, e.ground.g, e.ground.b);
@@ -820,16 +1008,107 @@ void Renderer::drawSky() {
     stats_.drawCalls++;
 }
 
-void Renderer::drawMesh(MeshPrimitive type, const Mat4& world, const MeshRenderer& mat, TextureHandle tex) {
-    const GpuMesh& mesh = meshes_[static_cast<int>(type)];
-    if (!mesh.vao) return;
-    drawSurface(mesh.vao, mesh.indexCount, false, world, mat.color, mat.metallic, mat.roughness, mat.emission,
-                mat.prototypeGrid, mat.unlit, tex, type == MeshPrimitive::Plane);
+int Renderer::terrainMesh(uint64_t key, uint32_t revision, const std::function<TerrainMesh()>& build) {
+    int slot = -1;
+    for (size_t i = 0; i < terrains_.size(); ++i)
+        if (terrains_[i].key == key) slot = static_cast<int>(i);
+    if (slot >= 0) terrains_[slot].lastUsed = frameCounter_;
+    if (slot >= 0 && terrains_[slot].revision == revision && terrains_[slot].mesh.vao) return slot;
+    if (slot < 0) {
+        terrains_.push_back({});
+        slot = static_cast<int>(terrains_.size() - 1);
+        terrains_[slot].key = key;
+        terrains_[slot].lastUsed = frameCounter_;
+    }
+    TerrainGpu& g = terrains_[slot];
+    const TerrainMesh m = build();
+    if (!g.mesh.vao) {
+        glGenVertexArrays(1, &g.mesh.vao);
+        glGenBuffers(1, &g.mesh.vbo);
+        glGenBuffers(1, &g.mesh.ibo);
+    }
+    glBindVertexArray(g.mesh.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, g.mesh.vbo);
+    glBufferData(GL_ARRAY_BUFFER, m.vertices.size() * sizeof(TerrainVertex), m.vertices.data(), GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g.mesh.ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, m.indices.size() * sizeof(uint32_t), m.indices.data(), GL_DYNAMIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(TerrainVertex), (void*)offsetof(TerrainVertex, position));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(TerrainVertex), (void*)offsetof(TerrainVertex, normal));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(TerrainVertex), (void*)offsetof(TerrainVertex, uv));
+    glEnableVertexAttribArray(5);
+    glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(TerrainVertex), (void*)offsetof(TerrainVertex, splat));
+    glBindVertexArray(0);
+    g.mesh.indexCount = static_cast<int>(m.indices.size());
+    g.revision = revision;
+    return slot;
 }
 
-void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4& world, Color color, float metallic,
-                           float roughness, Color emission, bool grid, bool unlit, TextureHandle tex, bool doubleSided) {
+void Renderer::drawTerrain(int handle, const Mat4& world, const Terrain& t, const TextureHandle layers[4]) {
+    if (handle < 0 || handle >= static_cast<int>(terrains_.size()) || !terrains_[handle].mesh.vao) return;
+    glUseProgram(meshProgram_);
+    float colors[12];
+    for (int i = 0; i < 4; ++i) {
+        colors[i * 3] = t.layerColors[i].r;
+        colors[i * 3 + 1] = t.layerColors[i].g;
+        colors[i * 3 + 2] = t.layerColors[i].b;
+        glActiveTexture(GL_TEXTURE7 + i);
+        glBindTexture(GL_TEXTURE_2D, textures_[layers[i] < textures_.size() ? layers[i] : kWhiteTexture].gl);
+        glUniform1i(uLayers_[i], 7 + i);
+    }
+    glUniform3fv(uLayerColor_, 4, colors);
+    glUniform1f(uLayerTiling_, t.layerTiling);
+    glActiveTexture(GL_TEXTURE0);
+    Surface s;
+    s.roughness = 0.9f;
+    terrainDraw_ = true;
+    drawSurface(terrains_[handle].mesh.vao, terrains_[handle].mesh.indexCount, true, world, s);
+    terrainDraw_ = false;
+}
+
+void Renderer::drawTerrainShadow(int handle, const Mat4& world) {
+    if (handle < 0 || handle >= static_cast<int>(terrains_.size()) || !terrains_[handle].mesh.vao) return;
+    glUniformMatrix4fv(uShadowModel_, 1, GL_FALSE, world.m);
+    glUniform1i(uShadowSkinned_, 0);
+    glBindVertexArray(terrains_[handle].mesh.vao);
+    glDrawElements(GL_TRIANGLES, terrains_[handle].mesh.indexCount, GL_UNSIGNED_INT, nullptr);
+    stats_.drawCalls++;
+}
+
+void Renderer::drawMesh(MeshPrimitive type, const Mat4& world, const MeshRenderer& mat, const MaterialTextures& tex) {
+    const GpuMesh& mesh = meshes_[static_cast<int>(type)];
+    if (!mesh.vao) return;
+    Surface s;
+    s.color = mat.color;
+    s.metallic = mat.metallic;
+    s.roughness = mat.roughness;
+    s.emission = mat.emission;
+    if (tex.emission != kWhiteTexture && s.emission.r + s.emission.g + s.emission.b <= 0) s.emission = {1, 1, 1, 1};
+    s.grid = mat.prototypeGrid;
+    s.unlit = mat.unlit;
+    s.doubleSided = mat.doubleSided || type == MeshPrimitive::Plane;
+    s.maps = tex;
+    s.tiling = mat.tiling;
+    s.offset = mat.offset;
+    s.alphaCutoff = mat.alphaClip ? mat.alphaCutoff : -1.0f;
+    s.normalStrength = mat.normalStrength;
+    drawSurface(mesh.vao, mesh.indexCount, false, world, s);
+}
+
+void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4& world, const Surface& s) {
+    const Color color = s.color;
+    const float metallic = s.metallic, roughness = s.roughness;
+    const Color emission = s.emission;
+    const bool grid = s.grid, unlit = s.unlit, doubleSided = s.doubleSided;
+    TextureHandle tex = s.maps.base;
     if (tex >= textures_.size()) tex = kWhiteTexture;
+    auto bindMap = [&](int unit, TextureHandle h) {
+        glActiveTexture(GL_TEXTURE0 + unit);
+        glBindTexture(GL_TEXTURE_2D, textures_[h < textures_.size() ? h : kWhiteTexture].gl);
+        return h != kWhiteTexture && h < textures_.size();
+    };
     // Matriz de normales: inversa traspuesta de la parte 3x3 (correcta también con escala no uniforme).
     const Mat4 inv = world.inverted();
     const float normalMat[9] = {inv.m[0], inv.m[4], inv.m[8], inv.m[1], inv.m[5], inv.m[9], inv.m[2], inv.m[6], inv.m[10]};
@@ -848,6 +1127,19 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
     glUniform1i(uSkinned_, skinned ? 1 : 0);
     glUniform1i(uJoints_, 2);
     if (skinned) uploadJoints(*currentJoints_);
+    glUniform4f(uUVTransform_, s.tiling.x, s.tiling.y, s.offset.x, s.offset.y);
+    glUniform1i(uTerrain_, terrainDraw_ ? 1 : 0);
+    glUniform1f(uAlphaCutoff_, s.alphaCutoff);
+    glUniform1f(uNormalStrength_, s.normalStrength);
+    glUniform1i(uNormalTex_, 3);
+    glUniform1i(uMRTex_, 4);
+    glUniform1i(uEmissiveTex_, 5);
+    glUniform1i(uOcclusionTex_, 6);
+    glUniform1i(uHasNormal_, bindMap(3, s.maps.normal) ? 1 : 0);
+    glUniform1i(uHasMR_, bindMap(4, s.maps.metallicRoughness) ? 1 : 0);
+    bindMap(5, s.maps.emission);
+    glUniform1i(uHasOcclusion_, bindMap(6, s.maps.occlusion) ? 1 : 0);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, textures_[tex].gl);
     // Una escala con determinante negativo invierte el sentido de los triángulos.
     const float det = world.m[0] * (world.m[5] * world.m[10] - world.m[9] * world.m[6]) -
@@ -855,7 +1147,7 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
                       world.m[8] * (world.m[1] * world.m[6] - world.m[5] * world.m[2]);
     glFrontFace(det < 0 ? GL_CW : GL_CCW);
     if (doubleSided) glDisable(GL_CULL_FACE);
-    const bool transparent = color.a < 0.999f;
+    const bool transparent = color.a < 0.999f && s.alphaCutoff < 0;
     if (transparent) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -892,10 +1184,25 @@ void Renderer::pushQuad(TextureHandle tex, const Vec3 c[4], Rect uv, Color color
 void Renderer::drawSprite(TextureHandle tex, const Mat4& world, Vec2 size, Vec2 pivot, Rect uv, Color color) {
     const float l = -pivot.x * size.x, r = (1.0f - pivot.x) * size.x;
     const float b = -pivot.y * size.y, t = (1.0f - pivot.y) * size.y;
+    if (batchAdditive_) flushSprites();
     const Vec3 c[4] = {world.transformPoint({l, t, 0}), world.transformPoint({r, t, 0}),
                        world.transformPoint({r, b, 0}), world.transformPoint({l, b, 0})};
     pushQuad(tex, c, uv, color);
     stats_.sprites++;
+}
+
+void Renderer::drawBillboard(TextureHandle tex, const Vec3& c, float size, float rotationDeg, Rect uv, Color color,
+                             bool additive) {
+    if (additive != batchAdditive_) {
+        flushSprites();
+        batchAdditive_ = additive;
+    }
+    // Ejes de la cámara (guardados en setCamera): el cuadrado siempre mira a la cámara.
+    const float a = rotationDeg * kDegToRad, h = size * 0.5f;
+    const float ca = std::cos(a) * h, sa = std::sin(a) * h;
+    const Vec3 r = camRight_ * ca + camUp_ * sa, u = camUp_ * ca - camRight_ * sa;
+    const Vec3 q[4] = {c - r + u, c + r + u, c + r - u, c - r - u};
+    pushQuad(tex, q, uv, color);
 }
 
 void Renderer::flushSprites() {
@@ -907,7 +1214,8 @@ void Renderer::flushSprites() {
     // Los sprites se ocultan detrás de las mallas, pero no se ocultan entre sí (se ordenan por sortingOrder).
     glDisable(GL_CULL_FACE);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    if (batchAdditive_) glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    else glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
     glBindTexture(GL_TEXTURE_2D, textures_[batchTexture_].gl);
     glBindVertexArray(spriteVao_);
@@ -923,6 +1231,7 @@ void Renderer::flushSprites() {
     stats_.drawCalls++;
     stats_.triangles += quadCount_ * 2;
     quadCount_ = 0;
+    batchAdditive_ = false; // el siguiente lote empieza en mezcla alfa salvo que drawBillboard diga otra cosa
 }
 
 void Renderer::drawLine(const Vec3& a, const Vec3& b, Color color) {
@@ -962,6 +1271,7 @@ void Renderer::endFrame() {
     flushSprites();
     flushLines();
     endOverlay();
+    resolveScene();
     if (!text_.empty()) {
         beginOverlay();
         for (const auto& cmd : text_) {
@@ -978,6 +1288,19 @@ void Renderer::endFrame() {
     glDisable(GL_CULL_FACE);
     stats_.textures = static_cast<int>(textures_.size());
     lastStats_ = stats_;
+    // Terrenos que ya no se dibujan (escena cerrada, fin de Jugar): se liberan tras unos segundos.
+    if (++frameCounter_ % 120 == 0)
+        for (size_t i = 0; i < terrains_.size();) {
+            TerrainGpu& t = terrains_[i];
+            if (frameCounter_ - t.lastUsed > 300) {
+                if (t.mesh.vbo) glDeleteBuffers(1, &t.mesh.vbo);
+                if (t.mesh.ibo) glDeleteBuffers(1, &t.mesh.ibo);
+                if (t.mesh.vao) glDeleteVertexArrays(1, &t.mesh.vao);
+                terrains_.erase(terrains_.begin() + static_cast<long>(i));
+            } else {
+                ++i;
+            }
+        }
 }
 
 } // namespace titan

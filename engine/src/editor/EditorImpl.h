@@ -21,6 +21,9 @@
 
 namespace titan {
 
+void propLabel(const char* label); // fila de propiedades del panel Detalles (EditorPanels.cpp)
+
+
 // Lee primero del proyecto y, si no está, de los recursos del motor (fuente de depuración).
 class ProjectFiles final : public FileSource {
 public:
@@ -57,6 +60,7 @@ struct Editor::Impl {
     ResourceCache resources;    // compartida con el modo Jugar (mismo Renderer)
     UISystem editorUI;          // interfaz de juego dibujada sobre la vista del editor
     bool showUI = true;
+    QualitySettings editorQuality; // la que eligió el usuario; se restaura al detener (un juego puede cambiarla)
     bool movingUI = false;
     std::chrono::steady_clock::time_point playStart; // para medir cuánto tarda en verse el primer fotograma
     bool playFirstFrame = false;
@@ -176,6 +180,8 @@ struct Editor::Impl {
     TextureHandle editorTexture(AssetRef ref) { return resources.texture(ref); }
     int editorModel(AssetRef ref) { return resources.model(ref); }
     int editorFont(AssetRef ref) { return resources.font(ref); }
+    void saveMaterial(Entity e);
+    void focusSelected(); // la cámara del editor encuadra el objeto seleccionado (tecla F) // crea materiales/<nombre>.mat con los valores del objeto y se lo asigna
     void drawUIOutlines(ImDrawList* dl);
     // Caja local del objeto (cubo unidad para primitivas, límites del modelo si lo tiene).
     bool localBounds(Entity e, Vec3& min, Vec3& max);
@@ -215,6 +221,22 @@ struct Editor::Impl {
     void drawOutliner();
     void drawOutlinerNode(Entity e);
     void drawDetails();
+    void drawMachineEditor(); // EditorAnimation.cpp
+    bool showMachineEditor = false;
+    // Herramientas de terreno (EditorTerrain.cpp)
+    int terrainTool = -1;        // -1 ninguna; si no, SculptTool
+    int terrainLayer = 1;
+    float brushRadius = 4, brushStrength = 4;
+    bool sculpting = false;
+    ImVec2 brushScreen;
+    float flattenHeight = 0;
+    AssetRef heightmapTexture;
+    uint32_t terrainSeed = 1;
+    void drawTerrainPanel(Entity e, Terrain& t);
+    bool terrainPointerDown(ImVec2 p); // true si el toque es para esculpir
+    void applySculpt(float dt);
+    void drawBrushGizmo();
+    UUID machineEditorFor;
     void drawComponentFields(const std::string& name, Entity e);
     bool assetCombo(const char* label, AssetType type, AssetRef& ref);
     void drawCode();

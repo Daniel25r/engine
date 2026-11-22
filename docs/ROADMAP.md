@@ -7,12 +7,12 @@ Cada paso se cierra con código, pruebas, documentación y un informe de lo que 
 |---|---|---|
 | 0 | Auditoría completa | ✅ 0.11.0 (actualizada en 0.12.0) |
 | 1 | Arquitectura y estabilidad: **culling** ✅; **recursos compartidos entre el editor y Play** ✅; sistema de tareas y carga asíncrona; deshacer por comandos | En curso |
-| 2 | Render: render targets, HDR, posproceso y perfiles de calidad con detección de capacidades; materiales v2 (normal, ORM, alpha clip, tiling); focos; sombras en cascada; instancing | Pendiente |
-| 3 | Entrada: Input Actions (táctil, teclado, mando) | Pendiente |
-| 4 | Física v2 (capas, controlador de personaje, consultas, mallas, heightfield, joints) y animación v2 (máquinas de estados, blend trees, IK, root motion) | Pendiente |
+| 2 | Render: **render targets, posproceso y perfiles de calidad** ✅; **materiales v2** ✅; **focos** ✅; HDR intermedio, sombras en cascada, instancing, LOD | En curso |
+| 3 | Entrada: **Input Actions** (táctil, teclado, mando) ✅; reasignación desde un menú | Casi terminada |
+| 4 | Física v2: **capas, personaje, consultas, joints** ✅; colliders de malla. Animación v2: **máquinas de estados, mezcla 1D, eventos** ✅; blend 2D, IK, root motion | En curso |
 | 5 | Editor profesional: selección múltiple, bloqueo, capas y etiquetas, vista de juego, paso a paso en Play | Pendiente |
-| 6 | Scripts: `require`, guardado de partidas, depurador, autocompletado | Pendiente |
-| 7 | Mundos: terreno, vegetación instanciada, agua, partículas, ciclo día/noche | Pendiente |
+| 6 | Scripts: **guardado de partidas** ✅; `require`, depurador, autocompletado | En curso |
+| 7 | Mundos: **terreno** ✅ y **partículas** ✅; vegetación instanciada, agua, ciclo día/noche | En curso |
 | 8 | 2D completo: tilemaps, física 2D (Box2D), luces 2D | Pendiente |
 | 9 | Audio v2: mezclador, grupos, efectos | Pendiente |
 | 10 | Herramientas visuales: materiales por nodos, animación, partículas, programación visual | Pendiente |

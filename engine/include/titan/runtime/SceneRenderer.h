@@ -1,6 +1,7 @@
 #pragma once
 // Traduce una escena a llamadas del Renderer. Lo usan el juego (con la cámara de la escena)
 // y el editor (con su cámara de edición): un único camino de render para los dos.
+#include <deque>
 #include <functional>
 #include <vector>
 
@@ -23,6 +24,7 @@ struct CullStats {
     int shadowCasters = 0, shadowCastersVisible = 0;
     int sprites = 0, spritesVisible = 0;
     int posesComputed = 0;                   // esqueletos calculados (solo los que se ven o dan sombra)
+    int particleSystems = 0, particleSystemsVisible = 0, particlesDrawn = 0;
 };
 
 class SceneRenderer {
@@ -33,6 +35,7 @@ public:
 
     using TextureResolver = std::function<TextureHandle(AssetRef)>;
     using ModelResolver = std::function<int(AssetRef)>; // -1 = sin modelo
+    using MaterialResolver = std::function<const MeshRenderer*(AssetRef)>; // nulo = sin material
 
     // Vista desde la cámara activa de mayor prioridad. Devuelve false si la escena no tiene ninguna.
     static bool cameraView(Scene& scene, float aspect, SceneView& out, Entity* cameraEntity = nullptr);
@@ -40,13 +43,14 @@ public:
     // beginFrame + cámara + luces + mallas opacas, transparentes y sprites.
     // NO llama a endFrame: quien llama puede añadir líneas o texto (rejilla, selección, estadísticas) y luego cerrarlo.
     void render(Scene& scene, Renderer& renderer, const Viewport& viewport, const SceneView& view,
-                const TextureResolver& textures, const ModelResolver& models = {});
+                const TextureResolver& textures, const ModelResolver& models = {},
+                const MaterialResolver& materials = {});
 
 private:
     struct MeshItem {
-        const MeshRenderer* mesh;
+        const MeshRenderer* mesh;   // con el material (.mat) ya aplicado
         const Mat4* world;
-        TextureHandle texture;
+        MaterialTextures maps;
         float depth;
         int model;
         int pose; // índice en poses_ o -1
@@ -66,9 +70,19 @@ private:
         Entity entity;
     };
     std::vector<Candidate> candidates_;
+    struct TerrainItem {
+        int handle;
+        const Mat4* world;
+        const Terrain* terrain;
+        AABB bounds;
+        TextureHandle layers[4];
+    };
+    std::vector<TerrainItem> terrains_;
+    std::deque<MeshRenderer> effective_; // copias con el material compartido aplicado (direcciones estables)
     std::vector<MeshItem> opaque_, transparent_, casters_;
     CullStats stats_;
     std::vector<SpriteItem> sprites_;
+    std::vector<std::pair<float, int>> particleOrder_;
 };
 
 } // namespace titan

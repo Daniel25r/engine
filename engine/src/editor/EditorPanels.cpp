@@ -16,6 +16,7 @@
 #include <set>
 
 #include "EditorImpl.h"
+#include "titan/core/Particles.h"
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include "lauxlib.h"
@@ -182,6 +183,7 @@ void Editor::Impl::drawUI() {
     const float W = float(fbWidth), H = float(fbHeight);
     const ImGuiStyle& st = ImGui::GetStyle();
     drawMenuBar();
+    if (showMachineEditor) drawMachineEditor();
     const float menuH = ImGui::GetFrameHeight();
     const float rowH = ImGui::GetFrameHeight() + st.WindowPadding.y * 2;
     drawToolbar(ImVec2(0, menuH), ImVec2(W, rowH));
@@ -297,7 +299,7 @@ void Editor::Impl::drawUI() {
 void Editor::Impl::drawCreateMenu() {
     static const char* basic[] = {"Vacío", "Cámara", "Sprite"};
     static const char* shapes[] = {"Cubo", "Esfera", "Plano", "Cilindro", "Cono", "Cápsula"};
-    static const char* lights[] = {"Luz direccional", "Luz puntual"};
+    static const char* lights[] = {"Luz direccional", "Luz puntual", "Foco"};
     for (const char* k : basic)
         if (ImGui::MenuItem(k)) createEntityOfKind(k);
     if (ImGui::BeginMenu("Formas")) {
@@ -314,6 +316,12 @@ void Editor::Impl::drawCreateMenu() {
         if (ImGui::MenuItem("Cubo con física")) createEntityOfKind("Cubo con física");
         if (ImGui::MenuItem("Esfera con física")) createEntityOfKind("Esfera con física");
         if (ImGui::MenuItem("Zona trigger")) createEntityOfKind("Zona trigger");
+        if (ImGui::MenuItem("Personaje")) createEntityOfKind("Personaje");
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Efectos")) {
+        for (const char* k : {"Fuego", "Humo", "Chispas", "Explosión", "Magia", "Lluvia", "Nieve"})
+            if (ImGui::MenuItem(k)) createEntityOfKind(k);
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Interfaz")) {
@@ -321,6 +329,7 @@ void Editor::Impl::drawCreateMenu() {
             if (ImGui::MenuItem(k)) createEntityOfKind(k);
         ImGui::EndMenu();
     }
+    if (ImGui::MenuItem("Terreno")) createEntityOfKind("Terreno");
     if (ImGui::MenuItem("Cielo y niebla")) createEntityOfKind("Cielo y niebla");
 }
 
@@ -343,6 +352,7 @@ void Editor::Impl::drawMenuBar() {
         const bool sel = !selectedEntity().isNull();
         if (ImGui::MenuItem("Duplicar", "Ctrl+D", false, sel)) duplicateSelected();
         if (ImGui::MenuItem("Eliminar", "Supr", false, sel)) deleteSelected();
+        if (ImGui::MenuItem("Enfocar selección", "F", false, sel && !runtime)) focusSelected();
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Crear")) {
@@ -354,6 +364,24 @@ void Editor::Impl::drawMenuBar() {
         ImGui::MenuItem("Rejilla", nullptr, &showGrid);
         ImGui::MenuItem("Gizmos", nullptr, &showGizmos);
         ImGui::MenuItem("Interfaz del juego", nullptr, &showUI);
+        if (ImGui::BeginMenu("Calidad gráfica")) {
+            const QualityLevel rec = recommendedQuality(renderer.caps());
+            for (QualityLevel l : {QualityLevel::VeryLow, QualityLevel::Low, QualityLevel::Medium, QualityLevel::High,
+                                   QualityLevel::VeryHigh}) {
+                std::string label = qualityName(l);
+                label[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(label[0])));
+                if (l == rec) label += "  (recomendada)";
+                if (ImGui::MenuItem(label.c_str(), nullptr, renderer.quality().level == l)) {
+                    editorQuality = QualitySettings::preset(l);
+                    renderer.setQuality(editorQuality);
+                }
+            }
+            ImGui::Separator();
+            const DeviceCaps& c = renderer.caps();
+            ImGui::TextDisabled("%s", c.renderer.c_str());
+            ImGui::TextDisabled("%s · textura máx. %d · %d MB", c.version.c_str(), c.maxTextureSize, c.memoryMB);
+            ImGui::EndMenu();
+        }
         ImGui::MenuItem("Estadísticas de render", nullptr, &showStats);
         ImGui::EndMenu();
     }
@@ -682,12 +710,16 @@ void Editor::Impl::drawBrowser() {
 const char* Editor::Impl::typeLabel(Entity e) {
     World& w = scene.world();
     if (w.has<Camera>(e)) return "Cámara";
+    if (w.has<ParticleSystem>(e)) return "Partículas";
+    if (w.has<Terrain>(e)) return "Terreno";
+    if (w.has<CharacterController>(e)) return "Personaje";
     if (w.has<UIJoystick>(e)) return "Joystick";
     if (w.has<UIButton>(e)) return "Botón";
     if (w.has<UIText>(e)) return "Texto UI";
     if (w.has<UIImage>(e)) return "Imagen UI";
     if (w.has<UIRect>(e)) return "UI";
-    if (const Light* l = w.get<Light>(e)) return l->type == Light::Type::Directional ? "Luz direccional" : "Luz puntual";
+    if (const Light* l = w.get<Light>(e))
+        return l->type == Light::Type::Directional ? "Luz direccional" : l->type == Light::Type::Spot ? "Foco" : "Luz puntual";
     if (w.has<Environment>(e)) return "Cielo y niebla";
     if (const MeshRenderer* m = w.get<MeshRenderer>(e)) return m->model.isNull() ? "Malla" : "Modelo";
     if (w.has<SpriteRenderer>(e)) return "Sprite";
@@ -881,6 +913,10 @@ bool beginProps(const char* id) {
     return true;
 }
 
+} // namespace
+
+// Etiqueta de una fila de propiedades (tabla de dos columnas del panel Detalles). También la usan
+// los otros archivos del editor (EditorImpl.h).
 void propLabel(const char* label) {
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(0);
@@ -889,7 +925,6 @@ void propLabel(const char* label) {
     ImGui::TableSetColumnIndex(1);
     ImGui::SetNextItemWidth(-1);
 }
-} // namespace
 
 void Editor::Impl::drawDetails() {
     panelHeader("DETALLES", scale);
@@ -1043,24 +1078,73 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
             propLabel("Triángulos");
             ImGui::TextDisabled("%d", renderer.modelTriangles(editorModel(m.model)));
         }
-        propLabel("Textura");
-        assetCombo("##tex", AssetType::Texture, m.texture);
-        color("Color base", m.color);
-        dragF("Metálico", m.metallic, 0.01f, 0, 1, "%.2f");
-        dragF("Rugosidad", m.roughness, 0.01f, 0, 1, "%.2f");
-        color("Emisión", m.emission, false);
-        check("Rejilla", m.prototypeGrid);
+        propLabel("Material");
+        assetCombo("##material", AssetType::Material, m.material);
+        // Con material compartido se editan los valores del archivo .mat (afecta a todos los que lo usan);
+        // sin él, los del propio objeto.
+        const MeshRenderer* shared = m.material.isNull() ? nullptr : resources.material(m.material);
+        MeshRenderer sharedEdit = shared ? *shared : MeshRenderer{};
+        MeshRenderer& mat = shared ? sharedEdit : m;
+        if (shared) {
+            propLabel("");
+            ImGui::TextDisabled("Editando el material compartido");
+        }
+        auto map = [&](const char* label, AssetRef& ref) {
+            propLabel(label);
+            assetCombo((std::string("##") + label).c_str(), AssetType::Texture, ref);
+        };
+        map("Textura", mat.texture);
+        color("Color base", mat.color);
+        dragF("Metálico", mat.metallic, 0.01f, 0, 1, "%.2f");
+        dragF("Rugosidad", mat.roughness, 0.01f, 0, 1, "%.2f");
+        map("Mapa normal", mat.normalMap);
+        if (!mat.normalMap.isNull()) dragF("Relieve", mat.normalStrength, 0.01f, 0, 4, "%.2f");
+        map("Metal/rugosidad", mat.metallicRoughnessMap);
+        map("Oclusión", mat.occlusionMap);
+        color("Emisión", mat.emission, false);
+        map("Mapa emisión", mat.emissionMap);
+        propLabel("Repetición");
+        ImGui::DragFloat2("##tiling", &mat.tiling.x, 0.01f, -100, 100, "%.2f");
+        track();
+        propLabel("Desplazamiento");
+        ImGui::DragFloat2("##offset", &mat.offset.x, 0.005f, -100, 100, "%.3f");
+        track();
+        check("Recorte alfa", mat.alphaClip);
+        if (mat.alphaClip) dragF("Umbral alfa", mat.alphaCutoff, 0.005f, 0, 1, "%.2f");
+        check("Doble cara", mat.doubleSided);
+        check("Rejilla", mat.prototypeGrid);
+        check("Sin luz", mat.unlit);
+        if (shared && serializeMaterial(sharedEdit) != serializeMaterial(*shared)) {
+            const AssetRecord* r = project->assets().find(m.material);
+            std::string err;
+            if (r && fileio::writeAtomic(project->assetsDir() + "/" + r->path, serializeMaterial(sharedEdit), true, &err))
+                resources.invalidateMaterial(m.material);
+            else
+                TITAN_ERROR("editor", "No se pudo guardar el material: %s", err.c_str());
+        }
         check("Sombras", m.castShadows);
-        check("Sin luz", m.unlit);
         check("Visible", m.visible);
+        propLabel("");
+        if (ImGui::Button(shared ? "Quitar material" : "Guardar como material")) {
+            if (shared) {
+                pushUndo();
+                m.material = {};
+            } else {
+                saveMaterial(e);
+            }
+        }
     } else if (name == "Light") {
         Light& l = *w.get<Light>(e);
         int type = static_cast<int>(l.type);
-        combo("Tipo", type, "Direccional (sol)\0Puntual\0");
+        combo("Tipo", type, "Direccional (sol)\0Puntual\0Foco\0");
         l.type = static_cast<Light::Type>(type);
         color("Color", l.color, false);
         dragF("Intensidad", l.intensity, 0.02f, 0, 20, "%.2f");
-        if (l.type == Light::Type::Point) dragF("Alcance", l.range, 0.1f, 0.1f, 500, "%.1f");
+        if (l.type != Light::Type::Directional) dragF("Alcance", l.range, 0.1f, 0.1f, 500, "%.1f");
+        if (l.type == Light::Type::Spot) {
+            dragF("Apertura", l.spotAngle, 0.25f, 1, 179, "%.0f°");
+            dragF("Borde suave", l.spotSoftness, 0.005f, 0, 1, "%.2f");
+        }
     } else if (name == "Environment") {
         Environment& v = *w.get<Environment>(e);
         check("Cielo", v.sky);
@@ -1073,6 +1157,19 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         dragF("Exposición", v.exposure, 0.01f, 0.05f, 8, "%.2f");
         check("Sombras", v.shadows);
         dragF("Dist. sombras", v.shadowDistance, 0.5f, 5, 500, "%.0f");
+        check("Bloom", v.bloom);
+        if (v.bloom) {
+            dragF("Intens. bloom", v.bloomIntensity, 0.01f, 0, 4, "%.2f");
+            dragF("Umbral bloom", v.bloomThreshold, 0.005f, 0, 1, "%.2f");
+        }
+        dragF("Viñeta", v.vignette, 0.005f, 0, 1, "%.2f");
+        dragF("Contraste", v.contrast, 0.005f, 0.5f, 1.5f, "%.2f");
+        dragF("Saturación", v.saturation, 0.005f, 0, 2, "%.2f");
+        dragF("Temperatura", v.temperature, 0.01f, -1, 1, "%.2f");
+        if (!renderer.quality().bloom && v.bloom) {
+            propLabel("");
+            ImGui::TextDisabled("El perfil de calidad actual no permite bloom");
+        }
     } else if (name == "Animator") {
         Animator& a = *w.get<Animator>(e);
         const MeshRenderer* mr = w.get<MeshRenderer>(e);
@@ -1106,6 +1203,17 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         float t = dur > 0 ? std::fmod(a.time, dur) : a.time;
         if (ImGui::SliderFloat("##tiempo", &t, 0, std::max(dur, 0.01f), "%.2f s")) a.time = t; // fregar la animación
         if (ImGui::IsItemActive()) noScrollWidgetActive = true;
+        propLabel("Estados");
+        const std::string label = a.machine.empty() ? std::string("Crear máquina de estados")
+                                                    : "Editar (" + std::to_string(a.machine.states.size()) + " estados)";
+        if (ImGui::Button(label.c_str(), ImVec2(-1, 0))) {
+            machineEditorFor = scene.info(e).id;
+            showMachineEditor = true;
+        }
+        if (!a.machine.empty()) {
+            propLabel("Estado actual");
+            ImGui::TextDisabled("%s", a.machine.current.empty() ? "-" : a.machine.current.c_str());
+        }
     } else if (name == "AudioSource") {
         AudioSource& a = *w.get<AudioSource>(e);
         propLabel("Sonido");
@@ -1119,6 +1227,63 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
             dragF("Distancia mín.", a.minDistance, 0.05f, 0.01f, 1000, "%.1f m");
             dragF("Distancia máx.", a.maxDistance, 0.1f, 0.1f, 10000, "%.1f m");
         }
+    } else if (name == "ParticleSystem") {
+        ParticleSystem& p = *w.get<ParticleSystem>(e);
+        propLabel("");
+        if (ImGui::Button("Reiniciar")) {
+            clearParticles(p);
+            playParticles(p);
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("%zu vivas", aliveParticles(p));
+        check("Al empezar", p.playOnStart);
+        check("Repetir", p.looping);
+        dragF("Duración", p.duration, 0.05f, 0.05f, 600, "%.2f s");
+        dragF("Por segundo", p.rate, 0.5f, 0, 5000, "%.0f");
+        dragF("Por metro", p.ratePerMeter, 0.1f, 0, 1000, "%.1f");
+        propLabel("Ráfaga");
+        ImGui::DragInt("##burst", &p.burst, 1, 0, 5000);
+        track();
+        propLabel("Máximo");
+        ImGui::DragInt("##maxp", &p.maxParticles, 5, 1, 10000);
+        track();
+        propLabel("Vida");
+        ImGui::DragFloatRange2("##vida", &p.lifetimeMin, &p.lifetimeMax, 0.02f, 0.01f, 60, "%.2f s");
+        track();
+        propLabel("Velocidad");
+        ImGui::DragFloatRange2("##vel", &p.speedMin, &p.speedMax, 0.05f, 0, 200, "%.1f");
+        track();
+        dragF("Apertura", p.spread, 0.5f, 0, 180, "%.0f°");
+        combo("Forma", p.shape, "Punto\0Esfera\0Caja\0");
+        if (p.shape != 0) {
+            propLabel(p.shape == 1 ? "Radio" : "Tamaño");
+            if (p.shape == 1) ImGui::DragFloat("##radio", &p.shapeSize.x, 0.01f, 0, 500);
+            else ImGui::DragFloat3("##caja", &p.shapeSize.x, 0.02f, 0, 500);
+            track();
+        }
+        propLabel("Aceleración");
+        ImGui::DragFloat3("##acc", &p.acceleration.x, 0.05f, -100, 100, "%.2f");
+        track();
+        dragF("Frenado", p.drag, 0.01f, 0, 20, "%.2f");
+        propLabel("Tamaño");
+        ImGui::DragFloatRange2("##tam", &p.sizeStart, &p.sizeEnd, 0.005f, 0, 50, "inicio %.2f", "fin %.2f");
+        track();
+        color("Color inicial", p.colorStart);
+        color("Color final", p.colorEnd);
+        dragF("Giro", p.rotationSpeed, 1, 0, 2000, "%.0f°/s");
+        propLabel("Textura");
+        assetCombo("##ptex", AssetType::Texture, p.texture);
+        if (!p.texture.isNull()) {
+            propLabel("Cuadros");
+            int cr[2] = {p.sheetColumns, p.sheetRows};
+            if (ImGui::DragInt2("##sheet", cr, 0.1f, 1, 64)) {
+                p.sheetColumns = std::max(1, cr[0]);
+                p.sheetRows = std::max(1, cr[1]);
+            }
+            track();
+        }
+        check("Aditiva (brillo)", p.additive);
+        check("En el mundo", p.worldSpace);
     } else if (name == "UIRect") {
         UIRect& r = *w.get<UIRect>(e);
         auto drag2 = [&](const char* label, Vec2& v, float speed, float lo, float hi, const char* fmt) {
@@ -1235,6 +1400,67 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         if (ImGui::SmallButton("Ajustar al objeto")) {
             pushUndo();
             fitCollider(e);
+        }
+        propLabel("Capa");
+        ImGui::SliderInt("##collayer", &c.layer, 0, 15);
+        track();
+    } else if (name == "Terrain") {
+        drawTerrainPanel(e, *w.get<Terrain>(e));
+    } else if (name == "CharacterController") {
+        CharacterController& c = *w.get<CharacterController>(e);
+        dragF("Altura", c.height, 0.01f, 0.2f, 20, "%.2f m");
+        dragF("Radio", c.radius, 0.01f, 0.05f, 5, "%.2f m");
+        dragF("Pendiente máx.", c.maxSlope, 0.5f, 1, 89, "%.0f°");
+        dragF("Escalón", c.stepHeight, 0.01f, 0, 2, "%.2f m");
+        dragF("Escala gravedad", c.gravityScale, 0.01f, -5, 5, "%.2f");
+        propLabel("Capa");
+        ImGui::SliderInt("##cclayer", &c.layer, 0, 15);
+        track();
+        propLabel("");
+        ImGui::TextDisabled("En un script: e:move(x, z), e:jump(5), e:isGrounded()");
+    } else if (name == "Joint") {
+        Joint& j = *w.get<Joint>(e);
+        int type = static_cast<int>(j.type);
+        combo("Tipo", type, "Fija\0Bisagra\0Distancia / cuerda\0");
+        j.type = static_cast<Joint::Type>(type);
+        propLabel("Conectada a");
+        const Entity other = j.connected.isNull() ? Entity{} : scene.findById(j.connected);
+        const std::string current = other.isNull() ? std::string("(el mundo)") : scene.info(other).name;
+        if (ImGui::BeginCombo("##jointcon", current.c_str())) {
+            if (ImGui::Selectable("(el mundo)", other.isNull())) {
+                pushUndo();
+                j.connected = {};
+            }
+            scene.world().each<Rigidbody>([&](Entity o, Rigidbody&) {
+                if (o == e) return;
+                ImGui::PushID(static_cast<int>(o.index));
+                if (ImGui::Selectable(scene.info(o).name.c_str(), o == other)) {
+                    pushUndo();
+                    j.connected = scene.info(o).id;
+                }
+                ImGui::PopID();
+            });
+            ImGui::EndCombo();
+        }
+        propLabel("Punto (local)");
+        ImGui::DragFloat3("##janchor", &j.anchor.x, 0.01f);
+        track();
+        if (j.type == Joint::Type::Hinge) {
+            propLabel("Eje (local)");
+            ImGui::DragFloat3("##jaxis", &j.axis.x, 0.01f, -1, 1);
+            track();
+            check("Limitar giro", j.limitAngle);
+            if (j.limitAngle) {
+                propLabel("Ángulos");
+                ImGui::DragFloatRange2("##jang", &j.minAngle, &j.maxAngle, 0.5f, -180, 180, "%.0f°");
+                track();
+            }
+        } else if (j.type == Joint::Type::Distance) {
+            propLabel("Distancia");
+            ImGui::DragFloatRange2("##jdist", &j.minDistance, &j.maxDistance, 0.01f, 0, 1000, "mín %.2f", "máx %.2f");
+            track();
+            dragF("Muelle (Hz)", j.springFrequency, 0.05f, 0, 30, "%.2f");
+            if (j.springFrequency > 0) dragF("Amortiguación", j.springDamping, 0.01f, 0, 1, "%.2f");
         }
     } else if (name == "Script") {
         Script& s = *w.get<Script>(e);

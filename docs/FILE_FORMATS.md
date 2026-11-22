@@ -62,13 +62,41 @@ Reglas comunes:
 | Componente | Campos |
 |---|---|
 | `Transform` | `position` [3], `rotation` [4], `scale` [3] |
-| `Camera` | `projection` ("orthographic"/"perspective"), `orthographicSize` (media altura), `fieldOfView` (grados), `near`, `far`, `priority`, `clearColor` [4] |
-| `SpriteRenderer` | `texture` (recurso), `color` [4], `size` [2], `pivot` [2], `uv` [4], `sortingOrder`, `visible` |
-| `Script` | `script` (recurso .lua), `enabled` |
-| `MeshRenderer` | `mesh` ("cube", "sphere", "plane", "cylinder", "cone", "capsule"), `texture`, `color` [4], `shininess`, `unlit`, `visible` |
-| `Light` | `type` ("directional"/"point"), `color` [4], `intensity`, `range` |
+| `Camera` | `projection` ("orthographic"/"perspective"), `orthographicSize`, `fieldOfView`, `near`, `far`, `priority`, `clearColor` [4] |
+| `SpriteRenderer` | `texture`, `color` [4], `size` [2], `pivot` [2], `uv` [4], `sortingOrder`, `visible` |
+| `Script` | `script` (recurso .lua), `enabled`, `props` (objeto) |
+| `MeshRenderer` | `mesh`, `model`, `material` (recurso .mat), `castShadows`, `visible` y los campos de material: `texture`, `color`, `metallic`, `roughness`, `emission`, `prototypeGrid`, `unlit`, `normalMap`, `normalStrength`, `metallicRoughnessMap`, `emissionMap`, `occlusionMap`, `tiling` [2], `offset` [2], `alphaClip`, `alphaCutoff`, `doubleSided` |
+| `Light` | `type` ("directional"/"point"/"spot"), `color`, `intensity`, `range`, `spotAngle`, `spotSoftness` |
+| `Environment` | cielo, niebla, sombras y posprocesado: `bloom`, `bloomIntensity`, `bloomThreshold`, `vignette`, `contrast`, `saturation`, `temperature` |
+| `Animator` | `clip`, `playing`, `loop`, `speed`, `fadeDuration`, `machine` (opcional: `params`, `states` con `blend` y `events`, `transitions` con `conditions`) |
+| `AudioSource` | `clip`, `volume`, `pitch`, `loop`, `playOnStart`, `spatial`, `minDistance`, `maxDistance` |
+| `Rigidbody`, `Collider` | ver ENGINE_API; `Collider.layer` 0..15 |
+| `CharacterController` | `height`, `radius`, `maxSlope`, `stepHeight`, `gravityScale`, `layer` |
+| `Joint` | `type` ("fixed"/"hinge"/"distance"), `connected` (id de entidad o null), `anchor`, `axis`, `limitAngle`, `minAngle`, `maxAngle`, `minDistance`, `maxDistance`, `springFrequency`, `springDamping` |
+| `ParticleSystem` | emisión, vida, velocidad, forma, aceleración, tamaño y color inicial/final, textura con hoja de cuadros, `additive`, `worldSpace` |
+| `Terrain` | `size`, `maxHeight`, `resolution`, `layerTiling`, `layers` [4 × {texture, color}], `heights` (base64 de uint16 little endian, resolution²), `splat` (base64, resolution² × 4 pesos) |
+| `UIRect`, `UIImage`, `UIText`, `UIButton`, `UIJoystick` | ver ENGINE_API |
+
+Los campos nuevos de 0.13 tienen valores por defecto que reproducen el aspecto anterior: una escena de 0.12 se carga
+igual, sin migración.
 
 Añadir componentes nuevos no cambia la versión del formato: un motor antiguo los conserva como desconocidos.
+
+## Material — `*.mat`
+
+```json
+{ "format": "titan.material", "version": 1, "engineVersion": "0.13.0",
+  "texture": "a1b2...", "color": [1, 1, 1, 1], "metallic": 0, "roughness": 0.6, "normalMap": null, "tiling": [1, 1], ... }
+```
+
+Los mismos campos de material que `MeshRenderer`. Un MeshRenderer con `material` usa los del archivo. El paquete comprueba
+que se puede leer y que sus texturas existen.
+
+## Partida guardada — `partida.json`
+
+`{"format": "titan.save", "version": 1, "data": { ... }}`, escrito de forma atómica con copia `.bak`. Lo crea `Save.*`
+en el almacenamiento privado de la app (Android), junto al paquete (reproductor de escritorio) o en `.titan/` del
+proyecto (Jugar en el editor; no se empaqueta).
 
 ## Metadatos de recurso — `<archivo>.meta`
 

@@ -1,5 +1,49 @@
 # Registro de cambios
 
+## 0.13.0 — 2026-11-22 · Gran actualización: render, materiales, partículas, controles, física, animación y terreno
+
+Entregada de una vez (a petición del usuario), con nueve sistemas. Todo probado en PC; nada en un teléfono real.
+
+Render
+- Render target + posprocesado (`engine/src/render/PostProcess.*`): escala de resolución, FXAA (Lottes), bloom por
+  "dual filtering" de 5 niveles, contraste, saturación, temperatura y viñeta. Sobre imagen LDR (RGBA8): funciona en
+  cualquier GPU OpenGL ES 3.0. La UI y el texto se dibujan después, a resolución completa.
+- Perfiles de calidad (`titan/core/Quality.h`): muy bajo, bajo, medio, alto, muy alto. Cambian de verdad la escala de
+  render, las sombras (sí/no y 512–4096), FXAA, bloom y el número de luces. Perfil recomendado según capacidades
+  medidas (versión de OpenGL ES, tamaño máximo de textura, memoria del sistema), nunca por el nombre del modelo.
+  Menú Ventana › Calidad gráfica; `Quality.*` en Lua.
+- Materiales v2: mapa normal (base tangente por píxel, sin tangentes precalculadas), metal/rugosidad (glTF),
+  emisión, oclusión, repetición y desplazamiento, recorte alfa, doble cara; los modelos glTF usan ya todos sus mapas
+  (antes solo el color) y `alphaMode: MASK`. Materiales compartidos `.mat` (Guardar como material en Detalles).
+- Focos (luces spot) con apertura y borde suave; hasta 8 luces locales según el perfil.
+- Sistema de partículas (`ParticleSystem`): simulación en CPU, cuadrados hacia la cámara, mezcla alfa o aditiva,
+  hoja de animación, emisión por tiempo, por distancia y por ráfagas, culling. 7 efectos de partida.
+- Terreno (`Terrain`): rejilla de alturas hasta 257×257, 4 capas pintadas, colisión, esculpido con el dedo (subir,
+  bajar, suavizar, aplanar, pintar), generador de montañas, importación de mapas de alturas.
+
+Juego
+- Input Actions: teclado y mando (escritorio con GLFW; Android en el reproductor y en el editor) y táctil/UI con el
+  mismo código: `Input.action`, `Input.axis`, `Input.define`. Acciones por defecto Mover, Mirar, Saltar, Atacar,
+  Interactuar, Correr, Pausa.
+- Física: controlador de personaje (Jolt CharacterVirtual: escalones, pendientes, salto), capas de colisión (16),
+  sphereCast, overlapSphere, overlapBox, raycast con normal y máscara, uniones fija, bisagra y distancia/muelle.
+- Animación: máquina de estados con parámetros, transiciones con condiciones y tiempo de salida, mezcla 1D (blend
+  tree) sincronizada, eventos (`onAnimationEvent`); editor por formularios pensado para el tacto.
+- Partida guardada: `Save.*` en JSON atómico (1 MB máximo), en el almacenamiento privado de la app.
+
+Editor
+- Crear › Efectos, Crear › Terreno, Crear › Física › Personaje, Crear › Luces › Foco.
+- Enfocar selección (tecla F o Editar › Enfocar selección).
+- La API de Lua se reparte en varios archivos (`ScriptInternal.h`, `ScriptApiWorld.cpp`); nuevos archivos del editor
+  `EditorAnimation.cpp` y `EditorTerrain.cpp`.
+
+Corregido
+- `FieldReader::readRaw` no aceptaba listas JSON (encontrado por la prueba del terreno: los colores de las capas no
+  se cargaban).
+
+Pruebas: 87 automáticas (24 nuevas). Prueba de regresión de 1600 objetos: 950 draw calls con culling y 3206 sin él,
+como en 0.11.
+
 ## 0.12.0 — 2026-11-22 · Jugar instantáneo
 
 Cambiado

@@ -21,7 +21,9 @@
 
 #include "titan/core/Events.h"
 #include "titan/core/Input.h"
+#include "titan/core/InputActions.h"
 #include "titan/core/PhysicsApi.h"
+#include "titan/core/Quality.h"
 #include "titan/core/Scene.h"
 #include "titan/core/Serialization.h"
 
@@ -52,6 +54,14 @@ public:
     virtual void scriptPlayEntitySound(Entity e) {}
     virtual void scriptStopSound(Entity e) {}
     virtual void scriptSetVolume(float v) {}
+    // Calidad gráfica (Quality.*). Sin renderer (pruebas) no hace nada.
+    virtual bool scriptSetQuality(const std::string& name) { return false; }
+    virtual std::string scriptQuality() const { return ""; }
+    virtual DeviceCaps scriptDeviceCaps() const { return {}; }
+    // Acciones de entrada (Input.action, Input.axis...). Nulo = sin acciones.
+    virtual InputActions* scriptActions() { return nullptr; }
+    // Archivo de la partida guardada (lo decide la plataforma, nunca el script). Vacío = solo en memoria.
+    virtual std::string scriptSavePath() const { return ""; }
 };
 
 struct ScriptError {
@@ -64,6 +74,12 @@ struct ScriptError {
 
 class ScriptSystem {
 public:
+    // ---- Partida guardada (Save.* en Lua): datos JSON en memoria que se escriben de forma atómica. ----
+    Json& saveData();                 // se carga del archivo la primera vez
+    bool writeSave(std::string* error = nullptr);
+    bool saveDirty() const { return saveDirty_; }
+    void markSaveDirty() { saveDirty_ = true; }
+
     // Devuelve el nombre del archivo (para los mensajes de error) y su código fuente.
     using SourceLoader = std::function<bool(AssetRef, std::string& chunkName, std::string& source)>;
 
@@ -81,7 +97,7 @@ public:
     // Llama onCollisionEnter/Exit u onTriggerEnter/Exit(other) en los scripts de "self".
     void dispatchContact(Entity self, Entity other, bool begin, bool trigger);
     // Llama a un método sin argumentos (p. ej. "onClick") en los scripts de esa entidad.
-    void dispatchEvent(Entity self, const char* method);
+    void dispatchEvent(Entity self, const char* method, const char* arg = nullptr);
     // Crea los scripts de una entidad nueva y de sus hijos (prefabs instanciados durante el juego).
     void attachSubtree(Entity root);
     void update(float dt);
@@ -110,6 +126,8 @@ public:
     void* allocate(void* ptr, size_t oldSize, size_t newSize);
 
 private:
+    Json save_;
+    bool saveLoaded_ = false, saveDirty_ = false;
     struct Instance {
         Entity entity;
         int ref = -1; // referencia a la tabla self en el registro de Lua
@@ -121,7 +139,8 @@ private:
 
     int loadClass(AssetRef id, std::string& chunkName);
     void createInstance(Entity e, const Script& component);
-    bool call(Instance& inst, const char* method, int nargs, const float* arg, const Entity* entityArg = nullptr);
+    bool call(Instance& inst, const char* method, int nargs, const float* arg, const Entity* entityArg = nullptr,
+              const char* stringArg = nullptr);
     void callAll(const char* method, float dt);
     void destroyInstance(Instance& inst);
     void reportError(const std::string& script, const std::string& entity, const std::string& function,

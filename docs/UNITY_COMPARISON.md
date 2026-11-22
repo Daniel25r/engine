@@ -2,7 +2,7 @@
 
 Este documento recorre los sistemas de Unity 6 (el editor, el runtime y los paquetes oficiales más usados),
 explica brevemente cómo funcionan y dice dónde está Titán. Es la hoja de ruta para llegar a su nivel.
-Estado de Titán a fecha de la versión 0.11.0.
+Estado de Titán a fecha de la versión 0.13.0.
 
 Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 
@@ -34,37 +34,37 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ pendiente
 | Unity (URP) | Cómo funciona | Titán |
 |---|---|---|
 | Render Pipeline (URP/HDRP) | Pipelines configurables, forward+ / deferred | 🟡 Forward propio en OpenGL ES 3.0 |
-| Materiales Lit (PBR) | Metálico/rugosidad, mapas normal, oclusión, emisión | 🟡 Color, metálico, rugosidad, emisión, textura de color; ❌ mapas normal/ORM |
+| Materiales Lit (PBR) | Metálico/rugosidad, mapas normal, oclusión, emisión | ✅ Color, metal/rugosidad, mapas normal, metal/rugosidad, emisión y oclusión, recorte alfa, repetición, materiales compartidos (.mat); ❌ mapas de altura (parallax) |
 | Shader Graph | Editor de shaders por nodos | ❌ |
-| Luces direccional, puntual, foco, área | Con sombras en tiempo real | 🟡 Direccional con sombras + 4 puntuales sin sombra; ❌ focos |
+| Luces direccional, puntual, foco, área | Con sombras en tiempo real | 🟡 Direccional con sombras + hasta 8 puntuales y focos sin sombra; ❌ luces de área |
 | Sombras en cascada | 1-4 cascadas | 🟡 1 cascada ajustada a la cámara |
 | Iluminación global (lightmaps, light probes, APV) | Luz rebotada precalculada | ❌ |
 | Skybox y niebla | Cielo procedural o cubemap | ✅ Cielo procedural, niebla exponencial |
-| Post-procesado (Volume): bloom, tonemapping, color grading, SSAO, DOF | Pila de efectos | 🟡 Tonemapping ACES; ❌ resto (requiere HDR intermedio) |
+| Post-procesado (Volume): bloom, tonemapping, color grading, SSAO, DOF | Pila de efectos | 🟡 ACES, bloom, FXAA, contraste/saturación/temperatura, viñeta, escala de render; ❌ SSAO, DOF, HDR intermedio |
 | LOD, occlusion culling, GPU instancing, SRP Batcher | Optimización | 🟡 Lotes de sprites, culling por frustum (cámara y sombras); ❌ LOD, occlusion culling, instancing |
-| Terreno (Terrain) | Mapa de alturas, pintura de capas, árboles, hierba | ❌ Prioridad alta para escenarios abiertos |
-| Partículas (Shuriken / VFX Graph) | Emisores configurables | ❌ |
+| Terreno (Terrain) | Mapa de alturas, pintura de capas, árboles, hierba | 🟡 Esculpido, 4 capas pintadas, colisión, montañas, mapas de alturas; ❌ vegetación, LOD de terreno |
+| Partículas (Shuriken / VFX Graph) | Emisores configurables | 🟡 Emisores CPU con formas, ráfagas, estelas, color/tamaño en el tiempo, hojas de animación, aditivas; ❌ colisión de partículas, curvas, GPU |
 
 ## 4. Física
 
 | Unity | Cómo funciona | Titán |
 |---|---|---|
 | PhysX 3D: Rigidbody, colliders caja/esfera/cápsula/malla | Simulación a paso fijo | ✅ Jolt Physics (motor de nivel AAA): caja, esfera, cápsula, triggers; ❌ colliders de malla |
-| Raycast, SphereCast, Overlap | Consultas | ✅ Raycast (con entidad ignorada); ❌ formas |
-| Joints (bisagra, muelle, fijo) | Restricciones | ❌ |
-| CharacterController | Movimiento de personajes con pendientes y escalones | ❌ (Jolt incluye CharacterVirtual, se expondrá) |
+| Raycast, SphereCast, Overlap | Consultas | ✅ Raycast, SphereCast, OverlapSphere, OverlapBox, con máscara de capas |
+| Joints (bisagra, muelle, fijo) | Restricciones | 🟡 Fija, bisagra con límites, distancia/cuerda/muelle; ❌ deslizante, ragdolls |
+| CharacterController | Movimiento de personajes con pendientes y escalones | ✅ Jolt CharacterVirtual: pendientes, escalones, salto |
 | Física 2D (Box2D) | Colliders 2D, efectores | ❌ (Box2D v3 previsto) |
-| Capas y matriz de colisión | Qué capas chocan entre sí | 🟡 Estáticos/móviles; ❌ capas del usuario |
+| Capas y matriz de colisión | Qué capas chocan entre sí | ✅ 16 capas con matriz configurable |
 
 ## 5. Animación, audio, UI, entrada
 
 | Unity | Titán |
 |---|---|
-| Animator (máquinas de estados, blend trees), Timeline | 🟡 Esqueletos glTF, clips, Animator con velocidad y bucle, control desde scripts, transiciones suaves, hasta 256 huesos; ❌ máquinas de estados, Timeline |
+| Animator (máquinas de estados, blend trees), Timeline | 🟡 Máquinas de estados con condiciones, mezcla 1D, eventos, transiciones; ❌ blend 2D, capas, IK, Timeline |
 | Importación de modelos FBX/glTF/OBJ con animaciones | 🟡 glTF/GLB con mallas, materiales, texturas, esqueletos y animaciones; ❌ FBX |
 | Audio: AudioSource 2D/3D, mezclador | 🟡 AudioSource 2D/3D, bucles, volumen, tono, oyente en la cámara; ❌ mezclador con grupos y efectos |
 | UI (uGUI / UI Toolkit): Canvas, botones, texto, layouts, anclajes | 🟡 Anclajes y estirado, imágenes, barras, texto TTF, botones, joystick; ❌ layouts automáticos, deslizadores, campos de texto, máscaras |
-| Input System: acciones, mandos, táctil | 🟡 Táctil multipunto y joystick virtual; ❌ acciones, mandos |
+| Input System: acciones, mandos, táctil | ✅ Acciones con teclado, mando, táctil y UI; 🟡 sin reasignación desde un menú del editor |
 | Navegación (NavMesh) | ❌ |
 | Red (Netcode) | ❌ |
 
@@ -85,14 +85,15 @@ En este orden, porque cada paso hace posibles juegos que antes no lo eran:
 1. **Física** ✅ (v0.6)
 2. **Variables de script editables en el Inspector** ✅ (v0.7)
 3. **Prefabs** ✅ básicos (v0.7); faltan variantes y propagación
-4. **Animación esquelética** ✅ (v0.8, transiciones y 256 huesos en v0.9); faltan máquinas de estados
+4. **Animación esquelética** ✅ (v0.8, transiciones y 256 huesos en v0.9, máquinas de estados en v0.13); faltan IK y blend 2D
 5. **Audio** ✅ (v0.9)
 6. **UI de juego** ✅ (v0.10): botones, imágenes, barras, texto TTF, joystick virtual
-7. **Terreno** con pintura de capas y vegetación instanciada.
-8. **Post-procesado** con HDR: bloom, SSAO, color grading.
-9. **Partículas**.
-10. **Controlador de personaje**, física 2D, joints.
-11. Exportar el APK desde el propio teléfono.
+7. **Terreno** ✅ (v0.13: esculpido, capas, colisión); falta vegetación instanciada
+8. **Post-procesado** ✅ básico (v0.13: bloom, FXAA, color, viñeta, escala); faltan HDR intermedio, SSAO y DOF
+9. **Partículas** ✅ (v0.13)
+10. **Controlador de personaje y joints** ✅ (v0.13); falta física 2D
+11. Instancing, LOD y occlusion culling.
+12. Exportar el APK desde el propio teléfono.
 
 Lo que Titán ya hace mejor que Unity: el editor completo funciona en el propio teléfono, el proyecto ocupa
 unos pocos MB, y los formatos son JSON legibles y versionados.

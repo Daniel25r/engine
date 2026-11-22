@@ -7,6 +7,7 @@
 
 #include "titan/core/FileIO.h"
 #include "titan/core/Log.h"
+#include "titan/core/TerrainTools.h"
 #include "titan/core/Version.h"
 
 namespace titan {
@@ -101,8 +102,8 @@ void FieldReader::read(const char* key, Quat& v) {
 
 void FieldReader::readRaw(const char* key, std::string& v) {
     if (auto* j = field(key)) {
-        if (j->is_object()) v = j->dump();
-        else warn(key, "se esperaba un objeto");
+        if (j->is_object() || j->is_array()) v = j->dump();
+        else warn(key, "se esperaba un objeto o una lista");
     }
 }
 
@@ -133,6 +134,146 @@ const ComponentType* ComponentRegistry::find(const std::string& name) const {
     for (auto& t : types_)
         if (t.name == name) return &t;
     return nullptr;
+}
+
+// Máquina de estados de animación (dentro del Animator). Lectura tolerante: lo que falte toma su valor por defecto.
+Json machineToJson(const AnimStateMachine& m) {
+    static const char* ptypes[] = {"float", "int", "bool", "trigger"};
+    static const char* ops[] = {">", "<", "==", "!=", "true", "false"};
+    Json params = Json::array(), states = Json::array(), transitions = Json::array();
+    for (const AnimParam& p : m.params)
+        params.push_back({{"name", p.name}, {"type", ptypes[static_cast<int>(p.type)]}, {"value", toJson(p.value)}});
+    for (const AnimState& s : m.states) {
+        Json blend = Json::array(), events = Json::array();
+        for (const AnimBlendPoint& b : s.blend) blend.push_back({{"threshold", toJson(b.threshold)}, {"clip", b.clip}});
+        for (const AnimEvent& e : s.events) events.push_back({{"time", toJson(e.time)}, {"name", e.name}});
+        states.push_back({{"name", s.name}, {"clip", s.clip}, {"speed", toJson(s.speed)}, {"loop", s.loop},
+                          {"blendParam", s.blendParam}, {"blend", blend}, {"events", events}});
+    }
+    for (const AnimTransition& t : m.transitions) {
+        Json conds = Json::array();
+        for (const AnimCondition& c : t.conditions)
+            conds.push_back({{"param", c.param}, {"op", ops[static_cast<int>(c.op)]}, {"value", toJson(c.value)}});
+        transitions.push_back({{"from", t.from}, {"to", t.to}, {"conditions", conds}, {"duration", toJson(t.duration)},
+                               {"hasExitTime", t.hasExitTime}, {"exitTime", toJson(t.exitTime)}});
+    }
+    return Json{{"params", params}, {"states", states}, {"transitions", transitions}};
+}
+
+void machineFromJson(const Json& j, AnimStateMachine& m) {
+    m = {};
+    if (!j.is_object()) return;
+    auto f = [](const Json& o, const char* k, float d) { return o.contains(k) && o[k].is_number() ? o[k].get<float>() : d; };
+    auto str = [](const Json& o, const char* k) { return o.contains(k) && o[k].is_string() ? o[k].get<std::string>() : std::string(); };
+    auto b = [](const Json& o, const char* k, bool d) { return o.contains(k) && o[k].is_boolean() ? o[k].get<bool>() : d; };
+    if (j.contains("params") && j["params"].is_array())
+        for (const Json& p : j["params"]) {
+            AnimParam ap;
+            ap.name = str(p, "name");
+            const std::string t = str(p, "type");
+            ap.type = t == "int" ? AnimParam::Type::Int : t == "bool" ? AnimParam::Type::Bool
+                    : t == "trigger" ? AnimParam::Type::Trigger : AnimParam::Type::Float;
+            ap.value = f(p, "value", 0);
+            if (!ap.name.empty()) m.params.push_back(ap);
+        }
+    if (j.contains("states") && j["states"].is_array())
+        for (const Json& s : j["states"]) {
+            AnimState st;
+            st.name = str(s, "name");
+            st.clip = str(s, "clip");
+            st.speed = f(s, "speed", 1);
+            st.loop = b(s, "loop", true);
+            st.blendParam = str(s, "blendParam");
+            if (s.contains("blend") && s["blend"].is_array())
+                for (const Json& p : s["blend"]) st.blend.push_back({f(p, "threshold", 0), str(p, "clip")});
+            if (s.contains("events") && s["events"].is_array())
+                for (const Json& e : s["events"]) st.events.push_back({f(e, "time", 0.5f), str(e, "name")});
+            if (!st.name.empty()) m.states.push_back(st);
+        }
+    if (j.contains("transitions") && j["transitions"].is_array())
+        for (const Json& t : j["transitions"]) {
+            AnimTransition tr;
+            tr.from = str(t, "from");
+            tr.to = str(t, "to");
+            tr.duration = f(t, "duration", 0.2f);
+            tr.hasExitTime = b(t, "hasExitTime", false);
+            tr.exitTime = f(t, "exitTime", 1);
+            if (t.contains("conditions") && t["conditions"].is_array())
+                for (const Json& c : t["conditions"]) {
+                    AnimCondition ac;
+                    ac.param = str(c, "param");
+                    const std::string op = str(c, "op");
+                    ac.op = op == "<" ? AnimCondition::Op::Less : op == "==" ? AnimCondition::Op::Equal
+                          : op == "!=" ? AnimCondition::Op::NotEqual : op == "true" ? AnimCondition::Op::IsTrue
+                          : op == "false" ? AnimCondition::Op::IsFalse : AnimCondition::Op::Greater;
+                    ac.value = f(c, "value", 0);
+                    tr.conditions.push_back(ac);
+                }
+            if (!tr.to.empty()) m.transitions.push_back(tr);
+        }
+}
+
+// Campos de material de un MeshRenderer. Los usan el componente y los archivos de material (.mat).
+void writeMaterialFields(const MeshRenderer& m, Json& j) {
+    j["texture"] = assetToJson(m.texture);
+    j["color"] = toJson(m.color);
+    j["metallic"] = toJson(m.metallic);
+    j["roughness"] = toJson(m.roughness);
+    j["emission"] = toJson(m.emission);
+    j["prototypeGrid"] = m.prototypeGrid;
+    j["unlit"] = m.unlit;
+    j["normalMap"] = assetToJson(m.normalMap);
+    j["normalStrength"] = toJson(m.normalStrength);
+    j["metallicRoughnessMap"] = assetToJson(m.metallicRoughnessMap);
+    j["emissionMap"] = assetToJson(m.emissionMap);
+    j["occlusionMap"] = assetToJson(m.occlusionMap);
+    j["tiling"] = toJson(m.tiling);
+    j["offset"] = toJson(m.offset);
+    j["alphaClip"] = m.alphaClip;
+    j["alphaCutoff"] = toJson(m.alphaCutoff);
+    j["doubleSided"] = m.doubleSided;
+}
+
+void readMaterialFields(MeshRenderer& m, FieldReader& rd) {
+    rd.readAsset("texture", m.texture);
+    rd.read("color", m.color);
+    rd.read("metallic", m.metallic);
+    rd.read("roughness", m.roughness);
+    rd.read("emission", m.emission);
+    rd.read("prototypeGrid", m.prototypeGrid);
+    rd.read("unlit", m.unlit);
+    rd.readAsset("normalMap", m.normalMap);
+    rd.read("normalStrength", m.normalStrength);
+    rd.readAsset("metallicRoughnessMap", m.metallicRoughnessMap);
+    rd.readAsset("emissionMap", m.emissionMap);
+    rd.readAsset("occlusionMap", m.occlusionMap);
+    rd.read("tiling", m.tiling);
+    rd.read("offset", m.offset);
+    rd.read("alphaClip", m.alphaClip);
+    rd.read("alphaCutoff", m.alphaCutoff);
+    rd.read("doubleSided", m.doubleSided);
+}
+
+std::string serializeMaterial(const MeshRenderer& m) {
+    Json j{{"format", "titan.material"}, {"version", 1}, {"engineVersion", kEngineVersion}};
+    writeMaterialFields(m, j);
+    return j.dump(2);
+}
+
+LoadReport parseMaterial(const std::string& text, MeshRenderer& out) {
+    LoadReport report;
+    const Json doc = Json::parse(text, nullptr, false);
+    if (doc.is_discarded() || !doc.is_object() || doc.value("format", "") != "titan.material") {
+        report.errors.push_back("no es un archivo de material de Titán");
+        return report;
+    }
+    if (doc.value("version", 0) > 1) {
+        report.errors.push_back("el material es de una versión más nueva del formato");
+        return report;
+    }
+    FieldReader rd(doc, "material", report);
+    readMaterialFields(out, rd);
+    return report;
 }
 
 ComponentRegistry ComponentRegistry::createDefault() {
@@ -196,25 +337,20 @@ ComponentRegistry ComponentRegistry::createDefault() {
         "MeshRenderer",
         [](const MeshRenderer& m) {
             static const char* names[] = {"cube", "sphere", "plane", "cylinder", "cone", "capsule"};
-            return Json{{"mesh", names[static_cast<int>(m.mesh)]}, {"model", assetToJson(m.model)}, {"texture", assetToJson(m.texture)},
-                        {"color", toJson(m.color)}, {"metallic", toJson(m.metallic)}, {"roughness", toJson(m.roughness)},
-                        {"emission", toJson(m.emission)}, {"prototypeGrid", m.prototypeGrid},
-                        {"castShadows", m.castShadows}, {"unlit", m.unlit}, {"visible", m.visible}};
+            Json j{{"mesh", names[static_cast<int>(m.mesh)]}, {"model", assetToJson(m.model)},
+                   {"material", assetToJson(m.material)}, {"castShadows", m.castShadows}, {"visible", m.visible}};
+            writeMaterialFields(m, j);
+            return j;
         },
         [](MeshRenderer& m, FieldReader& rd) {
             rd.readEnum("mesh", m.mesh,
                         {{"cube", MeshPrimitive::Cube}, {"sphere", MeshPrimitive::Sphere}, {"plane", MeshPrimitive::Plane},
                          {"cylinder", MeshPrimitive::Cylinder}, {"cone", MeshPrimitive::Cone}, {"capsule", MeshPrimitive::Capsule}});
             rd.readAsset("model", m.model);
-            rd.readAsset("texture", m.texture);
-            rd.read("color", m.color);
-            rd.read("metallic", m.metallic);
-            rd.read("roughness", m.roughness);
-            rd.read("emission", m.emission);
-            rd.read("prototypeGrid", m.prototypeGrid);
+            rd.readAsset("material", m.material);
             rd.read("castShadows", m.castShadows);
-            rd.read("unlit", m.unlit);
             rd.read("visible", m.visible);
+            readMaterialFields(m, rd);
         });
 
     r.addSimple<Environment>(
@@ -223,7 +359,11 @@ ComponentRegistry ComponentRegistry::createDefault() {
             return Json{{"sky", e.sky}, {"skyZenith", toJson(e.skyZenith)}, {"skyHorizon", toJson(e.skyHorizon)},
                         {"ground", toJson(e.ground)}, {"ambientIntensity", toJson(e.ambientIntensity)},
                         {"fogColor", toJson(e.fogColor)}, {"fogDensity", toJson(e.fogDensity)},
-                        {"exposure", toJson(e.exposure)}, {"shadows", e.shadows}, {"shadowDistance", toJson(e.shadowDistance)}};
+                        {"exposure", toJson(e.exposure)}, {"shadows", e.shadows}, {"shadowDistance", toJson(e.shadowDistance)},
+                        {"bloom", e.bloom}, {"bloomIntensity", toJson(e.bloomIntensity)},
+                        {"bloomThreshold", toJson(e.bloomThreshold)}, {"vignette", toJson(e.vignette)},
+                        {"contrast", toJson(e.contrast)}, {"saturation", toJson(e.saturation)},
+                        {"temperature", toJson(e.temperature)}};
         },
         [](Environment& e, FieldReader& rd) {
             rd.read("sky", e.sky);
@@ -236,16 +376,28 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("exposure", e.exposure);
             rd.read("shadows", e.shadows);
             rd.read("shadowDistance", e.shadowDistance);
+            rd.read("bloom", e.bloom);
+            rd.read("bloomIntensity", e.bloomIntensity);
+            rd.read("bloomThreshold", e.bloomThreshold);
+            rd.read("vignette", e.vignette);
+            rd.read("contrast", e.contrast);
+            rd.read("saturation", e.saturation);
+            rd.read("temperature", e.temperature);
         });
 
     r.addSimple<Light>(
         "Light",
         [](const Light& l) {
-            return Json{{"type", l.type == Light::Type::Point ? "point" : "directional"}, {"color", toJson(l.color)},
-                        {"intensity", toJson(l.intensity)}, {"range", toJson(l.range)}};
+            static const char* types[] = {"directional", "point", "spot"};
+            return Json{{"type", types[static_cast<int>(l.type)]}, {"color", toJson(l.color)},
+                        {"intensity", toJson(l.intensity)}, {"range", toJson(l.range)},
+                        {"spotAngle", toJson(l.spotAngle)}, {"spotSoftness", toJson(l.spotSoftness)}};
         },
         [](Light& l, FieldReader& rd) {
-            rd.readEnum("type", l.type, {{"directional", Light::Type::Directional}, {"point", Light::Type::Point}});
+            rd.readEnum("type", l.type, {{"directional", Light::Type::Directional}, {"point", Light::Type::Point},
+                                         {"spot", Light::Type::Spot}});
+            rd.read("spotAngle", l.spotAngle);
+            rd.read("spotSoftness", l.spotSoftness);
             rd.read("color", l.color);
             rd.read("intensity", l.intensity);
             rd.read("range", l.range);
@@ -254,8 +406,10 @@ ComponentRegistry ComponentRegistry::createDefault() {
     r.addSimple<Animator>(
         "Animator",
         [](const Animator& a) {
-            return Json{{"clip", a.clip}, {"playing", a.playing}, {"loop", a.loop}, {"speed", toJson(a.speed)},
-                        {"fadeDuration", toJson(a.fadeDuration)}};
+            Json j{{"clip", a.clip}, {"playing", a.playing}, {"loop", a.loop}, {"speed", toJson(a.speed)},
+                   {"fadeDuration", toJson(a.fadeDuration)}};
+            if (!a.machine.empty()) j["machine"] = machineToJson(a.machine);
+            return j;
         },
         [](Animator& a, FieldReader& rd) {
             rd.read("clip", a.clip);
@@ -263,6 +417,9 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("loop", a.loop);
             rd.read("speed", a.speed);
             rd.read("fadeDuration", a.fadeDuration);
+            std::string raw;
+            rd.readRaw("machine", raw);
+            if (!raw.empty()) machineFromJson(Json::parse(raw, nullptr, false), a.machine);
         });
 
     r.addSimple<AudioSource>(
@@ -281,6 +438,139 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("spatial", a.spatial);
             rd.read("minDistance", a.minDistance);
             rd.read("maxDistance", a.maxDistance);
+        });
+
+    r.addSimple<Terrain>(
+        "Terrain",
+        [](const Terrain& t) {
+            Json layers = Json::array();
+            for (int i = 0; i < 4; ++i)
+                layers.push_back({{"texture", assetToJson(t.layerTextures[i])}, {"color", toJson(t.layerColors[i])}});
+            // Alturas (uint16, little endian) y pesos de capas en base64: compactos y dentro de la escena.
+            std::vector<uint8_t> h(t.heights.size() * 2);
+            for (size_t i = 0; i < t.heights.size(); ++i) {
+                h[i * 2] = static_cast<uint8_t>(t.heights[i] & 0xFF);
+                h[i * 2 + 1] = static_cast<uint8_t>(t.heights[i] >> 8);
+            }
+            return Json{{"size", toJson(t.size)}, {"maxHeight", toJson(t.maxHeight)}, {"resolution", t.resolution},
+                        {"layerTiling", toJson(t.layerTiling)}, {"layers", layers},
+                        {"heights", base64Encode(h.data(), h.size())}, {"splat", base64Encode(t.splat.data(), t.splat.size())}};
+        },
+        [](Terrain& t, FieldReader& rd) {
+            rd.read("size", t.size);
+            rd.read("maxHeight", t.maxHeight);
+            rd.read("resolution", t.resolution);
+            t.resolution = std::clamp(t.resolution, 17, 257);
+            rd.read("layerTiling", t.layerTiling);
+            std::string raw;
+            rd.readRaw("layers", raw);
+            const Json layers = Json::parse(raw.empty() ? "[]" : raw, nullptr, false);
+            if (layers.is_array())
+                for (size_t i = 0; i < layers.size() && i < 4; ++i) {
+                    LoadReport ignored;
+                    FieldReader lr(layers[i], "Terrain.layers", ignored);
+                    lr.readAsset("texture", t.layerTextures[i]);
+                    lr.read("color", t.layerColors[i]);
+                }
+            std::string hb, sb;
+            rd.read("heights", hb);
+            rd.read("splat", sb);
+            const size_t n = size_t(t.resolution) * t.resolution;
+            std::vector<uint8_t> bytes;
+            if (base64Decode(hb, bytes) && bytes.size() == n * 2) {
+                t.heights.resize(n);
+                for (size_t i = 0; i < n; ++i) t.heights[i] = static_cast<uint16_t>(bytes[i * 2] | (bytes[i * 2 + 1] << 8));
+            }
+            if (base64Decode(sb, bytes) && bytes.size() == n * 4) t.splat = bytes;
+            terrainEnsureData(t);
+            ++t.revision;
+        });
+
+    r.addSimple<CharacterController>(
+        "CharacterController",
+        [](const CharacterController& c) {
+            return Json{{"height", toJson(c.height)}, {"radius", toJson(c.radius)}, {"maxSlope", toJson(c.maxSlope)},
+                        {"stepHeight", toJson(c.stepHeight)}, {"gravityScale", toJson(c.gravityScale)}, {"layer", c.layer}};
+        },
+        [](CharacterController& c, FieldReader& rd) {
+            rd.read("height", c.height);
+            rd.read("radius", c.radius);
+            rd.read("maxSlope", c.maxSlope);
+            rd.read("stepHeight", c.stepHeight);
+            rd.read("gravityScale", c.gravityScale);
+            rd.read("layer", c.layer);
+            c.layer = std::clamp(c.layer, 0, 15);
+        });
+
+    r.addSimple<Joint>(
+        "Joint",
+        [](const Joint& j) {
+            static const char* types[] = {"fixed", "hinge", "distance"};
+            return Json{{"type", types[static_cast<int>(j.type)]}, {"connected", j.connected.isNull() ? Json(nullptr) : Json(j.connected.toString())},
+                        {"anchor", toJson(j.anchor)}, {"axis", toJson(j.axis)}, {"limitAngle", j.limitAngle},
+                        {"minAngle", toJson(j.minAngle)}, {"maxAngle", toJson(j.maxAngle)},
+                        {"minDistance", toJson(j.minDistance)}, {"maxDistance", toJson(j.maxDistance)},
+                        {"springFrequency", toJson(j.springFrequency)}, {"springDamping", toJson(j.springDamping)}};
+        },
+        [](Joint& j, FieldReader& rd) {
+            rd.readEnum("type", j.type, {{"fixed", Joint::Type::Fixed}, {"hinge", Joint::Type::Hinge}, {"distance", Joint::Type::Distance}});
+            std::string id;
+            rd.read("connected", id);
+            if (!id.empty()) UUID::parse(id, j.connected);
+            rd.read("anchor", j.anchor);
+            rd.read("axis", j.axis);
+            rd.read("limitAngle", j.limitAngle);
+            rd.read("minAngle", j.minAngle);
+            rd.read("maxAngle", j.maxAngle);
+            rd.read("minDistance", j.minDistance);
+            rd.read("maxDistance", j.maxDistance);
+            rd.read("springFrequency", j.springFrequency);
+            rd.read("springDamping", j.springDamping);
+        });
+
+    r.addSimple<ParticleSystem>(
+        "ParticleSystem",
+        [](const ParticleSystem& p) {
+            return Json{{"playOnStart", p.playOnStart}, {"looping", p.looping}, {"duration", toJson(p.duration)},
+                        {"rate", toJson(p.rate)}, {"ratePerMeter", toJson(p.ratePerMeter)}, {"burst", p.burst},
+                        {"maxParticles", p.maxParticles}, {"lifetimeMin", toJson(p.lifetimeMin)},
+                        {"lifetimeMax", toJson(p.lifetimeMax)}, {"speedMin", toJson(p.speedMin)},
+                        {"speedMax", toJson(p.speedMax)}, {"spread", toJson(p.spread)}, {"shape", p.shape},
+                        {"shapeSize", toJson(p.shapeSize)}, {"acceleration", toJson(p.acceleration)},
+                        {"drag", toJson(p.drag)}, {"sizeStart", toJson(p.sizeStart)}, {"sizeEnd", toJson(p.sizeEnd)},
+                        {"colorStart", toJson(p.colorStart)}, {"colorEnd", toJson(p.colorEnd)},
+                        {"rotationSpeed", toJson(p.rotationSpeed)}, {"texture", assetToJson(p.texture)},
+                        {"sheetColumns", p.sheetColumns}, {"sheetRows", p.sheetRows}, {"additive", p.additive},
+                        {"worldSpace", p.worldSpace}};
+        },
+        [](ParticleSystem& p, FieldReader& rd) {
+            rd.read("playOnStart", p.playOnStart);
+            rd.read("looping", p.looping);
+            rd.read("duration", p.duration);
+            rd.read("rate", p.rate);
+            rd.read("ratePerMeter", p.ratePerMeter);
+            rd.read("burst", p.burst);
+            rd.read("maxParticles", p.maxParticles);
+            p.maxParticles = std::clamp(p.maxParticles, 0, 10000);
+            rd.read("lifetimeMin", p.lifetimeMin);
+            rd.read("lifetimeMax", p.lifetimeMax);
+            rd.read("speedMin", p.speedMin);
+            rd.read("speedMax", p.speedMax);
+            rd.read("spread", p.spread);
+            rd.read("shape", p.shape);
+            rd.read("shapeSize", p.shapeSize);
+            rd.read("acceleration", p.acceleration);
+            rd.read("drag", p.drag);
+            rd.read("sizeStart", p.sizeStart);
+            rd.read("sizeEnd", p.sizeEnd);
+            rd.read("colorStart", p.colorStart);
+            rd.read("colorEnd", p.colorEnd);
+            rd.read("rotationSpeed", p.rotationSpeed);
+            rd.readAsset("texture", p.texture);
+            rd.read("sheetColumns", p.sheetColumns);
+            rd.read("sheetRows", p.sheetRows);
+            rd.read("additive", p.additive);
+            rd.read("worldSpace", p.worldSpace);
         });
 
     r.addSimple<UIRect>(
@@ -375,7 +665,7 @@ ComponentRegistry ComponentRegistry::createDefault() {
         [](const Collider& c) {
             static const char* shapes[] = {"box", "sphere", "capsule"};
             return Json{{"shape", shapes[static_cast<int>(c.shape)]}, {"size", toJson(c.size)}, {"radius", toJson(c.radius)},
-                        {"height", toJson(c.height)}, {"center", toJson(c.center)}, {"isTrigger", c.isTrigger}};
+                        {"height", toJson(c.height)}, {"center", toJson(c.center)}, {"isTrigger", c.isTrigger}, {"layer", c.layer}};
         },
         [](Collider& c, FieldReader& rd) {
             rd.readEnum("shape", c.shape, {{"box", Collider::Shape::Box}, {"sphere", Collider::Shape::Sphere},
@@ -385,6 +675,8 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("height", c.height);
             rd.read("center", c.center);
             rd.read("isTrigger", c.isTrigger);
+            rd.read("layer", c.layer);
+            c.layer = std::clamp(c.layer, 0, 15);
         });
 
     r.addSimple<Script>(

@@ -3,6 +3,7 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES3/gl3.h>
+#include <algorithm>
 #include <android/asset_manager.h>
 #include <android/native_window.h>
 #include <android/window.h>
@@ -12,6 +13,7 @@
 
 #include "titan/core/Log.h"
 #include "titan/runtime/Runtime.h"
+#include "AndroidInput.h"
 
 namespace {
 
@@ -80,6 +82,8 @@ bool createSurface(App& app) {
     eglSwapInterval(app.display, 1);
 
     if (!app.engine.running()) {
+        if (app.android->activity->internalDataPath) // almacenamiento privado de la app: solo este juego lo lee
+            app.engine.setSavePath(std::string(app.android->activity->internalDataPath) + "/partida.json");
         if (!app.engine.start(app.files)) TITAN_ERROR("android", "No se pudo arrancar el juego");
     } else if (freshContext && app.contextWasLost) {
         app.engine.renderer().onContextRestored();
@@ -152,9 +156,24 @@ void onCommand(android_app* android, int32_t cmd) {
 }
 
 int32_t onInput(android_app* android, AInputEvent* event) {
-    if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) return 0;
     App& app = *static_cast<App*>(android->userData);
     titan::Input& input = app.engine.input();
+    if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_KEY) { // teclado y botones del mando
+        const int32_t code = AKeyEvent_getKeyCode(event);
+        if (code == AKEYCODE_BACK) return 0; // lo gestiona el sistema
+        const int32_t act = AKeyEvent_getAction(event);
+        if (act == AKEY_EVENT_ACTION_MULTIPLE) return 0;
+        return titan::androidinput::applyKey(input, code, act == AKEY_EVENT_ACTION_DOWN) ? 1 : 0;
+    }
+    if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) return 0;
+    if ((AInputEvent_getSource(event) & AINPUT_SOURCE_CLASS_JOYSTICK) != 0) { // sticks y gatillos
+        auto ax = [&](int32_t a) { return AMotionEvent_getAxisValue(event, a, 0); };
+        titan::androidinput::applyAxes(input, ax(AMOTION_EVENT_AXIS_X), ax(AMOTION_EVENT_AXIS_Y), ax(AMOTION_EVENT_AXIS_Z),
+                                       ax(AMOTION_EVENT_AXIS_RZ),
+                                       std::max(ax(AMOTION_EVENT_AXIS_LTRIGGER), ax(AMOTION_EVENT_AXIS_BRAKE)),
+                                       std::max(ax(AMOTION_EVENT_AXIS_RTRIGGER), ax(AMOTION_EVENT_AXIS_GAS)));
+        return 1;
+    }
     const int32_t action = AMotionEvent_getAction(event);
     const int32_t kind = action & AMOTION_EVENT_ACTION_MASK;
     const size_t index =

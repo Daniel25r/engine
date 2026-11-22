@@ -88,6 +88,14 @@ public:
     void scriptPlayEntitySound(Entity e) override;
     void scriptStopSound(Entity e) override { audio_.stopOwner(e); }
     void scriptSetVolume(float v) override { audio_.setMasterVolume(v); }
+    bool scriptSetQuality(const std::string& name) override;
+    std::string scriptQuality() const override { return qualityName(renderer_->quality().level); }
+    DeviceCaps scriptDeviceCaps() const override { return renderer_->caps(); }
+    InputActions* scriptActions() override { return &actions_; }
+    std::string scriptSavePath() const override { return savePath_; }
+    // Dónde se guarda la partida (Save.* en Lua). Lo fija la plataforma antes de start().
+    void setSavePath(const std::string& path) { savePath_ = path; }
+    InputActions& actions() { return actions_; }
     AudioEngine& audio() { return audio_; }
     PhysicsWorld& physics() { return physics_; }
     const UISystem& ui() const { return ui_; }
@@ -118,6 +126,8 @@ private:
     std::unique_ptr<Scene> scene_;
     std::unique_ptr<ScriptSystem> scripts_;
     UISystem ui_;
+    InputActions actions_;
+    std::string savePath_;
     std::vector<Entity> clicked_;
     std::string projectName_;
     UUID pendingScene_;

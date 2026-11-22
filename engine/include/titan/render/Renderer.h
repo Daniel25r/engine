@@ -7,6 +7,7 @@
 //   beginFrame(viewport) → setCamera → setLights → drawMesh... → drawSprite... → drawLine... → drawText... → endFrame
 // Las mallas se dibujan al llamar; sprites, líneas y texto se acumulan y se vuelcan en endFrame.
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -14,11 +15,14 @@
 
 #include "titan/core/Components.h"
 #include "titan/core/Math.h"
+#include "titan/core/Quality.h"
+#include "titan/core/TerrainTools.h"
 #include "titan/ui/Font.h"
 
 namespace titan {
 
 class FileSource;
+class PostProcessor;
 
 using TextureHandle = uint32_t;
 constexpr TextureHandle kWhiteTexture = 0; // textura blanca 1x1: rectángulos de color
@@ -34,18 +38,31 @@ struct Viewport {
 };
 
 struct RenderStats {
-    int drawCalls = 0;       // todas, incluidas las de la pasada de sombras
+    int drawCalls = 0;       // todas, incluidas las de la pasada de sombras (sin contar el posprocesado)
     int shadowDrawCalls = 0;
+    int postPasses = 0;      // pasadas a pantalla completa del posprocesado
+    int sceneWidth = 0, sceneHeight = 0; // resolución a la que se dibujó la escena
     int sprites = 0;
     int meshes = 0;
     int triangles = 0;
     int textures = 0;
 };
 
+// Luz local: puntual o foco.
 struct PointLightData {
     Vec3 position;
     float range = 10;
     Color color;
+    bool spot = false;
+    Vec3 direction{0, 0, -1}; // foco: hacia dónde apunta
+    float cosOuter = 0.7f;    // foco: coseno del borde del cono
+    float cosInner = 0.8f;    // foco: coseno donde empieza el difuminado
+};
+
+// Texturas de un material ya resueltas a handles (kWhiteTexture = sin textura).
+struct MaterialTextures {
+    TextureHandle base = kWhiteTexture, normal = kWhiteTexture, metallicRoughness = kWhiteTexture,
+                  emission = kWhiteTexture, occlusion = kWhiteTexture;
 };
 
 // Todo lo que afecta a la luz de un fotograma: ambiente (cielo, niebla, exposición), sol y luces puntuales.
@@ -61,10 +78,21 @@ struct SceneLighting {
 
 class Renderer {
 public:
-    static constexpr int kMaxPointLights = 4;
+    static constexpr int kMaxPointLights = 8; // luces locales (puntuales + focos); el perfil de calidad limita cuántas
+
+    Renderer();
+    ~Renderer();
+    Renderer(const Renderer&) = delete;
+    Renderer& operator=(const Renderer&) = delete;
 
     bool init(FileSource& files);
     void shutdown();
+
+    // ---- Calidad y capacidades ----
+    const DeviceCaps& caps() const { return caps_; }  // se rellena en init()
+    void setQuality(const QualitySettings& q);         // se aplica al siguiente fotograma
+    const QualitySettings& quality() const { return quality_; }
+    int shadowMapSize() const { return shadowSize_; }
 
     // Android puede destruir el contexto de OpenGL. Los recursos se recrean desde los archivos.
     void onContextLost();
@@ -74,7 +102,7 @@ public:
     Vec2 textureSize(TextureHandle t) const;
 
     // Mapa de sombras del sol: se rellena ANTES de beginFrame.
-    static constexpr int kShadowMapSize = 2048;
+    static constexpr int kShadowMapSize = 2048; // por defecto; el perfil de calidad lo cambia (shadowMapSize())
     void beginShadowPass(const Mat4& lightViewProjection);
     void drawShadowCaster(MeshPrimitive mesh, const Mat4& world);
     void endShadowPass();
@@ -86,7 +114,14 @@ public:
     // "Sin iluminación" del editor: muestra solo el color base.
     void setUnlitOverride(bool on) { unlitOverride_ = on; }
 
-    void drawMesh(MeshPrimitive mesh, const Mat4& world, const MeshRenderer& material, TextureHandle tex);
+    void drawMesh(MeshPrimitive mesh, const Mat4& world, const MeshRenderer& material, const MaterialTextures& tex);
+
+    // ---- Terreno ----
+    // Malla de un terreno en la GPU, identificada por "key" (p. ej. la entidad). Solo se reconstruye si cambia
+    // la revisión. Devuelve el handle para drawTerrain.
+    int terrainMesh(uint64_t key, uint32_t revision, const std::function<TerrainMesh()>& build);
+    void drawTerrain(int handle, const Mat4& world, const Terrain& t, const TextureHandle layers[4]);
+    void drawTerrainShadow(int handle, const Mat4& world);
 
     // ---- Modelos importados (glTF 2.0 / GLB) ----
     // Devuelve -1 si el archivo no existe o no se puede interpretar (el motivo va al registro).
@@ -95,7 +130,8 @@ public:
     int modelTriangles(int model) const;
     // El color del MeshRenderer tiñe el del modelo; su textura, si la tiene, sustituye a la del modelo.
     // joints: matrices de los huesos (computePose); nulo = pose de reposo.
-    void drawModel(int model, const Mat4& world, const MeshRenderer& material, TextureHandle overrideTex,
+    // Las texturas del MeshRenderer, si las tiene, sustituyen a las del modelo, una por una.
+    void drawModel(int model, const Mat4& world, const MeshRenderer& material, const MaterialTextures& overrideTex,
                    const std::vector<Mat4>* joints = nullptr);
     void drawModelShadow(int model, const Mat4& world, const std::vector<Mat4>* joints = nullptr);
 
@@ -114,6 +150,11 @@ public:
     // Sprite con su matriz de mundo completa: respeta posición, rotación, escala y jerarquía.
     void drawSprite(TextureHandle tex, const Mat4& world, Vec2 size, Vec2 pivot, Rect uv, Color color);
     void drawLine(const Vec3& a, const Vec3& b, Color color);
+    // Cuadrado orientado a la cámara (partículas): centro en el mundo, lado, giro en grados, UV y color.
+    // additive = mezcla aditiva (fuego, chispas); si no, mezcla alfa.
+    void drawBillboard(TextureHandle tex, const Vec3& center, float size, float rotationDeg, Rect uv, Color color,
+                       bool additive);
+    TextureHandle softParticleTexture() const { return softDot_; }
     // Texto en píxeles del viewport (origen arriba a la izquierda), encima de todo, al final del fotograma.
     void drawText(Vec2 pos, float size, std::string_view text, Color color);
 
@@ -178,8 +219,19 @@ private:
         Color color;
         float metallic = 0, roughness = 1;
         Color emission{0, 0, 0, 1};
-        TextureHandle texture = 0;
+        MaterialTextures maps;
         bool doubleSided = false;
+        float alphaCutoff = -1; // glTF alphaMode MASK
+    };
+    struct Surface {
+        Color color;
+        float metallic = 0, roughness = 1;
+        Color emission{0, 0, 0, 1};
+        bool grid = false, unlit = false, doubleSided = false;
+        MaterialTextures maps;
+        Vec2 tiling{1, 1}, offset;
+        float alphaCutoff = -1;
+        float normalStrength = 1;
     };
     struct AnimNode {
         int parent = -1;
@@ -215,10 +267,11 @@ private:
     bool buildModel(Model& m);
     void sampleClip(const Model& m, int anim, float time, bool loop, std::vector<AnimNode>& local) const;
     void uploadJoints(const std::vector<Mat4>& joints);
-    void drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4& world, Color color, float metallic,
-                     float roughness, Color emission, bool grid, bool unlit, TextureHandle tex, bool doubleSided);
+    void drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4& world, const Surface& s);
 
     bool createGpuObjects();
+    void createShadowMap();
+    void resolveScene(); // compone la escena del render target en pantalla (una vez por fotograma)
     void createMeshes();
     bool uploadTexture(Texture& t);
     bool uploadMemoryTexture(Texture& t);
@@ -239,7 +292,20 @@ private:
         uPointCount_ = -1, uPointPosRange_ = -1, uPointColor_ = -1, uCameraPos_ = -1, uUnlit_ = -1, uMetallic_ = -1,
         uRoughness_ = -1, uEmission_ = -1, uGrid_ = -1, uSkyZenith_ = -1, uSkyHorizon_ = -1, uGround_ = -1,
         uAmbientI_ = -1, uFogColor_ = -1, uFogDensity_ = -1, uExposure_ = -1, uLightVP_ = -1, uShadowMap_ = -1,
-        uShadowsOn_ = -1, uSkinned_ = -1, uJoints_ = -1;
+        uShadowsOn_ = -1, uSkinned_ = -1, uJoints_ = -1, uUVTransform_ = -1, uNormalTex_ = -1, uMRTex_ = -1,
+        uEmissiveTex_ = -1, uOcclusionTex_ = -1, uHasNormal_ = -1, uHasMR_ = -1, uHasOcclusion_ = -1,
+        uNormalStrength_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
+        uLayerTiling_ = -1;
+    int uLayers_[4] = {-1, -1, -1, -1};
+    bool terrainDraw_ = false;
+    struct TerrainGpu {
+        uint64_t key = 0;
+        uint32_t revision = 0;
+        GpuMesh mesh;
+        uint64_t lastUsed = 0; // fotograma; los que nadie dibuja en un rato se liberan
+    };
+    uint64_t frameCounter_ = 0;
+    std::vector<TerrainGpu> terrains_;
     // Sombras y cielo
     uint32_t shadowProgram_ = 0, shadowFbo_ = 0, shadowTex_ = 0;
     int uShadowLVP_ = -1, uShadowModel_ = -1, uShadowSkinned_ = -1, uShadowJoints_ = -1;
@@ -263,9 +329,18 @@ private:
     Viewport viewport_;
     Mat4 viewProj_;
     Vec3 cameraPos_;
+    Vec3 camRight_{1, 0, 0}, camUp_{0, 1, 0};
     std::vector<LoadedFont> fonts_;
+    QualitySettings quality_;
+    DeviceCaps caps_;
+    int shadowSize_ = kShadowMapSize;
+    std::unique_ptr<PostProcessor> post_;
+    bool sceneInTarget_ = false; // la escena de este fotograma va al render target
+    int targetFbo_ = 0;          // framebuffer final (0 en Android; el del editor si dibuja en otro)
     std::vector<GlyphQuad> glyphScratch_;
     TextureHandle disc_ = kWhiteTexture;
+    TextureHandle softDot_ = kWhiteTexture; // punto con borde difuminado: partícula por defecto
+    bool batchAdditive_ = false;
     Mat4 overlaySavedViewProj_;
     bool inOverlay_ = false;
     RenderStats stats_, lastStats_;

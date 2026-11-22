@@ -96,9 +96,10 @@ Todas se compilan desde el código fuente incluido en el repositorio. Ninguna es
 ### Arquitectura
 
 9. **`Renderer.cpp` es un bloque único**: shaders en línea, mallas, sprites, texto, sombras y cielo, todo con llamadas GL directas. Sin una capa RHI, añadir Vulkan exigiría reescribirlo.
-10. **No hay render targets**: se dibuja directamente en pantalla y el tonemapping se hace dentro del shader de mallas. Por eso no son posibles el posprocesado (bloom, SSAO, FXAA), la escala de resolución ni el HDR.
+10. ~~**No hay render targets**~~ Resuelto en 0.13.0 (posprocesado LDR; el HDR intermedio sigue pendiente).
+    Antes: **no había render targets**: se dibuja directamente en pantalla y el tonemapping se hace dentro del shader de mallas. Por eso no son posibles el posprocesado (bloom, SSAO, FXAA), la escala de resolución ni el HDR.
 11. **El deshacer guarda la escena entera** (JSON) en cada cambio, hasta 100 copias. Con escenas grandes, la memoria crece y cada cambio va más lento.
-12. **No hay perfiles de calidad ni detección de capacidades** (límites de textura, extensiones, memoria). Los valores están fijos: sombra de 2048, 4 luces.
+12. ~~**No hay perfiles de calidad ni detección de capacidades**~~ Resuelto en 0.13.0. Antes: **no había perfiles** (límites de textura, extensiones, memoria). Los valores están fijos: sombra de 2048, 4 luces.
 13. **No hay sistema de plugins, ni de tareas, ni configuración global** del motor.
 14. **Las escenas no se pueden cargar de forma aditiva ni en segundo plano.** Solo hay una escena activa.
 
@@ -189,6 +190,12 @@ Se mantiene la división actual, que funciona, y se añaden piezas por debajo y 
 |---|---|---|
 | 0.11.0 | Culling por frustum | 1600 objetos: draw calls de 3206 a 950; imagen idéntica |
 | 0.12.0 | Jugar comparte el Renderer y la caché de recursos del editor | Primer fotograma de Jugar: de 285–343 ms a 18–23 ms; ninguna textura ni modelo duplicado en la GPU |
+| 0.13.0 | Render targets, posprocesado y perfiles de calidad (problemas 10 y 12) | 5 perfiles medidos; la escala de render y las sombras cambian de verdad |
+| 0.13.0 | Materiales v2 y focos (problemas 15 y 16, en parte) | Modelo de referencia DamagedHelmet con todos sus mapas |
+| 0.13.0 | Input Actions (problema 19) | Teclado simulado mueve al personaje en el reproductor |
+| 0.13.0 | Física v2 (problema 17, salvo colliders de malla) | Personaje sube un escalón y salta; bisagra y cuerda; capas |
+| 0.13.0 | Máquina de estados de animación (problema 18, salvo IK y root motion) | Pruebas de transiciones, trigger, mezcla 1D y eventos |
+| 0.13.0 | Partículas, terreno y partida guardada | Pruebas de simulación, esculpido, colisión y archivo de guardado |
 
 Pendiente de la mejora 2: sistema de tareas y carga en segundo plano (hoy la primera carga de cada recurso sigue
 bloqueando un fotograma).

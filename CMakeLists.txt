@@ -33,6 +33,11 @@ target_compile_options(titan_lua PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fexce
 add_library(titan_core STATIC
     engine/src/core/Math.cpp
     engine/src/core/Bounds.cpp
+    engine/src/core/Quality.cpp
+    engine/src/core/Particles.cpp
+    engine/src/core/InputActions.cpp
+    engine/src/core/AnimationGraph.cpp
+    engine/src/core/TerrainTools.cpp
     engine/src/core/Log.cpp
     engine/src/core/Uuid.cpp
     engine/src/core/FileIO.cpp
@@ -50,7 +55,7 @@ endif()
 
 # ------------------------------------------------------------------ titan_scripting (Lua)
 
-add_library(titan_scripting STATIC engine/src/scripting/ScriptSystem.cpp)
+add_library(titan_scripting STATIC engine/src/scripting/ScriptSystem.cpp engine/src/scripting/ScriptApiWorld.cpp)
 target_link_libraries(titan_scripting PUBLIC titan_core titan_lua)
 target_compile_options(titan_scripting PRIVATE ${TITAN_WARNINGS} $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fexceptions>)
 
@@ -89,6 +94,7 @@ add_library(titan_render STATIC
     engine/src/render/Renderer.cpp
     engine/src/render/stb_impl.cpp
     engine/src/render/Model.cpp
+    engine/src/render/PostProcess.cpp
 )
 target_include_directories(titan_render PRIVATE third_party/stb)
 target_link_libraries(titan_render PUBLIC titan_core titan_ui)
@@ -130,8 +136,11 @@ add_library(titan_editor STATIC
     engine/src/editor/EditorCore.cpp
     engine/src/editor/EditorPanels.cpp
     engine/src/editor/EditorViewport.cpp
+    engine/src/editor/EditorAnimation.cpp
+    engine/src/editor/EditorTerrain.cpp
 )
 target_link_libraries(titan_editor PUBLIC titan_runtime titan_imgui titan_lua)
+target_include_directories(titan_editor PRIVATE third_party/stb)
 target_compile_options(titan_editor PRIVATE ${TITAN_WARNINGS})
 
 # ------------------------------------------------------------------ Plataformas
@@ -182,6 +191,12 @@ else()
             tests/test_audio.cpp
             tests/test_ui.cpp
             tests/test_bounds.cpp
+            tests/test_quality.cpp
+            tests/test_materials.cpp
+            tests/test_particles.cpp
+            tests/test_input_actions.cpp
+            tests/test_animation_graph.cpp
+            tests/test_terrain.cpp
         )
         target_compile_definitions(titan_tests PRIVATE TITAN_ENGINE_ASSETS_DIR="${CMAKE_SOURCE_DIR}/engine/assets")
         target_link_libraries(titan_tests PRIVATE titan_core titan_scripting titan_physics titan_audio titan_ui)

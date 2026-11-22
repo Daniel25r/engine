@@ -3,6 +3,7 @@ package dev.titan.editor
 import android.content.Context
 import android.opengl.GLSurfaceView
 import android.text.InputType
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.inputmethod.BaseInputConnection
@@ -68,6 +69,17 @@ class EditorView(context: Context) : GLSurfaceView(context) {
     }
 
     override fun onGenericMotionEvent(e: MotionEvent): Boolean {
+        // Mando: sticks y gatillos para el juego que se está probando.
+        if ((e.source and InputDevice.SOURCE_CLASS_JOYSTICK) != 0 && e.actionMasked == MotionEvent.ACTION_MOVE) {
+            val x = e.getAxisValue(MotionEvent.AXIS_X)
+            val y = e.getAxisValue(MotionEvent.AXIS_Y)
+            val z = e.getAxisValue(MotionEvent.AXIS_Z)
+            val rz = e.getAxisValue(MotionEvent.AXIS_RZ)
+            val lt = maxOf(e.getAxisValue(MotionEvent.AXIS_LTRIGGER), e.getAxisValue(MotionEvent.AXIS_BRAKE))
+            val rt = maxOf(e.getAxisValue(MotionEvent.AXIS_RTRIGGER), e.getAxisValue(MotionEvent.AXIS_GAS))
+            queueEvent { NativeBridge.nativeGameAxes(x, y, z, rz, lt, rt) }
+            return true
+        }
         if (e.actionMasked == MotionEvent.ACTION_SCROLL) {
             val amount = e.getAxisValue(MotionEvent.AXIS_VSCROLL)
             val x = e.x
@@ -130,6 +142,8 @@ class EditorView(context: Context) : GLSurfaceView(context) {
     private fun handleKey(event: KeyEvent): Boolean {
         if (event.keyCode == KeyEvent.KEYCODE_BACK) return false
         val down = event.action != KeyEvent.ACTION_UP
+        val code = event.keyCode
+        if (event.repeatCount == 0) queueEvent { NativeBridge.nativeGameKey(code, down) } // también al juego en Play
         val key = mapKey(event.keyCode)
         if (key >= 0) queueEvent { NativeBridge.nativeKey(key, down) }
         // Texto de teclados físicos (sin Ctrl, que se reserva para atajos).

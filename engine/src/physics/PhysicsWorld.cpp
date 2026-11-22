@@ -10,8 +10,16 @@
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
+#include <Jolt/Physics/Collision/CollideShape.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
+#include <Jolt/Physics/Constraints/DistanceConstraint.h>
+#include <Jolt/Physics/Constraints/FixedConstraint.h>
+#include <Jolt/Physics/Constraints/HingeConstraint.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
 
@@ -21,22 +29,32 @@
 #include <unordered_map>
 
 #include "titan/core/Log.h"
+#include "titan/core/TerrainTools.h"
 
 namespace titan {
 
 namespace {
 
-// ---- Capas: estáticos frente a móviles (los estáticos no chocan entre sí).
+// ---- Capas. Cada ObjectLayer de Jolt codifica (capa del usuario 0..15) * 2 + (0 estático, 1 móvil).
+// Los estáticos no chocan entre sí; dos móviles (o móvil y estático) chocan si su matriz de capas lo permite.
 namespace Layers {
 constexpr JPH::ObjectLayer kStatic = 0;
 constexpr JPH::ObjectLayer kMoving = 1;
-constexpr JPH::uint kCount = 2;
+constexpr JPH::uint kBroadCount = 2;
+constexpr int kUserLayers = 16;
+inline JPH::ObjectLayer make(int userLayer, bool moving) {
+    return static_cast<JPH::ObjectLayer>(std::clamp(userLayer, 0, kUserLayers - 1) * 2 + (moving ? 1 : 0));
+}
+inline int user(JPH::ObjectLayer l) { return static_cast<int>(l >> 1); }
+inline bool moving(JPH::ObjectLayer l) { return (l & 1) != 0; }
 } // namespace Layers
 
 class BroadPhaseLayers final : public JPH::BroadPhaseLayerInterface {
 public:
-    JPH::uint GetNumBroadPhaseLayers() const override { return Layers::kCount; }
-    JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer l) const override { return JPH::BroadPhaseLayer(static_cast<JPH::uint8>(l)); }
+    JPH::uint GetNumBroadPhaseLayers() const override { return Layers::kBroadCount; }
+    JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer l) const override {
+        return JPH::BroadPhaseLayer(static_cast<JPH::uint8>(l & 1));
+    }
 #if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
     const char* GetBroadPhaseLayerName(JPH::BroadPhaseLayer l) const override { return l.GetValue() == 0 ? "estatico" : "movil"; }
 #endif
@@ -45,15 +63,25 @@ public:
 class ObjectVsBroadPhase final : public JPH::ObjectVsBroadPhaseLayerFilter {
 public:
     bool ShouldCollide(JPH::ObjectLayer a, JPH::BroadPhaseLayer b) const override {
-        return a == Layers::kMoving || b.GetValue() == Layers::kMoving;
+        return Layers::moving(a) || b.GetValue() == Layers::kMoving;
     }
 };
 
 class ObjectPairs final : public JPH::ObjectLayerPairFilter {
 public:
+    const uint16_t* matrix = nullptr; // matrix[a] bit b = las capas a y b chocan
     bool ShouldCollide(JPH::ObjectLayer a, JPH::ObjectLayer b) const override {
-        return a == Layers::kMoving || b == Layers::kMoving;
+        if (!Layers::moving(a) && !Layers::moving(b)) return false;
+        return (matrix[Layers::user(a)] >> Layers::user(b)) & 1u;
     }
+};
+
+// Filtro de consultas por máscara de capas (bit i = capa i).
+class MaskFilter final : public JPH::ObjectLayerFilter {
+public:
+    explicit MaskFilter(uint32_t m) : mask(m) {}
+    uint32_t mask;
+    bool ShouldCollide(JPH::ObjectLayer l) const override { return (mask >> Layers::user(l)) & 1u; }
 };
 
 JPH::Vec3 toJ(const Vec3& v) { return JPH::Vec3(v.x, v.y, v.z); }
@@ -92,7 +120,14 @@ public:
     }
 };
 
+struct CharacterData {
+    JPH::Ref<JPH::CharacterVirtual> character;
+    float verticalVelocity = 0;
+    float height = 1.8f;
+};
+
 struct PhysicsWorld::Impl {
+    uint16_t layerMatrix[Layers::kUserLayers];
     BroadPhaseLayers bpLayers;
     ObjectVsBroadPhase objVsBp;
     ObjectPairs objPairs;
@@ -104,6 +139,8 @@ struct PhysicsWorld::Impl {
     std::unordered_map<uint32_t, Entity> owners;       // cuerpo -> entidad
     std::unordered_map<uint64_t, int> pairCount;       // contactos activos por par de entidades (varios puntos)
     std::vector<ContactEvent> events;
+    std::unordered_map<uint64_t, CharacterData> characters; // entidad -> personaje
+    std::vector<JPH::Ref<JPH::Constraint>> constraints;
 
     JPH::BodyInterface& bi() { return system->GetBodyInterface(); }
     const JPH::BodyInterface& bi() const { return system->GetBodyInterface(); }
@@ -117,6 +154,8 @@ struct PhysicsWorld::Impl {
 
 PhysicsWorld::PhysicsWorld() : impl_(std::make_unique<Impl>()) {
     initJolt();
+    for (uint16_t& row : impl_->layerMatrix) row = 0xFFFF; // por defecto todas las capas chocan entre sí
+    impl_->objPairs.matrix = impl_->layerMatrix;
     impl_->temp = std::make_unique<JPH::TempAllocatorImpl>(8 * 1024 * 1024);
     const int threads = std::clamp(static_cast<int>(std::thread::hardware_concurrency()) - 1, 1, 3);
     impl_->jobs = std::make_unique<JPH::JobSystemThreadPool>(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, threads);
@@ -129,6 +168,13 @@ PhysicsWorld::~PhysicsWorld() { clear(); }
 
 void PhysicsWorld::clear() {
     if (!impl_->system) return;
+    for (auto& c : impl_->constraints) impl_->system->RemoveConstraint(c);
+    impl_->constraints.clear();
+    for (auto& [key, ch] : impl_->characters) {
+        const JPH::BodyID inner = ch.character->GetInnerBodyID();
+        if (!inner.IsInvalid()) impl_->owners.erase(inner.GetIndexAndSequenceNumber());
+    }
+    impl_->characters.clear(); // la CharacterVirtual destruye su cuerpo interior
     for (auto& [key, id] : impl_->bodies) {
         impl_->bi().RemoveBody(id);
         impl_->bi().DestroyBody(id);
@@ -146,7 +192,12 @@ void PhysicsWorld::build(Scene& scene) {
     clear();
     std::vector<Entity> withCollider;
     scene.world().each<Collider>([&](Entity e, Collider&) { withCollider.push_back(e); });
+    scene.world().each<CharacterController>([&](Entity e, CharacterController&) {
+        if (!scene.world().has<Collider>(e)) withCollider.push_back(e);
+    });
     createBodies(scene, withCollider);
+    scene.world().each<Terrain>([&](Entity e, Terrain& t) { createTerrainBody(scene, e, t); });
+    createJoints(scene);
     impl_->system->OptimizeBroadPhase();
     TITAN_INFO("physics", "%zu cuerpos físicos en '%s'", impl_->bodies.size(), scene.name().c_str());
 }
@@ -154,7 +205,9 @@ void PhysicsWorld::build(Scene& scene) {
 void PhysicsWorld::addSubtree(Scene& scene, Entity root) {
     std::vector<Entity> list;
     scene.traverse([&](Entity e, int) {
-        if ((e == root || scene.isDescendantOf(e, root)) && scene.world().has<Collider>(e)) list.push_back(e);
+        if ((e == root || scene.isDescendantOf(e, root)) &&
+            (scene.world().has<Collider>(e) || scene.world().has<CharacterController>(e)))
+            list.push_back(e);
     });
     createBodies(scene, list);
 }
@@ -163,6 +216,10 @@ void PhysicsWorld::createBodies(Scene& scene, const std::vector<Entity>& list) {
     World& world = scene.world();
     for (Entity e : list) {
         if (!scene.isActiveInHierarchy(e)) continue;
+        if (const CharacterController* cc = world.get<CharacterController>(e)) {
+            createCharacter(scene, e, *cc);
+            continue; // el personaje sustituye a Collider/Rigidbody en esa entidad
+        }
         const Collider& c = *world.get<Collider>(e);
         const Rigidbody* rb = world.get<Rigidbody>(e);
         Vec3 pos, scl;
@@ -197,10 +254,10 @@ void PhysicsWorld::createBodies(Scene& scene, const std::vector<Entity>& list) {
                                       : type == Rigidbody::Type::Kinematic ? JPH::EMotionType::Kinematic
                                                                            : JPH::EMotionType::Static;
         JPH::BodyCreationSettings bs(result.Get(), JPH::RVec3(pos.x, pos.y, pos.z), toJ(rot), motion,
-                                     motion == JPH::EMotionType::Static ? Layers::kStatic : Layers::kMoving);
+                                     Layers::make(c.layer, motion != JPH::EMotionType::Static));
         bs.mIsSensor = c.isTrigger;
         bs.mUserData = pack(e);
-        if (c.isTrigger && motion == JPH::EMotionType::Static) bs.mObjectLayer = Layers::kMoving; // que detecte a todos
+        if (c.isTrigger && motion == JPH::EMotionType::Static) bs.mObjectLayer = Layers::make(c.layer, true); // que detecte a todos
         if (rb) {
             bs.mFriction = rb->friction;
             bs.mRestitution = rb->restitution;
@@ -225,7 +282,126 @@ void PhysicsWorld::createBodies(Scene& scene, const std::vector<Entity>& list) {
     }
 }
 
+void PhysicsWorld::createCharacter(Scene& scene, Entity e, const CharacterController& cc) {
+    const float r = std::max(0.05f, cc.radius), h = std::max(cc.height, 2 * r + 0.01f);
+    const float half = h * 0.5f - r;
+    // Cápsula con la base en el origen de la entidad (los pies).
+    JPH::Ref<JPH::Shape> shape = JPH::RotatedTranslatedShapeSettings(JPH::Vec3(0, h * 0.5f, 0), JPH::Quat::sIdentity(),
+                                                                      new JPH::CapsuleShape(half, r)).Create().Get();
+    JPH::Ref<JPH::CharacterVirtualSettings> s = new JPH::CharacterVirtualSettings();
+    s->mShape = shape;
+    s->mMaxSlopeAngle = std::clamp(cc.maxSlope, 1.0f, 89.0f) * kDegToRad;
+    s->mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -r); // solo cuenta como suelo la parte baja
+    // Cuerpo interior cinemático: los triggers, los rayos y los cuerpos dinámicos "ven" al personaje.
+    s->mInnerBodyShape = shape;
+    s->mInnerBodyLayer = Layers::make(cc.layer, true);
+    const Vec3 p = scene.computeWorldMatrix(e).translation();
+    CharacterData d;
+    d.height = h;
+    d.character = new JPH::CharacterVirtual(s, JPH::RVec3(p.x, p.y, p.z), JPH::Quat::sIdentity(), pack(e), impl_->system.get());
+    const JPH::BodyID inner = d.character->GetInnerBodyID();
+    if (!inner.IsInvalid()) {
+        impl_->owners[inner.GetIndexAndSequenceNumber()] = e;
+        impl_->bi().SetUserData(inner, pack(e));
+    }
+    impl_->characters[pack(e)] = d;
+}
+
+void PhysicsWorld::createTerrainBody(Scene& scene, Entity e, const Terrain& t) {
+    if (!scene.isActiveInHierarchy(e)) return;
+    Vec3 pos, scl;
+    Quat rot;
+    scene.computeWorldMatrix(e).decompose(pos, rot, scl);
+    const TerrainMesh mesh = buildTerrainMesh(t);
+    JPH::VertexList verts;
+    verts.reserve(mesh.vertices.size());
+    for (const TerrainVertex& v : mesh.vertices) verts.push_back(JPH::Float3(v.position.x * scl.x, v.position.y * scl.y, v.position.z * scl.z));
+    JPH::IndexedTriangleList tris;
+    tris.reserve(mesh.indices.size() / 3);
+    for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3)
+        tris.push_back(JPH::IndexedTriangle(mesh.indices[i], mesh.indices[i + 1], mesh.indices[i + 2], 0));
+    JPH::MeshShapeSettings settings(std::move(verts), std::move(tris));
+    JPH::ShapeSettings::ShapeResult result = settings.Create();
+    if (result.HasError()) {
+        TITAN_ERROR("physics", "Terreno '%s': %s", scene.info(e).name.c_str(), result.GetError().c_str());
+        return;
+    }
+    JPH::BodyCreationSettings bs(result.Get(), JPH::RVec3(pos.x, pos.y, pos.z), toJ(rot), JPH::EMotionType::Static, Layers::kStatic);
+    bs.mUserData = pack(e);
+    const JPH::BodyID id = impl_->bi().CreateAndAddBody(bs, JPH::EActivation::DontActivate);
+    if (id.IsInvalid()) return;
+    impl_->bodies[pack(e)] = id;
+    impl_->owners[id.GetIndexAndSequenceNumber()] = e;
+}
+
+void PhysicsWorld::createJoints(Scene& scene) {
+    World& world = scene.world();
+    world.each<Joint>([&](Entity e, Joint& j) {
+        JPH::BodyID a;
+        if (!impl_->find(e, a) || !scene.isActiveInHierarchy(e)) {
+            TITAN_WARN("physics", "Joint en '%s': necesita Rigidbody y Collider", scene.info(e).name.c_str());
+            return;
+        }
+        JPH::BodyID b;
+        if (!j.connected.isNull()) {
+            const Entity other = scene.findById(j.connected);
+            if (other.isNull() || !impl_->find(other, b)) {
+                TITAN_WARN("physics", "Joint en '%s': la entidad conectada no existe o no tiene física", scene.info(e).name.c_str());
+                return;
+            }
+        }
+        const Mat4 wa = scene.computeWorldMatrix(e);
+        const Vec3 anchor = wa.transformPoint(j.anchor);
+        const Vec3 axis = wa.transformDirection(j.axis).normalized();
+        JPH::Ref<JPH::TwoBodyConstraintSettings> settings;
+        if (j.type == Joint::Type::Fixed) {
+            auto* f = new JPH::FixedConstraintSettings();
+            f->mAutoDetectPoint = true;
+            settings = f;
+        } else if (j.type == Joint::Type::Hinge) {
+            auto* h = new JPH::HingeConstraintSettings();
+            h->mPoint1 = h->mPoint2 = JPH::RVec3(anchor.x, anchor.y, anchor.z);
+            h->mHingeAxis1 = h->mHingeAxis2 = toJ(axis);
+            const Vec3 normal = std::fabs(axis.y) < 0.9f ? cross(axis, {0, 1, 0}).normalized() : cross(axis, {1, 0, 0}).normalized();
+            h->mNormalAxis1 = h->mNormalAxis2 = toJ(normal);
+            if (j.limitAngle) {
+                h->mLimitsMin = std::min(j.minAngle, j.maxAngle) * kDegToRad;
+                h->mLimitsMax = std::max(j.minAngle, j.maxAngle) * kDegToRad;
+            }
+            settings = h;
+        } else {
+            auto* d = new JPH::DistanceConstraintSettings();
+            d->mPoint1 = JPH::RVec3(anchor.x, anchor.y, anchor.z);
+            Vec3 pb = anchor;
+            if (!b.IsInvalid()) {
+                const JPH::RVec3 c = impl_->bi().GetCenterOfMassPosition(b);
+                pb = {static_cast<float>(c.GetX()), static_cast<float>(c.GetY()), static_cast<float>(c.GetZ())};
+            }
+            d->mPoint2 = JPH::RVec3(pb.x, pb.y, pb.z);
+            d->mMinDistance = std::max(0.0f, j.minDistance);
+            d->mMaxDistance = std::max(d->mMinDistance, j.maxDistance);
+            if (j.springFrequency > 0) {
+                d->mLimitsSpringSettings.mFrequency = j.springFrequency;
+                d->mLimitsSpringSettings.mDamping = j.springDamping;
+            }
+            settings = d;
+        }
+        JPH::Body* body1 = impl_->system->GetBodyLockInterfaceNoLock().TryGetBody(a);
+        JPH::Body* body2 = b.IsInvalid() ? &JPH::Body::sFixedToWorld : impl_->system->GetBodyLockInterfaceNoLock().TryGetBody(b);
+        if (!body1 || !body2) return;
+        JPH::Ref<JPH::Constraint> c = settings->Create(*body1, *body2);
+        impl_->system->AddConstraint(c);
+        impl_->constraints.push_back(c);
+    });
+}
+
 void PhysicsWorld::removeEntity(Entity e) {
+    if (auto it = impl_->characters.find(pack(e)); it != impl_->characters.end()) {
+        const JPH::BodyID inner = it->second.character->GetInnerBodyID();
+        if (!inner.IsInvalid()) impl_->owners.erase(inner.GetIndexAndSequenceNumber());
+        impl_->characters.erase(it);
+        return;
+    }
     JPH::BodyID id;
     if (!impl_->find(e, id)) return;
     impl_->bi().RemoveBody(id);
@@ -246,6 +422,42 @@ void PhysicsWorld::step(Scene& scene, float dt) {
         Quat q;
         scene.computeWorldMatrix(e).decompose(p, q, s);
         bi.MoveKinematic(id, JPH::RVec3(p.x, p.y, p.z), toJ(q), dt);
+    }
+
+    // Personajes: velocidad pedida por los scripts + gravedad propia; Jolt resuelve escalones y pendientes.
+    const Vec3 g = gravity();
+    for (auto& [key, ch] : impl_->characters) {
+        const Entity e = unpack(key);
+        CharacterController* cc = scene.isValid(e) ? scene.world().get<CharacterController>(e) : nullptr;
+        if (!cc) continue;
+        JPH::CharacterVirtual& c = *ch.character;
+        // Si el Transform se movió desde fuera (teleport, editor, script), el personaje va allí.
+        const Vec3 tp = scene.computeWorldMatrix(e).translation();
+        const JPH::RVec3 cp = c.GetPosition();
+        if ((Vec3{float(cp.GetX()), float(cp.GetY()), float(cp.GetZ())} - tp).length() > 0.001f) c.SetPosition(JPH::RVec3(tp.x, tp.y, tp.z));
+        c.UpdateGroundVelocity();
+        const bool grounded = c.GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround;
+        if (grounded && ch.verticalVelocity < 0) ch.verticalVelocity = 0;
+        if (grounded && cc->jumpSpeed > 0) ch.verticalVelocity = cc->jumpSpeed;
+        cc->jumpSpeed = 0;
+        ch.verticalVelocity += g.y * cc->gravityScale * dt;
+        const JPH::Vec3 ground = grounded ? c.GetGroundVelocity() : JPH::Vec3::sZero();
+        c.SetLinearVelocity(JPH::Vec3(cc->desiredVelocity.x, ch.verticalVelocity, cc->desiredVelocity.z) + ground);
+        JPH::CharacterVirtual::ExtendedUpdateSettings us;
+        us.mWalkStairsStepUp = JPH::Vec3(0, std::max(0.0f, cc->stepHeight), 0);
+        us.mStickToFloorStepDown = JPH::Vec3(0, -std::max(0.05f, cc->stepHeight), 0);
+        const JPH::ObjectLayer layer = Layers::make(cc->layer, true);
+        c.ExtendedUpdate(dt, toJ(g * cc->gravityScale), us, impl_->system->GetDefaultBroadPhaseLayerFilter(layer),
+                         impl_->system->GetDefaultLayerFilter(layer), {}, {}, *impl_->temp);
+        const JPH::Vec3 v = c.GetLinearVelocity();
+        if (c.GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround && v.GetY() <= 0.01f) ch.verticalVelocity = 0;
+        else ch.verticalVelocity = v.GetY();
+        cc->grounded = c.GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround;
+        cc->velocity = fromJ(v);
+        const JPH::RVec3 np = c.GetPosition();
+        const Vec3 wp{float(np.GetX()), float(np.GetY()), float(np.GetZ())};
+        const Entity parent = scene.parent(e);
+        scene.transform(e).setPosition(parent.isNull() ? wp : scene.computeWorldMatrix(parent).inverted().transformPoint(wp));
     }
 
     impl_->system->Update(dt, 1, impl_->temp.get(), impl_->jobs.get());
@@ -334,17 +546,29 @@ void PhysicsWorld::setVelocity(Entity e, const Vec3& v) {
 }
 
 Vec3 PhysicsWorld::velocity(Entity e) const {
+    if (auto it = impl_->characters.find(pack(e)); it != impl_->characters.end())
+        return fromJ(it->second.character->GetLinearVelocity());
     JPH::BodyID id;
     return impl_->find(e, id) ? fromJ(impl_->bi().GetLinearVelocity(id)) : Vec3{};
 }
 
 void PhysicsWorld::teleport(Entity e, const Vec3& p) {
+    if (auto it = impl_->characters.find(pack(e)); it != impl_->characters.end()) {
+        it->second.character->SetPosition(JPH::RVec3(p.x, p.y, p.z));
+        it->second.verticalVelocity = 0;
+        return;
+    }
     JPH::BodyID id;
     if (impl_->find(e, id)) impl_->bi().SetPosition(id, JPH::RVec3(p.x, p.y, p.z), JPH::EActivation::Activate);
 }
 
 bool PhysicsWorld::raycast(const Vec3& origin, const Vec3& direction, float maxDistance, RaycastHit& hit,
                            Entity ignore) const {
+    return raycastMasked(origin, direction, maxDistance, hit, 0xFFFF, ignore);
+}
+
+bool PhysicsWorld::raycastMasked(const Vec3& origin, const Vec3& direction, float maxDistance, RaycastHit& hit,
+                                 uint32_t layerMask, Entity ignore) const {
     const Vec3 dir = direction.normalized() * maxDistance;
     JPH::RRayCast ray(JPH::RVec3(origin.x, origin.y, origin.z), toJ(dir));
     JPH::RayCastResult result;
@@ -352,7 +576,8 @@ bool PhysicsWorld::raycast(const Vec3& origin, const Vec3& direction, float maxD
     const bool hasIgnore = !ignore.isNull() && impl_->find(ignore, ignoreId);
     JPH::IgnoreSingleBodyFilter filter(ignoreId);
     const JPH::BodyFilter defaultFilter;
-    if (!impl_->system->GetNarrowPhaseQuery().CastRay(ray, result, {}, {}, hasIgnore ? static_cast<const JPH::BodyFilter&>(filter) : defaultFilter))
+    const MaskFilter mask(layerMask);
+    if (!impl_->system->GetNarrowPhaseQuery().CastRay(ray, result, {}, mask, hasIgnore ? static_cast<const JPH::BodyFilter&>(filter) : defaultFilter))
         return false;
     auto it = impl_->owners.find(result.mBodyID.GetIndexAndSequenceNumber());
     if (it == impl_->owners.end()) return false;
@@ -365,6 +590,84 @@ bool PhysicsWorld::raycast(const Vec3& origin, const Vec3& direction, float maxD
         hit.normal = fromJ(lock.GetBody().GetWorldSpaceSurfaceNormal(result.mSubShapeID2, ray.GetPointOnRay(result.mFraction)));
     return true;
 }
+
+void PhysicsWorld::setLayerCollision(int a, int b, bool collide) {
+    if (a < 0 || b < 0 || a >= Layers::kUserLayers || b >= Layers::kUserLayers) return;
+    const uint16_t bitB = static_cast<uint16_t>(1u << b), bitA = static_cast<uint16_t>(1u << a);
+    if (collide) {
+        impl_->layerMatrix[a] |= bitB;
+        impl_->layerMatrix[b] |= bitA;
+    } else {
+        impl_->layerMatrix[a] &= static_cast<uint16_t>(~bitB);
+        impl_->layerMatrix[b] &= static_cast<uint16_t>(~bitA);
+    }
+}
+
+bool PhysicsWorld::layersCollide(int a, int b) const {
+    if (a < 0 || b < 0 || a >= Layers::kUserLayers || b >= Layers::kUserLayers) return false;
+    return (impl_->layerMatrix[a] >> b) & 1u;
+}
+
+bool PhysicsWorld::sphereCast(const Vec3& origin, float radius, const Vec3& direction, float maxDistance, RaycastHit& hit,
+                              uint32_t layerMask, Entity ignore) const {
+    JPH::SphereShape sphere(std::max(0.001f, radius));
+    sphere.SetEmbedded();
+    const Vec3 dir = direction.normalized();
+    const JPH::RShapeCast cast(&sphere, JPH::Vec3::sReplicate(1), JPH::RMat44::sTranslation(JPH::RVec3(origin.x, origin.y, origin.z)),
+                               toJ(dir * maxDistance));
+    JPH::ShapeCastSettings settings;
+    JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
+    JPH::BodyID ignoreId;
+    const bool hasIgnore = !ignore.isNull() && impl_->find(ignore, ignoreId);
+    JPH::IgnoreSingleBodyFilter filter(ignoreId);
+    const JPH::BodyFilter defaultFilter;
+    const MaskFilter mask(layerMask);
+    impl_->system->GetNarrowPhaseQuery().CastShape(cast, settings, JPH::RVec3::sZero(), collector, {}, mask,
+                                                   hasIgnore ? static_cast<const JPH::BodyFilter&>(filter) : defaultFilter);
+    if (!collector.HadHit()) return false;
+    const JPH::ShapeCastResult& r = collector.mHit;
+    auto it = impl_->owners.find(r.mBodyID2.GetIndexAndSequenceNumber());
+    if (it == impl_->owners.end()) return false;
+    hit.entity = it->second;
+    hit.distance = r.mFraction * maxDistance;
+    hit.point = fromJ(r.mContactPointOn2);
+    const JPH::Vec3 n = -r.mPenetrationAxis;
+    hit.normal = n.LengthSq() > 1e-12f ? fromJ(n.Normalized()) : Vec3{0, 1, 0};
+    return true;
+}
+
+namespace {
+std::vector<Entity> collectOverlaps(const JPH::PhysicsSystem& system, const std::unordered_map<uint32_t, Entity>& owners,
+                                    const JPH::Shape& shape, const JPH::RMat44& transform, uint32_t layerMask) {
+    JPH::CollideShapeSettings settings;
+    JPH::AllHitCollisionCollector<JPH::CollideShapeCollector> collector;
+    const MaskFilter mask(layerMask);
+    system.GetNarrowPhaseQuery().CollideShape(&shape, JPH::Vec3::sReplicate(1), transform, settings, JPH::RVec3::sZero(),
+                                              collector, {}, mask);
+    std::vector<Entity> out;
+    for (const JPH::CollideShapeResult& r : collector.mHits) {
+        auto it = owners.find(r.mBodyID2.GetIndexAndSequenceNumber());
+        if (it != owners.end() && std::find(out.begin(), out.end(), it->second) == out.end()) out.push_back(it->second);
+    }
+    return out;
+}
+} // namespace
+
+std::vector<Entity> PhysicsWorld::overlapSphere(const Vec3& c, float radius, uint32_t layerMask) const {
+    JPH::SphereShape sphere(std::max(0.001f, radius));
+    sphere.SetEmbedded();
+    return collectOverlaps(*impl_->system, impl_->owners, sphere, JPH::RMat44::sTranslation(JPH::RVec3(c.x, c.y, c.z)), layerMask);
+}
+
+std::vector<Entity> PhysicsWorld::overlapBox(const Vec3& c, const Vec3& h, const Quat& q, uint32_t layerMask) const {
+    const float convex = std::min(0.05f, std::min(h.x, std::min(h.y, h.z)) * 0.5f);
+    JPH::BoxShape box(JPH::Vec3(std::max(0.001f, h.x), std::max(0.001f, h.y), std::max(0.001f, h.z)), std::max(0.0f, convex));
+    box.SetEmbedded();
+    return collectOverlaps(*impl_->system, impl_->owners, box, JPH::RMat44::sRotationTranslation(toJ(q), JPH::RVec3(c.x, c.y, c.z)),
+                           layerMask);
+}
+
+bool PhysicsWorld::isCharacter(Entity e) const { return impl_->characters.count(pack(e)) > 0; }
 
 void PhysicsWorld::setGravity(const Vec3& g) { impl_->system->SetGravity(toJ(g)); }
 Vec3 PhysicsWorld::gravity() const { return fromJ(impl_->system->GetGravity()); }

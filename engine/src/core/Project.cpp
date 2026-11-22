@@ -23,13 +23,14 @@ const char* assetTypeName(AssetType t) {
     case AssetType::Font: return "font";
     case AssetType::Data: return "data";
     case AssetType::Prefab: return "prefab";
+    case AssetType::Material: return "material";
     default: return "unknown";
     }
 }
 
 AssetType assetTypeFromName(const std::string& n) {
     for (AssetType t : {AssetType::Scene, AssetType::Texture, AssetType::Script, AssetType::Audio, AssetType::Model,
-                        AssetType::Font, AssetType::Data, AssetType::Prefab})
+                        AssetType::Font, AssetType::Data, AssetType::Prefab, AssetType::Material})
         if (n == assetTypeName(t)) return t;
     return AssetType::Unknown;
 }
@@ -39,6 +40,7 @@ AssetType assetTypeFromExtension(const std::string& path) {
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
     if (ext == ".scene") return AssetType::Scene;
     if (ext == ".prefab") return AssetType::Prefab;
+    if (ext == ".mat") return AssetType::Material;
     if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") return AssetType::Texture;
     if (ext == ".lua") return AssetType::Script;
     if (ext == ".wav" || ext == ".ogg" || ext == ".mp3") return AssetType::Audio;
@@ -302,6 +304,17 @@ bool Project::package(const std::string& outDir, const ComponentRegistry& regist
         const LoadReport rep = loadSceneFile(assets_.absolutePath(*r), scene, registry);
         for (auto& e : rep.errors) errors.push_back(r->path + ": " + e);
         for (auto& w : rep.warnings) warnings.push_back(r->path + ": " + w);
+        for (UUID ref : rep.assetRefs)
+            if (!assets_.find(ref)) errors.push_back(r->path + ": usa el recurso " + ref.toString() + ", que no existe en el proyecto");
+    }
+    for (const AssetRecord* r : assets_.all()) { // materiales: que se puedan leer y que sus texturas existan
+        if (r->type != AssetType::Material) continue;
+        std::string text;
+        MeshRenderer m;
+        LoadReport rep;
+        if (fileio::readText(assets_.absolutePath(*r), text)) rep = parseMaterial(text, m);
+        else rep.errors.push_back("no se puede leer");
+        for (auto& e : rep.errors) errors.push_back(r->path + ": " + e);
         for (UUID ref : rep.assetRefs)
             if (!assets_.find(ref)) errors.push_back(r->path + ": usa el recurso " + ref.toString() + ", que no existe en el proyecto");
     }
