@@ -5,6 +5,15 @@ en `third_party/` con su versión fijada, así la compilación no depende de la 
 
 ## En uso
 
+### ENet 1.3.18
+
+| | |
+|---|---|
+| Función | Red multijugador (UDP con mensajes fiables y no fiables) para `titan_net` y la API `Net.*` |
+| Licencia | MIT (`third_party/enet/LICENSE`) |
+| Origen | `github.com/lsalzman/enet`, etiqueta `v1.3.18` |
+| Coste | ~3 000 líneas de C; en Windows enlaza `ws2_32` y `winmm` |
+
 ### meshoptimizer 0.22
 
 | | |

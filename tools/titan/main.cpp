@@ -44,6 +44,7 @@ int usage() {
         "  titan demo-plataformas <carpeta>           crear la demo de plataformas 3D (menú, nivel, victoria)\n"
         "  titan demo-bloques <carpeta>               crear el sandbox de bloques (mundo infinito, romper y colocar)\n"
         "  titan demo-neon <carpeta>                  crear el escaparate del render (calle de neón de noche)\n"
+        "  titan demo-red <carpeta>                   crear la plaza multijugador (H crea partida, C se une)\n"
         "  titan import <carpeta> <archivo>           importar (OBJ, STL, PLY y .blend se convierten a GLB)\n"
         "  titan audiotest <archivo.wav>              grabar la prueba de sonido del motor en un WAV\n\n"
         "Opción: --scene <ruta dentro de assets/> para trabajar en otra escena.\n",
@@ -476,6 +477,15 @@ int main(int argc, char** argv) {
     if (cmd == "benchmark") return cmdBenchmark(dir);
     if (cmd == "demo-plataformas") return cmdDemoPlatformer(dir);
     if (cmd == "demo-bloques") return cmdDemoSandbox(dir);
+    if (cmd == "demo-red") {
+        std::string err;
+        if (!createMultiplayerSample(dir, "Plaza multijugador", &err)) {
+            std::fprintf(stderr, "Error: %s\n", err.c_str());
+            return 1;
+        }
+        std::printf("Plaza multijugador creada en %s. Ábrela dos veces: H en una, C en la otra.\n", dir.c_str());
+        return 0;
+    }
     if (cmd == "demo-neon") {
         std::string err;
         if (!createNeonSample(dir, "Ciudad de neón", &err)) {

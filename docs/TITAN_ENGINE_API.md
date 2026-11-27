@@ -212,6 +212,27 @@ local izq, der = Audio.busLevel("Master") -- medidor en dB (-80 = silencio)
 Los errores son explícitos: un bus, tipo de efecto o parámetro que no existe detiene el script con un mensaje que
 dice cuál. Un sonido enviado a un bus inexistente suena en Master (con un aviso en el registro).
 
+### Red multijugador (`Net`)
+
+Un jugador crea la partida (servidor) y los demás se conectan. Los mensajes son tablas de Lua (o textos) que viajan
+como JSON (hasta 64 KB). Llama a `Net.receive()` una vez por fotograma.
+
+| Función | Hace |
+|---|---|
+| `Net.host(puerto[, jugadores])` | abre el servidor; `true` o `false, error` |
+| `Net.connect(dirección, puerto)` | empieza a conectar (el evento `connect` llega con `Net.receive`) |
+| `Net.send(datos[, jugador][, fiable])` | `jugador` nil = a todos (en un cliente, al servidor); `fiable` (por defecto `true`) llega seguro y en orden; `false` es más rápido y puede perderse (posiciones) |
+| `Net.receive()` | lista de eventos `{type = "connect" / "disconnect" / "message", peer, data}` |
+| `Net.isServer()`, `Net.connected()`, `Net.peers()`, `Net.stats()`, `Net.close()` | estado, ids de jugadores, bytes enviados/recibidos |
+
+```lua
+if Input.keyPressed("H") then Net.host(7777) end
+for _, ev in ipairs(Net.receive()) do
+    if ev.type == "message" then print(ev.peer, ev.data.t) end
+end
+Net.send({ t = "pos", x = x, z = z }, nil, false)
+```
+
 ### Mundo de bloques (`Voxel`)
 
 Funciona si la escena tiene un objeto con el componente **VoxelTerrain** (Crear › Mundo de bloques). Sin él,

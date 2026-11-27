@@ -623,6 +623,7 @@ void Runtime::shutdown() {
     if (scripts_) scripts_->detach();
     physicsDestroySub_.reset();
     voxel_.stop(); // guarda los chunks modificados
+    net_.close();  // avisa a los demás jugadores
     physics_.clear();
     audio_.shutdown();
     if (scene_) {

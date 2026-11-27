@@ -1166,7 +1166,10 @@ int Editor::importFiles(const std::vector<std::string>& paths) {
 bool Editor::createSandboxProject(const std::string& name, int sample) {
     std::string err;
     const std::string dir = impl_->projectsDir() + "/" + name;
-    if (!(sample == 1 ? createNeonSample(dir, name, &err) : createSandboxSample(dir, name, &err))) {
+    const bool ok = sample == 1 ? createNeonSample(dir, name, &err)
+                  : sample == 2 ? createMultiplayerSample(dir, name, &err)
+                                : createSandboxSample(dir, name, &err);
+    if (!ok) {
         TITAN_ERROR("editor", "No se pudo crear el proyecto: %s", err.c_str());
         return false;
     }

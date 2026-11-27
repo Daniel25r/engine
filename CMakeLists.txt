@@ -95,11 +95,31 @@ if(ANDROID)
     target_link_libraries(titan_core PUBLIC log)
 endif()
 
+# ------------------------------------------------------------------ titan_net (multijugador, ENet MIT)
+
+add_library(titan_net STATIC engine/src/net/NetSession.cpp
+    third_party/enet/callbacks.c third_party/enet/compress.c third_party/enet/host.c third_party/enet/list.c
+    third_party/enet/packet.c third_party/enet/peer.c third_party/enet/protocol.c third_party/enet/unix.c
+    third_party/enet/win32.c)
+target_include_directories(titan_net PUBLIC engine/include PRIVATE third_party/enet/include)
+target_link_libraries(titan_net PUBLIC titan_core)
+target_compile_options(titan_net PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${TITAN_WARNINGS}>)
+set_source_files_properties(third_party/enet/callbacks.c third_party/enet/compress.c third_party/enet/host.c
+    third_party/enet/list.c third_party/enet/packet.c third_party/enet/peer.c third_party/enet/protocol.c
+    third_party/enet/unix.c third_party/enet/win32.c PROPERTIES COMPILE_OPTIONS "$<IF:$<C_COMPILER_ID:MSVC>,/w,-w>")
+if(WIN32)
+    target_link_libraries(titan_net PRIVATE ws2_32 winmm)
+else()
+    target_compile_definitions(titan_net PRIVATE HAS_SOCKLEN_T=1 HAS_FCNTL=1 HAS_POLL=1 HAS_GETADDRINFO=1
+        HAS_GETNAMEINFO=1 HAS_INET_PTON=1 HAS_INET_NTOP=1 HAS_MSGHDR_FLAGS=1)
+endif()
+
 # ------------------------------------------------------------------ titan_scripting (Lua)
 
 add_library(titan_scripting STATIC engine/src/scripting/ScriptSystem.cpp engine/src/scripting/ScriptApiWorld.cpp
+    engine/src/scripting/ScriptApiNet.cpp
     engine/src/scripting/ScriptApiVoxel.cpp)
-target_link_libraries(titan_scripting PUBLIC titan_core titan_lua titan_audio)
+target_link_libraries(titan_scripting PUBLIC titan_core titan_lua titan_audio titan_net)
 target_compile_options(titan_scripting PRIVATE ${TITAN_WARNINGS} $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fexceptions>)
 
 # ------------------------------------------------------------------ Jolt Physics 5.2.0 (MIT) y titan_physics
@@ -195,7 +215,8 @@ file(WRITE ${CMAKE_BINARY_DIR}/generated/DemoSandboxScripts.inc.tmp "${_sandbox_
 configure_file(${CMAKE_BINARY_DIR}/generated/DemoSandboxScripts.inc.tmp
                ${CMAKE_BINARY_DIR}/generated/DemoSandboxScripts.inc COPYONLY)
 add_library(titan_samples STATIC engine/src/samples/PlatformerSample.cpp engine/src/samples/SampleSounds.cpp
-    engine/src/samples/SandboxSample.cpp engine/src/samples/NeonSample.cpp)
+    engine/src/samples/SandboxSample.cpp engine/src/samples/NeonSample.cpp
+    engine/src/samples/MultiplayerSample.cpp)
 target_include_directories(titan_samples PRIVATE ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(titan_samples PUBLIC titan_core titan_audio)
 target_compile_options(titan_samples PRIVATE ${TITAN_WARNINGS})
@@ -287,7 +308,7 @@ else()
             tests/test_audio_mixer.cpp
             tests/test_jobs.cpp
             tests/test_modeling.cpp
-            tests/test_voxel.cpp tests/test_material_graph.cpp tests/test_fbx.cpp
+            tests/test_voxel.cpp tests/test_material_graph.cpp tests/test_fbx.cpp tests/test_net.cpp
             tests/test_ui.cpp
             tests/test_bounds.cpp
             tests/test_quality.cpp

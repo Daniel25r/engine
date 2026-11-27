@@ -34,6 +34,7 @@ namespace titan {
 
 // Lo que el sistema de scripts necesita del runtime que lo aloja.
 class VoxelWorld;
+class NetSession;
 class ScriptHost {
 public:
     virtual ~ScriptHost() = default;
@@ -81,6 +82,8 @@ public:
     virtual VoxelWorld* scriptVoxelWorld() { return nullptr; }
     virtual void scriptVoxelChanged(int x, int y, int z) {}
     virtual int scriptVoxelSave() { return 0; }
+    // Red multijugador de la partida (nula si la plataforma no la ofrece).
+    virtual NetSession* scriptNet() { return nullptr; }
 };
 
 struct ScriptError {

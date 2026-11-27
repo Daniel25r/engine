@@ -519,4 +519,7 @@ void registerWorldGlobals(lua_State* L) {
     lua_pop(L, 1);
 }
 
+Json luaToJson(lua_State* L, int idx) { return toJsonValue(L, idx, 0); }
+void jsonToLua(lua_State* L, const Json& j) { pushJson(L, j); }
+
 } // namespace titan::script_detail

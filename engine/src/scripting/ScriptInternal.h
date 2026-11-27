@@ -4,6 +4,7 @@
 #include "lauxlib.h"
 #include "lua.h"
 #include "titan/scripting/ScriptSystem.h"
+#include "titan/core/Serialization.h"
 
 namespace titan::script_detail {
 
@@ -76,6 +77,11 @@ inline void setGlobalTable(lua_State* L, const char* name, const luaL_Reg* fns) 
 // Añade métodos a la tabla de métodos de Entity (en la cima de la pila) y crea sus tablas globales.
 void registerWorldEntityMethods(lua_State* L);
 void registerWorldGlobals(lua_State* L);
+// Conversión Lua <-> JSON (la de Save.*), también para la red.
+Json luaToJson(lua_State* L, int idx);
+void jsonToLua(lua_State* L, const Json& j);
+// ScriptApiNet.cpp: Net.* (multijugador).
+void registerNetGlobals(lua_State* L);
 // ScriptApiVoxel.cpp: Voxel.* (mundo de bloques).
 void registerVoxelGlobals(lua_State* L);
 

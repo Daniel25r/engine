@@ -27,6 +27,7 @@
 #include "titan/runtime/ResourceCache.h"
 #include "titan/runtime/SceneRenderer.h"
 #include "titan/runtime/VoxelSystem.h"
+#include "titan/net/NetSession.h"
 #include "titan/scripting/ScriptSystem.h"
 #include "titan/core/JobSystem.h"
 #include "titan/ui/UISystem.h"
@@ -111,6 +112,7 @@ public:
     NavGrid* scriptNavGrid() override { return &navGrid_; }
     int scriptBakeNav(const NavSettings* settings) override; // nulo = zona automática según la escena
     VoxelWorld* scriptVoxelWorld() override { return voxel_.world(); }
+    NetSession* scriptNet() override { return &net_; }
     void scriptVoxelChanged(int x, int y, int z) override { voxel_.blockChanged(x, y, z); }
     int scriptVoxelSave() override;
     VoxelSystem& voxel() { return voxel_; }
@@ -154,6 +156,7 @@ private:
     CameraSystem cameras_;
     NavGrid navGrid_;
     VoxelSystem voxel_;
+    NetSession net_; // multijugador (se cierra al parar)
     std::string savePath_;
     std::vector<Entity> clicked_;
     std::string projectName_;

@@ -16,4 +16,7 @@ bool createSandboxSample(const std::string& dir, const std::string& name, std::s
 // "Ciudad de neón": escaparate del render (HDR, reflejos, nodos, barniz, luces, TAA). Calle de noche con cámara en Lua.
 bool createNeonSample(const std::string& dir, const std::string& name, std::string* error = nullptr);
 
+// "Plaza multijugador": varios jugadores por red (H crea la partida, C se une); plantilla para juegos en línea.
+bool createMultiplayerSample(const std::string& dir, const std::string& name, std::string* error = nullptr);
+
 } // namespace titan

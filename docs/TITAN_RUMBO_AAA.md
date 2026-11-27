@@ -22,7 +22,7 @@ Solo se apuntan bibliotecas con licencia compatible (MIT, BSD, Apache 2.0, zlib)
 | 5 | ~~LOD automático~~ ✅ hecho (2026-11-27) con meshoptimizer. Falta: LOD para las primitivas instanciadas y el mundo de bloques | — | MIT |
 | 6 | Navegación con navmesh real | Recast/Detour (sustituye la rejilla) | zlib |
 | 7 | Backend Vulkan / render moderno | Filament (render PBR de Google) o un backend propio sobre Vulkan | Apache 2.0 |
-| 8 | Red multijugador | Servidor autoritativo con ENet o GameNetworkingSockets | MIT / BSD |
+| 8 | ~~Red multijugador~~ ✅ base hecha (2026-11-27) con ENet y `Net.*`. Falta: replicación automática, predicción, servidor dedicado | — | MIT |
 | 9 | GI en tiempo real | DDGI (sondas con trazado) cuando haya Vulkan | propio |
 
 Cada bloque se entrega igual que hasta ahora: integrado, probado (pruebas automáticas + capturas), documentado y

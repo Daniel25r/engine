@@ -1,7 +1,7 @@
 // Editor de Titán para escritorio (GLFW). El mismo editor que en Android.
 //
 // Uso normal:  titan_editor [--projects carpeta]
-// Automatización (pruebas): --open ruta | --new nombre --template 0..5 (4 = mundo de bloques, 5 = ciudad de neón), --panel nombre, --select entidad, --import archivo, --create "Botón;Joystick",
+// Automatización (pruebas): --open ruta | --new nombre --template 0..5 (4 = mundo de bloques, 5 = ciudad de neón, 6 = plaza multijugador), --panel nombre, --select entidad, --import archivo, --create "Botón;Joystick",
 //   --script ruta.lua, --play-at N, --stop-at N, --taps "x,y@N;...", --drag "x1,y1,x2,y2@N",
 //   --frames N, --screenshot archivo.png, --size 1280x800, --scale 1.0, --touch
 #define GLFW_INCLUDE_ES3
@@ -267,7 +267,7 @@ int main(int argc, char** argv) {
             else gEditor->onPause();
         });
 
-        if (!newName.empty() && (templ == 4 || templ == 5)) editor.createSandboxProject(newName, templ - 4);
+        if (!newName.empty() && (templ >= 4 && templ <= 6)) editor.createSandboxProject(newName, templ - 4);
         else if (!newName.empty()) editor.createProject(newName, templ == 1 || templ == 3, templ >= 2);
         if (!openPath.empty()) editor.openProject(openPath);
         for (size_t s = 0; s < createKinds.size();) {

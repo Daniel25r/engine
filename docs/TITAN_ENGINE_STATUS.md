@@ -100,6 +100,8 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 | Streaming de chunks del mundo de bloques alrededor de la cámara (generar/leer y mallar en los hilos del JobSystem, como mucho 4 subidas a la GPU por fotograma, descarga de lo lejano) | ✅ | Reproductor: 149 chunks, 73 llamadas de dibujo, el personaje anda sobre los bloques (colisión de malla estática de Jolt) |
 | Guardado incremental del mundo (solo chunks modificados, RLE, escritura atómica) y recarga | ✅ | Reproductor: romper/colocar → `mundos/mundo/chunks/0_-1.chunk`; segunda ejecución lo carga |
 | Plantilla "Mundo de bloques" (Demo A: explorar, romper, colocar, biomas, guardar) y `titan demo-bloques` | ✅ | Editor (`--template 4` + Jugar) y reproductor con teclas simuladas |
+| **Multijugador** (ENet, MIT): servidor/cliente por UDP con mensajes fiables o rápidos; API de Lua `Net.host/connect/send/receive/peers/stats` (tablas de Lua como JSON); plantilla "Plaza multijugador" y `titan demo-red` | ✅ | 2 pruebas `red:` con servidor y cliente reales por localhost; dos reproductores a la vez: cada uno ve la cápsula del otro donde la movió |
+| Replicación automática de entidades, predicción del cliente, servidor dedicado sin ventana, emparejamiento por Internet | ❌ | Hoy la sincronización se escribe en Lua (como en la plantilla) |
 | Plantilla "Ciudad de neón" (escaparate del render: HDR, SSR, nodos, barniz, farolas, TAA, cámara en Lua) y `titan demo-neon` | ✅ | Reproductor: 6 fotogramas sin píxeles inválidos; imagen principal del README |
 | World partition para escenas normales, origen flotante, HLOD | ❌ | El streaming existe solo para el mundo de bloques |
 | Vista previa del mundo de bloques en el editor sin pulsar Jugar | ❌ | Se ve al jugar |

@@ -56,6 +56,11 @@ const TemplateInfo kTemplates[] = {
      "reflejos, ventanas generadas con materiales por nodos, coche con barniz, farolas, sombras en cascada, SSAO y "
      "antialiasing temporal. Una cámara recorre la calle. Todo hecho con primitivas (sin recursos de terceros).",
      "1 escena · materiales por nodos · 4 luces · cámara en Lua"},
+    {"Plaza multijugador", "Ejemplo en red",
+     "Varios jugadores en la misma escena por la red: uno pulsa H para crear la partida y los demás C para unirse. "
+     "Cada uno mueve su cápsula con WASD y ve a los demás; el servidor reenvía las posiciones. Un punto de partida "
+     "para juegos en línea con la API Net de Lua.",
+     "1 escena · 1 script Lua (Net.*) · hasta 8 jugadores"},
 };
 
 std::string relativeTime(fs::file_time_type t) {
@@ -170,6 +175,23 @@ void drawPreviewNeon(ImDrawList* dl, ImVec2 a, ImVec2 b, float s) {
     dl->AddRectFilled(ImVec2(a.x, a.y + H * 0.72f), b, IM_COL32(12, 12, 18, 160));
     // Coche rojo.
     dl->AddRectFilled(ImVec2(a.x + W * 0.38f, a.y + H * 0.66f), ImVec2(a.x + W * 0.62f, a.y + H * 0.76f), IM_COL32(176, 16, 26, 255), 4 * s);
+}
+
+void drawPreviewMultiplayer(ImDrawList* dl, ImVec2 a, ImVec2 b, float s) {
+    gradient(dl, a, b, IM_COL32(110, 120, 135, 255), IM_COL32(170, 178, 190, 255));
+    const float W = b.x - a.x, H = b.y - a.y;
+    for (int i = 0; i <= 8; ++i) // rejilla de la plaza
+        dl->AddLine(ImVec2(a.x + W * i / 8.0f, a.y + H * 0.45f), ImVec2(a.x + W * (i / 8.0f - 0.5f) * 1.6f + W * 0.5f, b.y),
+                    IM_COL32(120, 128, 140, 255));
+    const ImU32 cols[] = {IM_COL32(59, 125, 216, 255), IM_COL32(214, 69, 69, 255), IM_COL32(69, 184, 106, 255), IM_COL32(232, 178, 58, 255)};
+    const float xs[] = {0.3f, 0.5f, 0.65f, 0.8f}, ys[] = {0.75f, 0.6f, 0.8f, 0.62f};
+    for (int i = 0; i < 4; ++i) {
+        const ImVec2 c(a.x + W * xs[i], a.y + H * ys[i]);
+        dl->AddRectFilled(ImVec2(c.x - 5 * s, c.y - 16 * s), ImVec2(c.x + 5 * s, c.y), cols[i], 5 * s);
+    }
+    // ondas de red entre jugadores
+    dl->AddLine(ImVec2(a.x + W * 0.3f, a.y + H * 0.7f), ImVec2(a.x + W * 0.5f, a.y + H * 0.55f), IM_COL32(255, 255, 255, 140), 1.5f * s);
+    dl->AddLine(ImVec2(a.x + W * 0.5f, a.y + H * 0.55f), ImVec2(a.x + W * 0.8f, a.y + H * 0.57f), IM_COL32(255, 255, 255, 140), 1.5f * s);
 }
 
 void drawPreviewPlatformer(ImDrawList* dl, ImVec2 a, ImVec2 b, float s) {
@@ -415,7 +437,7 @@ void Editor::Impl::drawBrowser() {
         const float prevH = std::clamp(cardW * 0.5f, 80 * s, 150 * s), cardH = prevH + 64 * s;
         ImGui::BeginChild("##galeria", ImVec2(galleryW, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
         ImDrawList* gl = ImGui::GetWindowDrawList();
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 6; ++i) {
             if (i % cols) ImGui::SameLine(0, gap);
             ImGui::PushID(i);
             const ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + cardW, a.y + cardH);
@@ -423,9 +445,10 @@ void Editor::Impl::drawBrowser() {
                 newProjectTemplate = i;
                 // Nombre sugerido: el del ejemplo, salvo que el usuario ya haya escrito uno propio.
                 const bool suggested = newProjectName == "Mi juego" || newProjectName == "Isla Estelar" || newProjectName == "Mundo de bloques" ||
-                                       newProjectName == "Ciudad de neón";
+                                       newProjectName == "Ciudad de neón" || newProjectName == "Plaza multijugador";
                 if (suggested)
-                    newProjectName = i == 2 ? "Isla Estelar" : i == 3 ? "Mundo de bloques" : i == 4 ? "Ciudad de neón" : "Mi juego";
+                    newProjectName = i == 2 ? "Isla Estelar" : i == 3 ? "Mundo de bloques" : i == 4 ? "Ciudad de neón"
+                                   : i == 5 ? "Plaza multijugador" : "Mi juego";
             }
             const bool hover = ImGui::IsItemHovered(), sel = newProjectTemplate == i;
             gl->AddRectFilled(a, b, hover ? kCardHover : kCard, 8 * s);
@@ -435,7 +458,8 @@ void Editor::Impl::drawBrowser() {
             else if (i == 1) drawPreview2D(gl, a, pb, s);
             else if (i == 2) drawPreviewPlatformer(gl, a, pb, s);
             else if (i == 3) drawPreviewSandbox(gl, a, pb, s);
-            else drawPreviewNeon(gl, a, pb, s);
+            else if (i == 4) drawPreviewNeon(gl, a, pb, s);
+            else drawPreviewMultiplayer(gl, a, pb, s);
             gl->PopClipRect();
             gl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.1f, ImVec2(a.x + 14 * s, pb.y + 12 * s), kText, kTemplates[i].title);
             gl->AddText(ImVec2(a.x + 14 * s, pb.y + 36 * s), i >= 2 ? IM_COL32(255, 200, 61, 255) : kDimText, kTemplates[i].tag);
@@ -446,7 +470,7 @@ void Editor::Impl::drawBrowser() {
         // Detalles y creación
         ImGui::SameLine(0, 24 * s);
         ImGui::BeginChild("##detalle", ImVec2(detailW, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
-        const TemplateInfo& t = kTemplates[std::clamp(newProjectTemplate, 0, 4)];
+        const TemplateInfo& t = kTemplates[std::clamp(newProjectTemplate, 0, 5)];
         ImDrawList* d2 = ImGui::GetWindowDrawList();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         d2->AddRectFilled(p, ImVec2(p.x + detailW, p.y + 2 * s), kAccent);
@@ -478,6 +502,7 @@ void Editor::Impl::drawBrowser() {
             if (newProjectTemplate == 2) ok = createPlatformerSample(dir, newProjectName, &err);
             else if (newProjectTemplate == 3) ok = createSandboxSample(dir, newProjectName, &err);
             else if (newProjectTemplate == 4) ok = createNeonSample(dir, newProjectName, &err);
+            else if (newProjectTemplate == 5) ok = createMultiplayerSample(dir, newProjectName, &err);
             else ok = createProjectFromTemplate(dir, newProjectName,
                                                 newProjectTemplate == 0 ? ProjectTemplate::Empty3D : ProjectTemplate::Empty2D, &err) != nullptr;
             if (ok) {
