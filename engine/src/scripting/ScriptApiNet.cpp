@@ -50,7 +50,8 @@ int n_send(lua_State* L) {
 }
 
 int n_receive(lua_State* L) {
-    const std::vector<NetEvent> events = net(L).poll();
+    net(L); // error claro si no hay red
+    const std::vector<NetEvent> events = sys(L).host().scriptNetEvents();
     lua_createtable(L, int(events.size()), 0);
     int i = 1;
     for (const NetEvent& ev : events) {
@@ -69,6 +70,8 @@ int n_receive(lua_State* L) {
     }
     return 1;
 }
+
+int n_myId(lua_State* L) { lua_pushinteger(L, sys(L).host().scriptNetId()); return 1; }
 
 int n_isServer(lua_State* L) { lua_pushboolean(L, net(L).isServer()); return 1; }
 int n_connected(lua_State* L) { lua_pushboolean(L, net(L).active()); return 1; }
@@ -97,7 +100,8 @@ int n_stats(lua_State* L) {
 
 const luaL_Reg kNetGlobals[] = {{"host", n_host}, {"connect", n_connect}, {"close", n_close}, {"send", n_send},
                                 {"receive", n_receive}, {"isServer", n_isServer}, {"connected", n_connected},
-                                {"peers", n_peers}, {"stats", n_stats}, {nullptr, nullptr}};
+                                {"peers", n_peers}, {"stats", n_stats}, {"myId", n_myId},
+                                {nullptr, nullptr}};
 } // namespace
 
 void registerNetGlobals(lua_State* L) { setGlobalTable(L, "Net", kNetGlobals); }

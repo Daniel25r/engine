@@ -1,4 +1,5 @@
 #include <cctype>
+#include <cmath>
 #include "titan/runtime/Runtime.h"
 #include "titan/runtime/UIRenderer.h"
 #include "titan/core/AnimationGraph.h"
@@ -305,6 +306,7 @@ void Runtime::frame(const Viewport& viewport) {
     // 2-3. Lógica variable.
     time_ += dt;
     if (!paused) {
+        updateNet(dt); // antes de los scripts: así Net.receive() ve lo de este fotograma
         scripts_->update(dt);
         scripts_->lateUpdate(dt);
         if (navGrid_.baked()) updateNavAgents(*scene_, navGrid_, dt); // los agentes deciden su velocidad
@@ -572,6 +574,85 @@ void Runtime::startVoxel() {
     if (!cameraPosition(c)) c = {0, 0, 0};
     voxel_.preload(c, 2); // el suelo cercano ya está al empezar (el jugador no cae al vacío)
     TITAN_INFO("voxel", "Mundo de bloques iniciado: %zu chunks cerca de la cámara", voxel_.world()->loadedChunks());
+}
+
+// Red: los mensajes internos de la replicación ("_sync", "_id") se tratan aquí; el resto va a Net.receive().
+void Runtime::updateNet(float dt) {
+    if (!net_.open()) { // sin red (un cliente que está conectando sí cuenta: hay que procesar para conectar)
+        netId_ = -1;
+        return;
+    }
+    const bool server = net_.isServer();
+    const int me = server ? 0 : netId_;
+    World& w = scene_->world();
+    auto findSync = [&](const std::string& idText, Entity& out) {
+        UUID id;
+        if (!UUID::parse(idText, id)) return false;
+        out = scene_->findById(id);
+        return scene_->isValid(out) && w.has<NetSync>(out);
+    };
+    for (NetEvent& ev : net_.poll()) {
+        if (ev.type == NetEvent::Type::Connected && server) // al que llega se le dice su número
+            net_.send(Json{{"_id", ev.peer}}.dump(), ev.peer, true);
+        if (ev.type == NetEvent::Type::Disconnected && !server) netId_ = -1;
+        if (ev.type == NetEvent::Type::Message && !ev.data.empty() && ev.data[0] == '{' && ev.data.find("\"_") != std::string::npos) {
+            const Json j = Json::parse(ev.data, nullptr, false);
+            if (j.is_object() && j.contains("_id")) {
+                netId_ = j["_id"].get<int>();
+                continue;
+            }
+            if (j.is_object() && j.contains("_sync") && j["_sync"].is_array()) {
+                for (const Json& it : j["_sync"]) {
+                    Entity e;
+                    if (!it.is_object() || !findSync(it.value("e", ""), e)) continue;
+                    NetSync& ns = *w.get<NetSync>(e);
+                    if (ns.owner == me) continue;                       // lo mío lo muevo yo
+                    if (server && ns.owner != ev.peer) continue;        // un cliente solo mueve lo suyo
+                    const Json& p = it["p"];
+                    const Json& r = it["r"];
+                    if (!p.is_array() || p.size() != 3 || !r.is_array() || r.size() != 4) continue;
+                    ns.targetPos = {p[0].get<float>(), p[1].get<float>(), p[2].get<float>()};
+                    ns.targetRot = Quat{r[0].get<float>(), r[1].get<float>(), r[2].get<float>(), r[3].get<float>()};
+                    if (!ns.hasTarget) { // primera vez: directamente allí
+                        scene_->transform(e).setPosition(ns.targetPos);
+                        scene_->transform(e).setRotation(ns.targetRot);
+                    }
+                    ns.hasTarget = true;
+                }
+                if (server) net_.send(ev.data, -1, false); // el servidor reenvía a todos lo que mueven los clientes
+                continue;
+            }
+        }
+        netForScripts_.push_back(std::move(ev));
+    }
+    if (netForScripts_.size() > 1024) netForScripts_.erase(netForScripts_.begin(), netForScripts_.end() - 1024);
+    // Lo que no es mío se acerca suavemente al último estado recibido (sin saltos a 20 envíos por segundo).
+    const float k = 1.0f - std::exp(-15.0f * dt);
+    w.each<NetSync>([&](Entity e, NetSync& ns) {
+        if (ns.owner == me || !ns.hasTarget) return;
+        Transform& t = scene_->transform(e);
+        t.setPosition(t.position() + (ns.targetPos - t.position()) * k);
+        Quat a = t.rotation(), b = ns.targetRot;
+        if (a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w < 0) b = {-b.x, -b.y, -b.z, -b.w}; // camino corto
+        Quat q{a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, a.z + (b.z - a.z) * k, a.w + (b.w - a.w) * k};
+        const float len = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+        if (len > 1e-6f) t.setRotation({q.x / len, q.y / len, q.z / len, q.w / len});
+    });
+    // Lo mío se envía (20 veces por segundo por defecto) en un solo mensaje.
+    netSyncTimer_ += dt;
+    float rate = 20;
+    w.each<NetSync>([&](Entity, NetSync& ns) { rate = std::max(rate, std::min(ns.rate, 60.0f)); });
+    if (me < 0 || netSyncTimer_ < 1.0f / rate) return;
+    netSyncTimer_ = 0;
+    Json list = Json::array();
+    w.each<NetSync>([&](Entity e, NetSync& ns) {
+        if (ns.owner != me) return;
+        Vec3 p, s;
+        Quat q;
+        scene_->computeWorldMatrix(e).decompose(p, q, s);
+        list.push_back(Json{{"e", scene_->info(e).id.toString()}, {"p", {p.x, p.y, p.z}}, {"r", {q.x, q.y, q.z, q.w}}});
+    });
+    if (!list.empty()) net_.send(Json{{"_sync", list}}.dump(), -1, false);
 }
 
 void Runtime::captureProbes() {

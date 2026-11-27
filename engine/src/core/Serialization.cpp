@@ -364,6 +364,13 @@ ComponentRegistry ComponentRegistry::createDefault() {
             readMaterialFields(m, rd);
         });
 
+    r.addSimple<NetSync>(
+        "NetSync", [](const NetSync& n) { return Json{{"owner", n.owner}, {"rate", toJson(n.rate)}}; },
+        [](NetSync& n, FieldReader& rd) {
+            rd.read("owner", n.owner);
+            rd.read("rate", n.rate);
+        });
+
     r.addSimple<Vehicle>(
         "Vehicle",
         [](const Vehicle& v) {

@@ -130,3 +130,16 @@ TEST("animaciones: la lista \"Animaciones de\" del Animator se guarda") {
     const Animator* r = b.world().get<Animator>(b.findByName("Personaje"));
     CHECK(r && r->animationSources.size() == 2 && r->animationSources[1].value == 0xABCD && r->clip == "Correr");
 }
+
+TEST("red: NetSync (replicación automática) se guarda con la escena") {
+    const ComponentRegistry reg = ComponentRegistry::createDefault();
+    Scene a("a");
+    NetSync ns;
+    ns.owner = 3;
+    ns.rate = 30;
+    a.world().add<NetSync>(a.createEntity("Jugador 3"), ns);
+    Scene b("b");
+    CHECK(deserializeScene(serializeScene(a, reg), b, reg).ok());
+    const NetSync* r = b.world().get<NetSync>(b.findByName("Jugador 3"));
+    CHECK(r && r->owner == 3 && std::abs(r->rate - 30.0f) < 1e-5f && !r->hasTarget);
+}

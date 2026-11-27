@@ -35,6 +35,7 @@ public:
 
     bool isServer() const;
     bool active() const;      // servidor abierto o cliente conectado
+    bool open() const;        // servidor abierto o cliente conectado o conectando
     int peerCount() const;    // jugadores conectados (en el cliente: 1 si está conectado al servidor)
     std::vector<int> peers() const;
     uint64_t bytesSent() const;

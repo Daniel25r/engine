@@ -22,7 +22,7 @@ Descomprime el zip y abre `titan_editor.exe`.
 | **Mundos** | Mundo de bloques infinito (biomas, cuevas, árboles) que se carga en varios hilos y se guarda solo; terreno por mapa de alturas con esculpido y 4 capas de pintura |
 | **Física** | Jolt Physics: cuerpos rígidos, uniones, controlador de personaje, colisión de malla, vehículos con motor, cambios y suspensión |
 | **Juego** | Scripts en Lua (con entorno aislado), acciones de entrada (teclado, mando, táctil), cámara en tercera persona, navegación e IA, partículas, animación esquelética con máquina de estados, interfaz de juego, partidas guardadas |
-| **Multijugador** | Servidor y clientes por red (ENet), API `Net.*` en Lua |
+| **Multijugador** | Servidor y clientes por red (ENet), replicación automática de entidades (`NetSync`), API `Net.*` en Lua |
 | **Audio** | miniaudio con mezclador de buses y efectos (reverberación, eco, filtros, limitador...) |
 | **Editor** | Escena, jerarquía, inspector, gizmos, contenido, consola, botón Jugar. Modelado (extruir, inset, subdividir, simetría), escultura (6 pinceles), esqueleto automático y animación por claves |
 | **Importar** | FBX con esqueleto y animaciones (Mixamo, Maya, 3ds Max, Prisma 3D; animaciones de Mixamo descargadas aparte se aplican al personaje), glTF/GLB, OBJ, STL, PLY y .blend. Arrastra el archivo a la ventana del editor |

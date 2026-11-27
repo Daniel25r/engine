@@ -67,6 +67,7 @@ Reglas comunes:
 | `Script` | `script` (recurso .lua), `enabled`, `props` (objeto) |
 | `MeshRenderer` | `mesh`, `model`, `material` (recurso .mat), `castShadows`, `visible` y los campos de material: `texture`, `color`, `metallic`, `roughness`, `emission`, `prototypeGrid`, `unlit`, `normalMap`, `normalStrength`, `clearcoat`, `clearcoatRoughness` (barniz), `graph` (material por nodos: `{"format": "titan-material-graph", "version": 1, "nextId", "nodes": [{"id", "type", "value" [4], "texture", "pos" [2], "inputs" [ids]}]}`), `metallicRoughnessMap`, `emissionMap`, `occlusionMap`, `tiling` [2], `offset` [2], `alphaClip`, `alphaCutoff`, `doubleSided` |
 | `Light` | `type` ("directional"/"point"/"spot"), `color`, `intensity`, `range`, `spotAngle`, `spotSoftness` |
+| `NetSync` | `owner` (0 = servidor, N = jugador N), `rate` (envíos por segundo) |
 | `Vehicle` | `engineTorque`, `maxRpm`, `maxSteerAngle`, `wheelRadius`, `wheelWidth`, `suspensionLength`, `suspensionFrequency`, `wheels` (ids de las 4 ruedas visibles) |
 | `ReflectionProbe` | `intensity`, `resolution` (píxeles por cara) |
 | `Animator` (además) | `animationSources`: ids de modelos cuyos clips se añaden por nombre de hueso |

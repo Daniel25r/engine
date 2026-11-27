@@ -13,6 +13,7 @@
 //
 // Seguridad: sin io, os, package, load ni dofile; límite de memoria del intérprete y
 // límite de tiempo por llamada para que un bucle infinito no congele el juego ni el editor.
+#include "titan/net/NetSession.h"
 #include <deque>
 #include <functional>
 #include <string>
@@ -34,7 +35,6 @@ namespace titan {
 
 // Lo que el sistema de scripts necesita del runtime que lo aloja.
 class VoxelWorld;
-class NetSession;
 class ScriptHost {
 public:
     virtual ~ScriptHost() = default;
@@ -84,6 +84,9 @@ public:
     virtual int scriptVoxelSave() { return 0; }
     // Red multijugador de la partida (nula si la plataforma no la ofrece).
     virtual NetSession* scriptNet() { return nullptr; }
+    // Eventos de red para Lua (los de la replicación automática ya se han quitado) y el id propio en la partida.
+    virtual std::vector<NetEvent> scriptNetEvents() { return {}; }
+    virtual int scriptNetId() const { return -1; }
 };
 
 struct ScriptError {

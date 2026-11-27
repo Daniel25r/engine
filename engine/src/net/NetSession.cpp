@@ -154,6 +154,7 @@ bool NetSession::send(const std::string& data, int peer, bool reliable) {
 }
 
 bool NetSession::isServer() const { return impl_->host && impl_->server; }
+bool NetSession::open() const { return impl_->host != nullptr; }
 bool NetSession::active() const { return impl_->host && (impl_->server || impl_->connected); }
 int NetSession::peerCount() const { return impl_->server ? int(impl_->peers.size()) : (impl_->connected ? 1 : 0); }
 std::vector<int> NetSession::peers() const {

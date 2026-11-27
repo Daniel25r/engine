@@ -233,6 +233,8 @@ como JSON (hasta 64 KB). Llama a `Net.receive()` una vez por fotograma.
 | `Net.send(datos[, jugador][, fiable])` | `jugador` nil = a todos (en un cliente, al servidor); `fiable` (por defecto `true`) llega seguro y en orden; `false` es más rápido y puede perderse (posiciones) |
 | `Net.receive()` | lista de eventos `{type = "connect" / "disconnect" / "message", peer, data}` |
 | `Net.isServer()`, `Net.connected()`, `Net.peers()`, `Net.stats()`, `Net.close()` | estado, ids de jugadores, bytes enviados/recibidos |
+| `Net.myId()` | mi número en la partida (0 = servidor, -1 = sin conectar) |
+| `e:isMine()`, `e:netOwner()`, `e:setNetOwner(id)` | replicación automática: en una entidad con `NetSync`, solo su dueño la mueve; el motor envía y aplica su posición y rotación |
 
 ```lua
 if Input.keyPressed("H") then Net.host(7777) end

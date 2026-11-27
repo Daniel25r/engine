@@ -266,6 +266,19 @@ int e_vehicleSpeed(lua_State* L) { lua_pushnumber(L, component<Vehicle>(L, live(
 int e_vehicleRpm(lua_State* L) { lua_pushnumber(L, component<Vehicle>(L, live(L, 1), "Vehicle").rpm); return 1; }
 int e_vehicleGear(lua_State* L) { lua_pushinteger(L, component<Vehicle>(L, live(L, 1), "Vehicle").gear); return 1; }
 
+// Replicación: dueño de una entidad con NetSync (0 = servidor, N = jugador N) y si la muevo yo.
+int e_setNetOwner(lua_State* L) {
+    component<NetSync>(L, live(L, 1), "NetSync").owner = int(luaL_checkinteger(L, 2));
+    return 0;
+}
+int e_netOwner(lua_State* L) { lua_pushinteger(L, component<NetSync>(L, live(L, 1), "NetSync").owner); return 1; }
+int e_isMine(lua_State* L) {
+    const NetSync* n = scene(L).world().get<NetSync>(live(L, 1));
+    const int me = sys(L).host().scriptNetId();
+    lua_pushboolean(L, n && me >= 0 && n->owner == me);
+    return 1;
+}
+
 int e_isGrounded(lua_State* L) { lua_pushboolean(L, character(L, live(L, 1)).grounded); return 1; }
 int e_endJump(lua_State* L) { character(L, live(L, 1)).cutJump = true; return 0; } // salto variable: soltar el botón
 int e_isTouchingWall(lua_State* L) {
@@ -511,6 +524,7 @@ const luaL_Reg kWorldEntityMethods[] = {
     {"pushCharacter", e_pushCharacter}, {"jumpsUsed", e_jumpsUsed},
     {"playParticles", e_playParticles}, {"stopParticles", e_stopParticles}, {"emitParticles", e_emitParticles},
     {"particleCount", e_particleCount},
+    {"setNetOwner", e_setNetOwner}, {"netOwner", e_netOwner}, {"isMine", e_isMine},
     {"drive", e_drive}, {"vehicleSpeed", e_vehicleSpeed}, {"vehicleRpm", e_vehicleRpm}, {"vehicleGear", e_vehicleGear},
     {nullptr, nullptr}};
 

@@ -337,6 +337,17 @@ struct Vehicle {
     int gear = 0;
 };
 
+// Replicación por red: la posición y rotación de esta entidad se envían solas a los demás jugadores. El dueño
+// (0 = el servidor, N = el jugador N) es quien la mueve; en los demás equipos se aplica lo que llega (suavizado).
+struct NetSync {
+    int owner = 0;
+    float rate = 20.0f;   // envíos por segundo
+    // En ejecución (no se guarda): último estado recibido, hacia el que se interpola.
+    bool hasTarget = false;
+    Vec3 targetPos;
+    Quat targetRot;
+};
+
 struct Collider {
     // Mesh: los triángulos exactos de su MeshRenderer (modelo o primitiva); solo para lo que no se mueve (escenarios).
     // ConvexHull: la envolvente convexa del modelo; sirve también para cuerpos dinámicos.

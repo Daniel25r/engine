@@ -113,6 +113,12 @@ public:
     int scriptBakeNav(const NavSettings* settings) override; // nulo = zona automática según la escena
     VoxelWorld* scriptVoxelWorld() override { return voxel_.world(); }
     NetSession* scriptNet() override { return &net_; }
+    std::vector<NetEvent> scriptNetEvents() override {
+        std::vector<NetEvent> out;
+        out.swap(netForScripts_);
+        return out;
+    }
+    int scriptNetId() const override { return net_.isServer() ? 0 : netId_; }
     void scriptVoxelChanged(int x, int y, int z) override { voxel_.blockChanged(x, y, z); }
     int scriptVoxelSave() override;
     VoxelSystem& voxel() { return voxel_; }
@@ -157,6 +163,10 @@ private:
     NavGrid navGrid_;
     VoxelSystem voxel_;
     NetSession net_; // multijugador (se cierra al parar)
+    std::vector<NetEvent> netForScripts_; // lo que no es de la replicación automática
+    int netId_ = -1;                      // id propio en el cliente (lo dice el servidor)
+    float netSyncTimer_ = 0;
+    void updateNet(float dt);
     std::string savePath_;
     std::vector<Entity> clicked_;
     std::string projectName_;
