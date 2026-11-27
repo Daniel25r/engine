@@ -3,6 +3,7 @@
 #include <GLES3/gl3.h>
 
 #include <algorithm>
+#include <cmath>
 
 #include "titan/core/Log.h"
 
@@ -82,6 +83,8 @@ uniform sampler2D uSSR;
 uniform sampler2D uSpec;
 uniform int uSSROn;
 uniform int uHdr;
+uniform int uAutoExp;
+uniform sampler2D uAdapted;
 vec3 acesTone(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 out vec4 outColor;
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -115,6 +118,10 @@ void main() {
     }
     if (uBloomOn == 1) c += texture(uBloom, vUV).rgb * uBloomIntensity;
     if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0); // red de seguridad: nunca un píxel inválido en pantalla
+    if (uAutoExp == 1) { // clave 0,18 (gris medio) sobre la luminancia adaptada; límites para no exagerar
+        float adapted = max(texture(uAdapted, vec2(0.5)).r, 1e-4);
+        c *= clamp(0.18 / adapted, 0.3, 4.0);
+    }
     if (uHdr == 1) c = pow(acesTone(max(c, 0.0)), vec3(1.0 / 2.2)); // HDR: el tonemapping se hace aquí
     c = (c - 0.5) * uContrast + 0.5;
     c = mix(vec3(luma(c)), c, uSaturation);
@@ -351,6 +358,38 @@ void main() {
 }
 )";
 
+// Exposición automática: 1) luminancia logarítmica de la escena a 64×64; 2) media de esos 4096 valores en un píxel,
+// mezclada con la del fotograma anterior según el tiempo (adaptación gradual, como el ojo).
+const char* kLumFS = R"(#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uSrc;
+out vec4 outColor;
+void main() {
+    vec3 c = texture(uSrc, vUV).rgb;
+    if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0);
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    outColor = vec4(log(max(l, 1e-4)), 0.0, 0.0, 1.0);
+}
+)";
+const char* kAdaptFS = R"(#version 300 es
+precision highp float;
+uniform sampler2D uLum;
+uniform sampler2D uPrev;
+uniform float uBlend;  // 0..1: cuánto se acerca a la luz actual en este fotograma
+uniform int uReset;
+out vec4 outColor;
+void main() {
+    float sum = 0.0;
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x) sum += texelFetch(uLum, ivec2(x, y), 0).r;
+    float target = exp(sum / 4096.0);
+    float prev = texelFetch(uPrev, ivec2(0, 0), 0).r;
+    if (uReset == 1 || !(prev > 0.0)) prev = target;
+    outColor = vec4(mix(prev, target, uBlend), 0.0, 0.0, 1.0);
+}
+)";
+
 GLuint compile(GLenum type, const char* src) {
     GLuint s = glCreateShader(type);
     glShaderSource(s, 1, &src, nullptr);
@@ -409,6 +448,8 @@ bool PostProcessor::init() {
     ssr_ = link(kSsrFS);
     ssrBlur_ = link(kSsrBlurFS);
     taa_ = link(kTaaFS);
+    lum_ = link(kLumFS);
+    adapt_ = link(kAdaptFS);
     if (!taa_) TITAN_WARN("render", "TAA no disponible en esta GPU (no compiló); se usa FXAA");
     if (!ssr_) TITAN_WARN("render", "SSR no disponible en esta GPU (no compiló); se dibuja sin él");
     if (!ssao_ || !ssaoBlur_) TITAN_WARN("render", "SSAO no disponible en esta GPU (no compiló); se dibuja sin él");
@@ -426,6 +467,15 @@ void PostProcessor::destroyTargets() {
     if (ssrFbo2_) glDeleteFramebuffers(1, &ssrFbo2_);
     if (ssrTex2_) glDeleteTextures(1, &ssrTex2_);
     sceneFbo_ = sceneColor_ = sceneDepth_ = sceneSpec_ = ssrFbo_ = ssrTex_ = ssrFbo2_ = ssrTex2_ = 0;
+    if (lumFbo_) glDeleteFramebuffers(1, &lumFbo_);
+    if (lumTex_) glDeleteTextures(1, &lumTex_);
+    lumFbo_ = lumTex_ = 0;
+    for (int i = 0; i < 2; ++i) {
+        if (adaptFbo_[i]) glDeleteFramebuffers(1, &adaptFbo_[i]);
+        if (adaptTex_[i]) glDeleteTextures(1, &adaptTex_[i]);
+        adaptFbo_[i] = adaptTex_[i] = 0;
+    }
+    adaptValid_ = false;
     for (int i = 0; i < 2; ++i) {
         if (taaFbo_[i]) glDeleteFramebuffers(1, &taaFbo_[i]);
         if (taaTex_[i]) glDeleteTextures(1, &taaTex_[i]);
@@ -448,7 +498,7 @@ void PostProcessor::destroyTargets() {
 
 void PostProcessor::shutdown() {
     destroyTargets();
-    for (uint32_t* p : {&composite_, &down_, &up_, &ssao_, &ssaoBlur_, &ssr_, &ssrBlur_, &taa_})
+    for (uint32_t* p : {&composite_, &down_, &up_, &ssao_, &ssaoBlur_, &ssr_, &ssrBlur_, &taa_, &lum_, &adapt_})
         if (*p) glDeleteProgram(*p), *p = 0;
     if (vao_) glDeleteVertexArrays(1, &vao_);
     vao_ = 0;
@@ -456,7 +506,9 @@ void PostProcessor::shutdown() {
 
 void PostProcessor::onContextLost() {
     composite_ = down_ = up_ = ssao_ = ssaoBlur_ = ssr_ = vao_ = sceneFbo_ = sceneColor_ = sceneDepth_ = 0;
-    sceneSpec_ = ssrFbo_ = ssrTex_ = ssrBlur_ = ssrFbo2_ = ssrTex2_ = taa_ = 0;
+    sceneSpec_ = ssrFbo_ = ssrTex_ = ssrBlur_ = ssrFbo2_ = ssrTex2_ = taa_ = lum_ = adapt_ = lumFbo_ = lumTex_ = 0;
+    adaptFbo_[0] = adaptFbo_[1] = adaptTex_[0] = adaptTex_[1] = 0;
+    adaptValid_ = false;
     for (int i = 0; i < 2; ++i) taaFbo_[i] = taaTex_[i] = 0;
     historyValid_ = false;
     for (int i = 0; i < 2; ++i) aoFbo_[i] = aoTex_[i] = 0;
@@ -539,6 +591,22 @@ bool PostProcessor::createTargets(int w, int h) {
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, taaTex_[i], 0);
     }
     historyValid_ = false;
+    if (hdr_) { // exposición automática (solo con HDR): R16F
+        auto r16 = [](int tw, int th, uint32_t& tex, uint32_t& fbo) {
+            glGenTextures(1, &tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, tw, th, 0, GL_RED, GL_HALF_FLOAT, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glGenFramebuffers(1, &fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            return glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+        };
+        bool ok = r16(64, 64, lumTex_, lumFbo_);
+        for (int i = 0; i < 2; ++i) ok = r16(1, 1, adaptTex_[i], adaptFbo_[i]) && ok;
+        if (!ok) TITAN_WARN("render", "Exposición automática no disponible (R16F no renderizable)");
+    }
     ssrTex2_ = makeColorTexture(aoW_, aoH_, hdr_);
     glGenFramebuffers(1, &ssrFbo2_);
     glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo2_);
@@ -617,6 +685,33 @@ void PostProcessor::resolve(uint32_t target, int x, int y, int w, int h, const P
         sceneSrc = taaTex_[next];
     } else {
         historyValid_ = false;
+    }
+    const bool autoExp = s.hdr && hdr_ && s.autoExposure && lum_ && adapt_ && lumFbo_ && adaptFbo_[0] && adaptFbo_[1];
+    if (autoExp) {
+        glBindFramebuffer(GL_FRAMEBUFFER, lumFbo_);
+        glViewport(0, 0, 64, 64);
+        glUseProgram(lum_);
+        glUniform1i(glGetUniformLocation(lum_, "uSrc"), 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sceneSrc);
+        drawFullscreen();
+        const int next = adaptIndex_ ^ 1;
+        glBindFramebuffer(GL_FRAMEBUFFER, adaptFbo_[next]);
+        glViewport(0, 0, 1, 1);
+        glUseProgram(adapt_);
+        glUniform1i(glGetUniformLocation(adapt_, "uLum"), 0);
+        glUniform1i(glGetUniformLocation(adapt_, "uPrev"), 1);
+        glUniform1f(glGetUniformLocation(adapt_, "uBlend"), 1.0f - std::exp(-std::max(0.0f, s.adaptationSpeed) * std::clamp(s.dt, 0.0f, 0.25f)));
+        glUniform1i(glGetUniformLocation(adapt_, "uReset"), adaptValid_ ? 0 : 1);
+        glBindTexture(GL_TEXTURE_2D, lumTex_);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, adaptTex_[adaptIndex_]);
+        glActiveTexture(GL_TEXTURE0);
+        drawFullscreen();
+        adaptIndex_ = next;
+        adaptValid_ = true;
+    } else {
+        adaptValid_ = false;
     }
     const bool bloom = s.bloom && s.bloomIntensity > 0 && bloomLevels_ > 0;
     if (bloom) {
@@ -717,6 +812,10 @@ void PostProcessor::resolve(uint32_t target, int x, int y, int w, int h, const P
     glUniform1i(glGetUniformLocation(composite_, "uSpec"), 4);
     glUniform1i(glGetUniformLocation(composite_, "uSSROn"), ssr ? 1 : 0);
     glUniform1i(glGetUniformLocation(composite_, "uHdr"), (s.hdr && hdr_) ? 1 : 0);
+    glUniform1i(glGetUniformLocation(composite_, "uAutoExp"), autoExp ? 1 : 0);
+    glUniform1i(glGetUniformLocation(composite_, "uAdapted"), 5);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, autoExp ? adaptTex_[adaptIndex_] : sceneColor_);
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, ssr ? ssrTex2_ : sceneColor_);
     glActiveTexture(GL_TEXTURE4);

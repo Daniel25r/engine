@@ -165,6 +165,10 @@ struct Environment {
     // HDR: la escena en coma flotante; emisión, sol y brillos por encima de 1 hacen bloom de verdad (neón).
     // Sin cambios de aspecto en lo demás. Desactivado por defecto.
     bool hdr = false;
+    // Exposición automática (adaptación del ojo, necesita HDR): la cámara se ajusta poco a poco a la luz media de
+    // la escena. "exposure" actúa como compensación (más de 1 = más claro).
+    bool autoExposure = false;
+    float adaptationSpeed = 1.5f; // por segundo
 };
 
 struct Light {

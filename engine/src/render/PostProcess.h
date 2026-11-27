@@ -20,6 +20,8 @@ struct PostSettings {
     // Antialiasing temporal: matrices sin desplazamiento (actual invertida y anterior) y desplazamiento en UV.
     bool taa = false, taaReset = false;
     bool hdr = false; // la escena viene en lineal sin tonemapear: ACES al componer
+    bool autoExposure = false;
+    float adaptationSpeed = 1.5f, dt = 1.0f / 60.0f;
     float invViewProj[16] = {}, prevViewProj[16] = {};
     float jitter[2] = {0, 0}; // P00, P11, P22, P23 de la proyección en perspectiva
     bool bloom = false;
@@ -59,6 +61,11 @@ private:
     int aoW_ = 0, aoH_ = 0;
     int depthBits_ = 0;
     bool hdr_ = false, hdrFailed_ = false;
+    // Exposición automática: luminancia logarítmica en 64×64 y luminancia adaptada en 1×1 (se alternan).
+    uint32_t lum_ = 0, adapt_ = 0, lumFbo_ = 0, lumTex_ = 0, adaptFbo_[2] = {}, adaptTex_[2] = {};
+    int adaptIndex_ = 0;
+    bool adaptValid_ = false;
+
     uint32_t sceneFbo_ = 0, sceneColor_ = 0, sceneDepth_ = 0;
     uint32_t sceneSpec_ = 0;          // reflectancia y lisura por píxel (la escriben los opacos)
     uint32_t ssr_ = 0, ssrFbo_ = 0, ssrTex_ = 0; // reflejos a media resolución

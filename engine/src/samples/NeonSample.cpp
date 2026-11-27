@@ -106,7 +106,7 @@ bool buildCity(Project& p, UUID scriptId, UUID& sceneId) {
     en.fogColor = Color::hex(0x1C1030);
     en.fogDensity = 0.035f;
     en.ambientIntensity = 0.45f;
-    en.exposure = 1.35f;
+    en.autoExposure = true; // el ojo se adapta a la noche
     en.shadows = true;
     en.shadowDistance = 40;
     en.bloom = true;

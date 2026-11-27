@@ -960,6 +960,13 @@ void Renderer::resolveScene() {
     const Environment& e = lighting_.env;
     PostSettings s;
     s.hdr = hdrActive_;
+    s.autoExposure = e.autoExposure;
+    s.adaptationSpeed = e.adaptationSpeed;
+    {
+        const auto now = std::chrono::steady_clock::now();
+        s.dt = lastResolve_.time_since_epoch().count() ? std::chrono::duration<float>(now - lastResolve_).count() : 1.0f / 60.0f;
+        lastResolve_ = now;
+    }
     s.taa = taaActive_ && e.taa;
     s.fxaa = quality_.fxaa && !s.taa;
     if (s.taa) {

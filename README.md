@@ -18,7 +18,7 @@ Descomprime el zip y abre `titan_editor.exe`.
 
 | Área | Lo que hay |
 |---|---|
-| **Render** | PBR, materiales por nodos, luz ambiental del cielo con el modelo *split-sum* (el de UE4/UE5), oclusión ambiental (SSAO), reflejos en pantalla (SSR), barniz para pintura de coche, sombras del sol en 4 cascadas, antialiasing temporal (TAA), HDR con bloom real (neón), niveles de detalle automáticos, FXAA, gradación de color, perfiles de calidad |
+| **Render** | PBR, materiales por nodos, luz ambiental del cielo con el modelo *split-sum* (el de UE4/UE5), oclusión ambiental (SSAO), reflejos en pantalla (SSR), barniz para pintura de coche, sombras del sol en 4 cascadas, antialiasing temporal (TAA), HDR con bloom real (neón) y exposición automática, niveles de detalle automáticos, FXAA, gradación de color, perfiles de calidad |
 | **Mundos** | Mundo de bloques infinito (biomas, cuevas, árboles) que se carga en varios hilos y se guarda solo; terreno por mapa de alturas con esculpido y 4 capas de pintura |
 | **Física** | Jolt Physics: cuerpos rígidos, uniones, controlador de personaje, colisión de malla |
 | **Juego** | Scripts en Lua (con entorno aislado), acciones de entrada (teclado, mando, táctil), cámara en tercera persona, navegación e IA, partículas, animación esquelética con máquina de estados, interfaz de juego, partidas guardadas |

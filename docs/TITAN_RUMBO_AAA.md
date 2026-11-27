@@ -17,7 +17,7 @@ Solo se apuntan bibliotecas con licencia compatible (MIT, BSD, Apache 2.0, zlib)
 |---|---|---|---|
 | 1 | ~~Editor de materiales por nodos~~ ✅ hecho (2026-11-27). Siguiente: salida de normal, grafos en .mat compartidos | — | propio |
 | 2 | ~~Importar FBX~~ ✅ hecho (2026-11-27). Siguiente: retarget de animaciones entre modelos | — | MIT |
-| 3 | ~~TAA~~ ✅ hecho (2026-11-27). HDR también ✅. Falta: exposición automática, vectores de movimiento por objeto | — | propio |
+| 3 | ~~TAA~~ ✅ hecho (2026-11-27). HDR y exposición automática también ✅. Falta: vectores de movimiento por objeto | — | propio |
 | 4 | Sondas de reflexión y luz | Cubemaps capturados en el editor, prefiltrado por rugosidad | propio |
 | 5 | ~~LOD automático~~ ✅ hecho (2026-11-27) con meshoptimizer. Falta: LOD para las primitivas instanciadas y el mundo de bloques | — | MIT |
 | 6 | Navegación con navmesh real | Recast/Detour (sustituye la rejilla) | zlib |

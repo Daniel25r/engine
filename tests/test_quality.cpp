@@ -90,6 +90,7 @@ TEST("calidad: barniz y reflejos en pantalla se guardan; los proyectos antiguos 
     en.ssrIntensity = 0.7f;
     en.taa = true;
     en.hdr = true;
+    en.autoExposure = true;
     a.world().add<Environment>(a.createEntity("Entorno"), en);
     const std::string text = serializeScene(a, reg);
     Scene b("b");
@@ -97,9 +98,9 @@ TEST("calidad: barniz y reflejos en pantalla se guardan; los proyectos antiguos 
     const MeshRenderer* m = b.world().get<MeshRenderer>(b.findByName("Coche"));
     CHECK(m && std::abs(m->clearcoat - 0.8f) < 1e-5f && std::abs(m->clearcoatRoughness - 0.1f) < 1e-5f);
     const Environment* e = b.world().get<Environment>(b.findByName("Entorno"));
-    CHECK(e && e->ssr && std::abs(e->ssrIntensity - 0.7f) < 1e-5f && e->taa && e->hdr);
+    CHECK(e && e->ssr && std::abs(e->ssrIntensity - 0.7f) < 1e-5f && e->taa && e->hdr && e->autoExposure);
     // Sin los campos (escena de una versión anterior): sin barniz y sin reflejos en pantalla.
     MeshRenderer def;
     Environment edef;
-    CHECK(def.clearcoat == 0.0f && !edef.ssr && !edef.taa && !edef.hdr);
+    CHECK(def.clearcoat == 0.0f && !edef.ssr && !edef.taa && !edef.hdr && !edef.autoExposure);
 }

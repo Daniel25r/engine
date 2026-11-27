@@ -76,7 +76,8 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 | Escena en HDR (RGBA16F) con el tonemapping ACES al componer: emisión, sol y brillos por encima de 1 hacen bloom (neón). Cielo y sprites pasan por la inversa de ACES: con HDR la escena se ve igual que sin él (diferencia media medida: 0,14/255). Si la GPU no dibuja en RGBA16F, se sigue sin HDR | ✅ | Comparación medida sin/con HDR; escena de neón con bloom y reflejos |
 | Valores inválidos (NaN/Inf) en HDR: el SSR y el SSAO descartan normales degeneradas (geometría muy fina), el SSR se sanea, y el TAA, el bloom y la composición nunca propagan un píxel inválido | ✅ | Escena de neón: de 144-240 píxeles negros en algunos fotogramas a 0 en 6 fotogramas |
 | Niveles de detalle automáticos (meshoptimizer, MIT): al cargar un modelo, cada parte de 256+ triángulos recibe versiones al 50 % y 25 % (mismos vértices, un solo búfer de índices); se elige por el tamaño en pantalla, también para las sombras; los perfiles bajos simplifican antes (lodBias) | ✅ | 40 personajes: 65 090 → 45 842 triángulos con la misma imagen; error de simplificación 0,3 % y 0,9 % |
-| Sondas de reflexión con cubemaps, lightmaps, GI, volumétricas, exposición automática | ❌ | Ver `docs/TITAN_RUMBO_AAA.md` |
+| Exposición automática (adaptación del ojo, con HDR): media logarítmica de la luminancia (64×64) y adaptación gradual en el tiempo; la exposición manual actúa de compensación | ✅ | Brillo medio medido: noche 20 → 46,7, día 156 → 139 |
+| Sondas de reflexión con cubemaps, lightmaps, GI, volumétricas | ❌ | Ver `docs/TITAN_RUMBO_AAA.md` |
 | TAA, DoF, motion blur, aberración cromática, grano, auto exposición | ❌ | |
 
 ## 3. Materiales y shaders

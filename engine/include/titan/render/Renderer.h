@@ -395,6 +395,7 @@ private:
     // TAA: proyección desplazada una fracción de píxel cada fotograma; la cámara del fotograma anterior reproyecta.
     bool taaRequested_ = false, taaActive_ = false, prevValid_ = false;
     bool hdrRequested_ = false, hdrActive_ = false;
+    std::chrono::steady_clock::time_point lastResolve_{}; // dt de la exposición automática
     void setHdrUniforms(bool on);
     Mat4 unjitteredVP_, prevVP_;
     uint32_t taaFrame_ = 0;

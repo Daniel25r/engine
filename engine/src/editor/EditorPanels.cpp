@@ -1125,6 +1125,12 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         if (v.ssr) dragF("Intens. reflejos", v.ssrIntensity, 0.01f, 0, 2, "%.2f");
         check("Antialiasing temporal (TAA)", v.taa);
         check("HDR (brillos y neón)", v.hdr);
+        if (v.hdr) {
+            check("Exposición automática", v.autoExposure);
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                ImGui::SetTooltip("La cámara se adapta poco a poco a la luz, como el ojo (al entrar en una cueva o salir al sol)");
+            if (v.autoExposure) dragF("Velocidad adaptación", v.adaptationSpeed, 0.05f, 0.1f, 10, "%.2f /s");
+        }
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
             ImGui::SetTooltip("La emisión, el sol y los brillos fuertes pasan de 1 y hacen bloom de verdad");
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
