@@ -49,7 +49,9 @@ bool Editor::Impl::init() {
     io.IniFilename = nullptr; // la distribución la decide el editor según el tamaño de pantalla
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     if (platform.isTouchScreen()) io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;
-    uiZoom = platform.isTouchScreen() ? 1.0f : 1.25f; // PC: la interfaz por defecto un poco más grande
+    // PC sin escala del sistema (100 %): la interfaz por defecto un poco más grande. Si Windows ya escala (125 %,
+    // 150 %...), no se multiplica otra vez: con 150 % × 125 % todo salía enorme.
+    uiZoom = platform.isTouchScreen() || platform.uiScale() > 1.1f ? 1.0f : 1.25f;
     loadPreferences();
     scale = std::max(1.0f, platform.uiScale()) * uiZoom;
     loadFonts();

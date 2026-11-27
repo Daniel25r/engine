@@ -258,8 +258,7 @@ void Editor::Impl::drawBrowser() {
     ImGui::Spacing();
     { // Carpeta de proyectos: solo el final de la ruta; la ruta completa al pasar el ratón.
         const fs::path dirPath(projectsDir());
-        const std::string shortPath = ".../" + dirPath.parent_path().filename().generic_string() + "/" + dirPath.filename().generic_string();
-        ImGui::TextDisabled("Proyectos en %s", shortPath.c_str());
+        ImGui::TextDisabled("Carpeta: %s", dirPath.filename().generic_string().c_str());
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", projectsDir().c_str());
     }
     ImGui::EndGroup();
@@ -284,9 +283,10 @@ void Editor::Impl::drawBrowser() {
         if (primaryButton("+  Nuevo proyecto", ImVec2(190 * s, 0))) launcherView = 1;
         ImGui::Dummy(ImVec2(0, 10 * s));
 
-        const float gap = 16 * s, cardH = 220 * s, prevH = 140 * s;
-        const int cols = std::max(1, int((mainW + gap) / (280 * s + gap)));
+        const float gap = 16 * s;
+        const int cols = std::max(1, int((mainW + gap) / (240 * s + gap)));
         const float cardW = (mainW - 8 * s - gap * (cols - 1)) / cols;
+        const float prevH = std::clamp(cardW * 0.5f, 90 * s, 150 * s), cardH = prevH + 80 * s;
         const ImVec2 origin = ImGui::GetCursorScreenPos();
         int shown = 0;
         const std::string q = lower(projectSearch);
@@ -348,8 +348,11 @@ void Editor::Impl::drawBrowser() {
         title("Nuevo proyecto", "Elige una plantilla. Los ejemplos son juegos completos que puedes jugar y modificar.");
         const float detailW = std::min(380 * s, mainW * 0.34f), gap = 16 * s;
         const float galleryW = mainW - detailW - 24 * s;
-        const int cols = std::max(1, int((galleryW + gap) / (260 * s + gap)));
-        const float cardW = (galleryW - gap * (cols - 1)) / cols, cardH = 200 * s, prevH = 140 * s;
+        // Al menos 2 columnas si caben tarjetas de 170 px: una sola tarjeta a todo lo ancho se veía desproporcionada.
+        int cols = std::max(1, int((galleryW + gap) / (220 * s + gap)));
+        if (cols == 1 && galleryW >= 2 * 170 * s + gap) cols = 2;
+        const float cardW = (galleryW - gap * (cols - 1)) / cols;
+        const float prevH = std::clamp(cardW * 0.5f, 80 * s, 150 * s), cardH = prevH + 64 * s;
         ImGui::BeginChild("##galeria", ImVec2(galleryW, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
         ImDrawList* gl = ImGui::GetWindowDrawList();
         for (int i = 0; i < 3; ++i) {
