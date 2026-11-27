@@ -30,6 +30,9 @@ struct DeviceCaps {
     bool astc = false;            // GL_KHR_texture_compression_astc_ldr
     bool halfFloatTargets = false; // GL_EXT_color_buffer_half_float (o float)
     int memoryMB = 0;             // memoria total del sistema; 0 = desconocida
+    // PC (Windows, Linux, macOS): GPU de escritorio aunque OpenGL ES diga "3.0" (ANGLE en Windows siempre lo dice).
+    bool desktop = false;
+    bool softwareRenderer = false; // llvmpipe, SwiftShader, softpipe, WARP: la "GPU" es la CPU
 };
 
 // Perfil recomendado según capacidades medibles (versión de OpenGL ES, límites, memoria), nunca por el nombre del modelo.

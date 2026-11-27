@@ -191,6 +191,17 @@ else()
     target_link_libraries(titan_editor_desktop PRIVATE titan_editor glfw)
     target_compile_definitions(titan_editor_desktop PRIVATE TITAN_ENGINE_ASSETS="${CMAKE_SOURCE_DIR}/engine/assets")
 
+    # Windows: el editor es un programa de ventanas (sin la consola negra detrás); el registro va a
+    # TitanProyectos/titan-registro.txt. Se conserva main() como punto de entrada.
+    if(WIN32)
+        set_target_properties(titan_editor_desktop PROPERTIES WIN32_EXECUTABLE TRUE)
+        if(MSVC)
+            target_link_options(titan_editor_desktop PRIVATE /ENTRY:mainCRTStartup)
+        else()
+            target_link_options(titan_editor_desktop PRIVATE -mwindows)
+        endif()
+    endif()
+
     # Windows: los .exe se distribuyen con "engine_assets" al lado (el programa la busca allí antes que en la ruta
     # de compilación) y con las DLL de ANGLE y GLFW.
     if(WIN32)

@@ -34,4 +34,10 @@ TEST("calidad: nombres y recomendación según capacidades medibles") {
     CHECK(recommendedQuality(c) == QualityLevel::VeryLow);
     c = {}; c.glesMajor = 3; c.glesMinor = 1; c.maxTextureSize = 8192;
     CHECK(recommendedQuality(c) == QualityLevel::Medium);
+    // PC con ANGLE (Windows): informa OpenGL ES 3.0 aunque sea una GPU de escritorio → alto, no bajo.
+    c = {}; c.glesMajor = 3; c.glesMinor = 0; c.maxTextureSize = 16384; c.desktop = true;
+    c.renderer = "ANGLE (Intel, Intel(R) UHD Graphics Direct3D11 vs_5_0 ps_5_0)";
+    CHECK(recommendedQuality(c) == QualityLevel::High);
+    c.softwareRenderer = true; // llvmpipe, WARP...
+    CHECK(recommendedQuality(c) == QualityLevel::Medium);
 }

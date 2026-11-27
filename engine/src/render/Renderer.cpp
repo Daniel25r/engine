@@ -419,6 +419,11 @@ bool Renderer::init(FileSource& files) {
             caps_.halfFloatTargets = true;
     }
     caps_.memoryMB = systemMemoryMB();
+#if !defined(__ANDROID__)
+    caps_.desktop = true;
+#endif
+    for (const char* sw : {"llvmpipe", "SwiftShader", "softpipe", "Microsoft Basic Render", "WARP"})
+        if (caps_.renderer.find(sw) != std::string::npos) caps_.softwareRenderer = true;
     shadowSize_ = std::min(std::max(256, quality_.shadowMapSize), caps_.maxTextureSize);
     if (!createGpuObjects()) return false;
     fonts_.clear();

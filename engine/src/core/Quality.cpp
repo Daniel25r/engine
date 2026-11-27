@@ -58,6 +58,9 @@ bool parseQuality(const std::string& name, QualityLevel& out) {
 }
 
 QualityLevel recommendedQuality(const DeviceCaps& c) {
+    // PC: la versión de OpenGL ES no dice nada (ANGLE informa 3.0 con cualquier tarjeta). Una GPU de PC, incluida
+    // una integrada Intel UHD, mueve el perfil alto; con render por software, medio.
+    if (c.desktop) return c.softwareRenderer ? QualityLevel::Medium : QualityLevel::High;
     // OpenGL ES 3.2 suele ir con GPU recientes; 3.1, gama media; 3.0 (o límites de textura de 4096), gama baja.
     QualityLevel l = QualityLevel::Low;
     if (c.glesMajor > 3 || (c.glesMajor == 3 && c.glesMinor >= 2)) l = c.maxTextureSize >= 8192 ? QualityLevel::High : QualityLevel::Medium;
