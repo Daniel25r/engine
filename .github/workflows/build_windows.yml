@@ -10,6 +10,9 @@ name: Windows
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write # para publicar el .zip como Release (no gasta la cuota de Artifacts de la cuenta)
+
 concurrency:
   group: windows-${{ github.ref }}
   cancel-in-progress: true
@@ -71,6 +74,9 @@ jobs:
           New-Item -ItemType Directory -Force bin | Out-Null
           Copy-Item build/Release/titan_editor.exe, build/Release/titan_player.exe, build/Release/titan.exe bin/
           Copy-Item build/Release/*.dll bin/
+          # GLFW abre libEGL.dll al crear la ventana (no se enlaza, así que vcpkg no la copia sola): todas las DLL.
+          Copy-Item build/vcpkg_installed/x64-windows/bin/*.dll bin/ -Force
+          if (-not (Test-Path bin/libEGL.dll)) { throw "Falta libEGL.dll: sin ella no se puede abrir la ventana" }
           Copy-Item -Recurse engine/assets bin/engine_assets
           @"
           Titán para Windows x86_64 ($env:GITHUB_SHA)
@@ -84,9 +90,22 @@ jobs:
           "@ | Set-Content -Encoding utf8 bin/LEEME.txt
           Get-ChildItem bin
 
-      - name: Subir el Artifact
+      - name: Publicar en Releases (windows-ultima)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Compress-Archive -Path bin/* -DestinationPath Titan-Windows-x86_64.zip -Force
+          gh release view windows-ultima *> $null
+          if ($LASTEXITCODE -eq 0) { gh release delete windows-ultima --yes --cleanup-tag }
+          gh release create windows-ultima Titan-Windows-x86_64.zip --prerelease --target $env:GITHUB_SHA `
+            --title "Titán para Windows (última compilación)" `
+            --notes "Compilado automáticamente desde $env:GITHUB_SHA. Descomprime y abre titan_editor.exe; deja las DLL y engine_assets junto a los .exe."
+
+      - name: Subir también como Artifact (si queda cuota en la cuenta)
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: Titan-Windows-x86_64
           path: bin/
-          retention-days: 60
+          retention-days: 7
