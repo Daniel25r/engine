@@ -93,7 +93,9 @@ Las funciones que devuelven vectores devuelven varios valores: `local x, y, z = 
 | `Input.key(nombre)`, `Input.keyPressed(nombre)`, `Input.gamepad()` | Teclado ("Space", "W", "LeftShift"...) y si hay un mando conectado |
 | `Quality.set("muy bajo"/"bajo"/"medio"/"alto"/"muy alto")`, `Quality.get()`, `Quality.recommended()`, `Quality.device()` | Calidad gráfica y datos medidos del dispositivo (para un menú de ajustes) |
 | `Save.set(clave, valor)`, `Save.get(clave [, defecto])`, `Save.has`, `Save.delete`, `Save.clear`, `Save.write()` | Partida guardada: números, textos, booleanos y tablas; máx. 1 MB; se escribe sola al pausar o cerrar |
-| `Audio.play(sonido [, volumen])`, `Audio.playAt(sonido, x, y, z [, volumen])`, `Audio.setVolume(v)` | Sonidos sueltos (por ruta o por nombre) |
+| `Audio.play(sonido [, volumen [, bus]])`, `Audio.playAt(sonido, x, y, z [, volumen [, bus]])`, `Audio.setVolume(v)` | Sonidos sueltos (por ruta o por nombre), opcionalmente a un bus del mezclador |
+| `Audio.buses()`, `Audio.setBusVolume(bus, dB)`, `Audio.getBusVolume(bus)`, `Audio.setBusMute(bus, b)`, `Audio.setBusBypass(bus, b)` | Mezclador (ver "Mezclador de audio" más abajo) |
+| `Audio.addEffect(bus, tipo [, {parámetros}])` → índice, `Audio.removeEffect(bus, i)`, `Audio.setEffectEnabled(bus, i, b)`, `Audio.setEffectParam(bus, i, nombre, v)`, `Audio.getEffectParam(bus, i, nombre)`, `Audio.busLevel(bus)` → dB izq., dB der. | Efectos de cada bus (índices desde 1) y medidor |
 | `Time.delta()`, `Time.fixedDelta()`, `Time.time()`, `Time.frame()` | Tiempo |
 | `Input.touchCount()`, `Input.touch(i)` → `{id, x, y, phase}`, `Input.touchWorld(i)` → x,y,z (plano z = 0 en 2D; suelo y = 0 con cámara en perspectiva), `Input.tapped()` | Táctil; `i` empieza en 1; `phase` es "began" o "held". Los dedos que están usando un botón o joystick de la interfaz no aparecen |
 | `Screen.width()`, `Screen.height()` | Píxeles |
@@ -179,6 +181,36 @@ Save.set("nivel", 3)
 Save.set("inventario", {"espada", "poción"})
 local nivel = Save.get("nivel", 1)
 ```
+
+### Mezclador de audio
+
+Los buses se definen en **Ventana › Mezclador de audio** (se guarda en `assets/audio_buses.json`). Master siempre
+existe; cada bus envía su salida a otro (por defecto a Master). Un `AudioSource` elige su bus en Detalles; los
+sonidos sueltos lo reciben como tercer argumento. Los efectos procesan en el orden de la lista.
+
+| Tipo | Parámetros (rango, valor por defecto) |
+|---|---|
+| `reverb` | `room_size` (0–1, 0,8), `damping` (0–1, 0,5), `spread` (0–1, 1), `hipass` (0–1, 0), `dry` (0–1, 1), `wet` (0–1, 0,5), `predelay_ms` (20–500, 150), `predelay_feedback` (0–0,98, 0,4) |
+| `delay` | `dry` (0–1, 1); `tap1_active`, `tap1_delay_ms` (0–1500, 250), `tap1_level_db` (−60–0, −6), `tap1_pan` (−1–1, 0,2); `tap2_*` (500 ms, −12 dB, −0,4); `feedback_active` (0), `feedback_delay_ms` (340), `feedback_level_db` (−6), `feedback_lowpass` (1–16000 Hz) |
+| `lowpass`, `highpass`, `bandpass` | `cutoff_hz` (1–20500, 2000), `resonance` (0–1, 0,5), `db` (0–3: 6, 12, 18 o 24 dB por octava) |
+| `compressor` | `threshold_db` (−60–0, 0), `ratio` (1–48, 4), `gain_db` (−20–20, 0), `attack_us` (20–2000, 20), `release_ms` (20–2000, 250), `mix` (0–1, 1) |
+| `limiter` | `pre_gain_db` (−24–24, 0), `ceiling_db` (−24–0, −0,3), `release` (0,01–3 s, 0,1) |
+| `distortion` | `mode` (0 recorte, 1 atan, 2 lo-fi, 3 saturación, 4 forma de onda), `pre_gain_db` (−60–60, 0), `keep_hf_hz` (1–20000, 16000), `drive` (0–1, 0), `post_gain_db` (−80–24, 0) |
+
+```lua
+-- Bajo el agua: todo lo de "Efectos" suena apagado mientras el jugador está sumergido.
+function Jugador:onStart() self.filtro = Audio.addEffect("Efectos", "lowpass", { cutoff_hz = 600, db = 1 }) end
+function Jugador:onUpdate(dt)
+    local _, y = self.entity:getPosition()
+    Audio.setEffectEnabled("Efectos", self.filtro, y < 0)
+end
+-- Menú de opciones
+Audio.setBusVolume("Música", -12)
+local izq, der = Audio.busLevel("Master") -- medidor en dB (-80 = silencio)
+```
+
+Los errores son explícitos: un bus, tipo de efecto o parámetro que no existe detiene el script con un mensaje que
+dice cuál. Un sonido enviado a un bus inexistente suena en Master (con un aviso en el registro).
 
 ## C++ (para el motor, las herramientas y el futuro editor)
 

@@ -135,12 +135,30 @@ Se extraerá cuando llegue el render 3D, antes de considerar Vulkan.
 ## 10. Scripts
 
 Lua 5.4.7 compilado como C++ (sus errores son excepciones, así los destructores de C++ se ejecutan bien).
-Detalles y API en `docs/ENGINE_API.md`. Aislamiento:
+Detalles y API en `docs/TITAN_ENGINE_API.md`. Aislamiento:
 
 - Sin `io`, `os`, `package`, `debug`, `load`, `loadfile`, `dofile` ni `string.dump`. Solo se carga código de texto, nunca bytecode.
 - Límite de memoria del intérprete (asignador propio; 256 MB por defecto).
 - Límite de tiempo por llamada (0,25 s por defecto) mediante un *hook* cada 10 000 instrucciones.
 - Una instancia que falla se desactiva y su error queda registrado con archivo, línea, función y traza.
+
+## 10b. Audio y mezclador
+
+```
+voz (ma_sound) ─► grupo del bus ─► nodo de efectos ─► grupo del bus de destino ─► … ─► Master ─► altavoces
+                   (suma voces y      (cadena de AudioEffect,
+                    sub-buses)         volumen, medidor)
+```
+
+- `AudioEngine` (miniaudio) crea por bus un `ma_sound_group` y un nodo propio (`FxNode`) del grafo de nodos de
+  miniaudio. El nodo procesa en el hilo de audio; sus efectos están protegidos por un mutex por bus (el hilo
+  principal solo lo toma al añadir/quitar efectos o cambiar parámetros). Volumen, silencio y bypass son atómicos.
+- `AudioEffect` (`AudioEffects.cpp`): el DSP está portado de Godot (MIT, ver `TITAN_ENGINE_DEPENDENCIES.md`).
+  Interfaz propia: parámetros por nombre con rango, `process(in, out, frames)` en estéreo intercalado, `reset()`.
+- `AudioBusLayout` (`AudioBus.cpp`): datos puros + JSON + normalización (sin ciclos). Lo usan el runtime
+  (`Runtime::loadBusLayout` al arrancar), el editor (panel Mezclador) y la herramienta `titan`.
+- Reglas: `audio` no depende de `scripting`; `scripting` usa `AudioEngine` a través de `ScriptHost::scriptAudio()`.
+  Cambiar la estructura (buses, envíos, efectos) rehace el grafo y para las voces; cambiar valores no corta nada.
 
 ## 11. Decisiones de arquitectura
 
@@ -187,5 +205,5 @@ instantáneas de la escena serializada (pendiente: comandos por operación).
 
 ## 13. Límites actuales
 
-Ver `docs/AUDITORIA.md` (problemas con su causa) y `docs/PROJECT_STATUS.md`.
+Ver `docs/AUDITORIA.md` (problemas con su causa) y `docs/TITAN_ENGINE_STATUS.md`.
 Nada se ha probado aún en un dispositivo Android real.

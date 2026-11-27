@@ -69,7 +69,7 @@ fuente) de 285–343 ms a 18–23 ms. La prueba de regresión de 1600 objetos no
 
 Añadido
 - `docs/AUDITORIA.md`: auditoría técnica completa (estado real de cada sistema, problemas con su causa en el código,
-  madurez, arquitectura propuesta, hoja de ruta por dependencias). `docs/ROADMAP.md` reescrito a partir de ella.
+  madurez, arquitectura propuesta, hoja de ruta por dependencias). `docs/TITAN_ENGINE_ROADMAP.md` reescrito a partir de ella.
 - Culling por frustum (`titan/core/Bounds.h`: AABB, transformación exacta de cajas, frustum de Gribb-Hartmann):
   - pasada principal: solo se dibujan las mallas y sprites que tocan el campo de visión de la cámara;
   - sombras: solo los objetos dentro de la caja de la luz (lo de fuera tampoco aparecería en el mapa de sombras);
@@ -215,7 +215,7 @@ Corregido
 - `Screen.text` leía mal el color (lo detectó la prueba del editor en modo Play).
 
 Cambiado
-- Decisión D8: la interfaz del editor se dibuja en C++ con Dear ImGui en lugar de Kotlin (ver ARCHITECTURE.md).
+- Decisión D8: la interfaz del editor se dibuja en C++ con Dear ImGui en lugar de Kotlin (ver docs/TITAN_ENGINE_ARCHITECTURE.md).
 
 ## 0.2.0 — 2026-11-21 · Fundación de Titán
 

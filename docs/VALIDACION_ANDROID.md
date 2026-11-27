@@ -90,7 +90,7 @@ Plantilla para anotar:
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | | | | | | | | | | | | |
 
-Referencia (no es un teléfono): PC con render por software llvmpipe, calidad media, 1280×720. Ver `docs/TESTS.md`.
+Referencia (no es un teléfono): PC con render por software llvmpipe, calidad media, 1280×720. Ver `docs/TITAN_ENGINE_TESTS.md`.
 
 ## 6. Qué se ha comprobado sin teléfono
 

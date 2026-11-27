@@ -33,7 +33,7 @@ else()
     set(TITAN_GLES_LIBS GLESv2)
 endif()
 
-# Lua 5.4.7 (MIT). Ver docs/DEPENDENCIES.md
+# Lua 5.4.7 (MIT). Ver docs/TITAN_ENGINE_DEPENDENCIES.md
 file(GLOB LUA_SOURCES ${CMAKE_SOURCE_DIR}/third_party/lua/*.c)
 add_library(titan_lua STATIC ${LUA_SOURCES})
 target_include_directories(titan_lua PUBLIC third_party/lua)

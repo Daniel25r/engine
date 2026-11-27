@@ -21,7 +21,7 @@ class InputActions {
 public:
     enum class Type { Button, Axis2D };
 
-    // Mover, Mirar, Saltar, Atacar, Interactuar, Correr, Pausa (ver docs/ENGINE_API.md).
+    // Mover, Mirar, Saltar, Atacar, Interactuar, Correr, Pausa (ver docs/TITAN_ENGINE_API.md).
     void addDefaults();
     // Define o redefine una acción. Devuelve false (y no cambia nada) si algún enlace no es válido; error lo explica.
     bool define(const std::string& name, Type type, const std::vector<std::string>& bindings, std::string* error = nullptr);

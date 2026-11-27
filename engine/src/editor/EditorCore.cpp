@@ -592,7 +592,7 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
         fitCollider(e);
         scene.world().add<Rigidbody>(e);
     } else if (kind == "Enemigo") {
-        // Personaje rojo con agente de navegación; su script decide a quién perseguir (ver docs/ENGINE_API.md).
+        // Personaje rojo con agente de navegación; su script decide a quién perseguir (ver docs/TITAN_ENGINE_API.md).
         scene.transform(e).setPosition({spawnPoint().x + 3, 0, spawnPoint().z});
         scene.world().add<CharacterController>(e);
         scene.world().add<NavAgent>(e);

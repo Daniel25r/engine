@@ -186,7 +186,7 @@ Se mantiene la división actual, que funciona, y se añaden piezas por debajo y 
 
 ## 9. Mejoras realizadas desde la auditoría
 
-| Versión | Mejora | Resultado medido (PC, ver `docs/TESTS.md`) |
+| Versión | Mejora | Resultado medido (PC, ver `docs/TITAN_ENGINE_TESTS.md`) |
 |---|---|---|
 | 0.11.0 | Culling por frustum | 1600 objetos: draw calls de 3206 a 950; imagen idéntica |
 | 0.12.0 | Jugar comparte el Renderer y la caché de recursos del editor | Primer fotograma de Jugar: de 285–343 ms a 18–23 ms; ninguna textura ni modelo duplicado en la GPU |

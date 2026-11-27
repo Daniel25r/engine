@@ -191,6 +191,31 @@ representan a un teléfono**; los draw calls sí.
 | Muy alto | 1280×720 | 4096 | 951 | 48,7 ms |
 | Alto sin culling | 1280×720 | 2048 | 3206 | 37,6 ms |
 
+## Mezclador de audio (2026-11-27, Linux x86_64, GCC, sin dispositivo de audio: mezcla en memoria a 48 kHz)
+
+`tests/test_audio_mixer.cpp`, 9 pruebas, todas pasan. Lo que miden:
+
+| Prueba | Medida y resultado esperado |
+|---|---|
+| Sin disposición | Solo Master; un tono de amplitud 0,5 sale con RMS 0,354 ± 0,02 (igual que antes de los buses) |
+| Volumen y silencio | −6,02 dB → amplitud × 0,50 ± 0,01; silencio → pico < 10⁻⁶ (tras 21 ms de búfer ya mezclado); bus inexistente → suena en Master |
+| Enrutado | Voces → Efectos → Master: silenciar Efectos silencia Voces; −6 dB en Master afecta a todo |
+| Paso bajo 500 Hz, 24 dB/oct | 100 Hz pasa (0,40–0,505; el original de Godot usa Q = 0,5 por etapa y cae ~1,4 dB); 4 kHz baja más de 60 dB |
+| Paso alto 1 kHz, 12 dB/oct | 100 Hz baja más de 34 dB; 4 kHz pasa (≥ 0,425) |
+| Reverberación | Golpe seco: nada tras 0,3 s; con efecto: cola en ambos canales entre 0,3 y 0,7 s, que decrece |
+| Eco | Silencio entre el golpe y 250 ms; toque 1 a −6 dB (0,501 ± 0,01), toque 2 a −12 dB (0,251 ± 0,01); panorámica izquierda/derecha = 0,8 |
+| Limitador | +12 dB sobre 0,5: pico ≤ 0,966 (−0,3 dB) y > 0,9 |
+| Compresor | Umbral −20 dB, 4:1: RMS < 60 % del original |
+| Distorsión | 3.er armónico (1320 Hz) de un seno de 440 Hz: < 0,002 limpio, > 0,05 con distorsión |
+| Medidor | Pico 0,5 ± 0,02 en el bus que suena; 0 en el que no |
+| JSON | Ida y vuelta; ciclos, nombres repetidos, destinos inexistentes y Master ausente se corrigen |
+| Lua | Buses, efectos, parámetros y nivel desde un script llegan al motor (−6 dB medidos); errores con mensaje |
+
+Integración (reproductor de escritorio, demo de plataformas empaquetada con `titan package`): el registro muestra
+"Mezclador: 3 buses", la escena del nivel carga 34 scripts sin errores y la música y los efectos se mezclan por sus
+buses. En el editor, el panel Mezclador durante Jugar muestra los medidores de Música y Master moviéndose.
+**No se ha oído en un altavoz**: este entorno no tiene tarjeta de sonido (miniaudio usa su salida nula).
+
 ## Mediciones
 
 | Medida | Valor | Condiciones |

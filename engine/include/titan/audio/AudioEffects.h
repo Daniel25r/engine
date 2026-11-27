@@ -4,7 +4,7 @@
 // El procesado de señal está portado de Godot Engine (servers/audio/effects y audio_filter_sw), licencia MIT:
 //   Copyright (c) 2014-present Godot Engine contributors. Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.
 // Se ha adaptado a Titán (sin AudioServer ni Ref<>; parámetros por nombre; búferes estéreo intercalados).
-// Texto completo de la licencia en docs/DEPENDENCIES.md.
+// Texto completo de la licencia en docs/TITAN_ENGINE_DEPENDENCIES.md.
 #include <memory>
 #include <string>
 #include <vector>

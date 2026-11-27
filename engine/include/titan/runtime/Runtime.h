@@ -2,7 +2,7 @@
 // Runtime: ejecuta un paquete de juego (project.titan + asset_index.json + assets/).
 // Es lo que corre dentro del APK exportado y en el reproductor de escritorio, sin editor.
 //
-// Orden de cada fotograma (ver docs/ARCHITECTURE.md):
+// Orden de cada fotograma (ver docs/TITAN_ENGINE_ARCHITECTURE.md):
 //   1. Paso fijo (0..N veces a 60 Hz): scripts onFixedUpdate  [física: pendiente]
 //   2. scripts onUpdate, onLateUpdate
 //   3. destrucciones diferidas

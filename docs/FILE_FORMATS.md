@@ -92,6 +92,26 @@ Añadir componentes nuevos no cambia la versión del formato: un motor antiguo l
 Los mismos campos de material que `MeshRenderer`. Un MeshRenderer con `material` usa los del archivo. El paquete comprueba
 que se puede leer y que sus texturas existen.
 
+## Mezclador — `assets/audio_buses.json` (versión 1, opcional)
+
+Sin este archivo solo existe Master, sin efectos (los proyectos anteriores suenan igual). Lo escribe el editor.
+
+```json
+{
+  "version": 1,
+  "buses": [
+    { "name": "Master", "send": "Master", "volume_db": 0, "mute": false, "bypass_effects": false,
+      "effects": [ { "type": "limiter", "enabled": true, "params": {} } ] },
+    { "name": "Efectos", "send": "Master", "volume_db": -3, "mute": false, "bypass_effects": false,
+      "effects": [ { "type": "reverb", "enabled": true, "params": { "wet": 0.18, "room_size": 0.35 } } ] }
+  ]
+}
+```
+
+Al cargar se normaliza: Master va primero (se crea si falta), los nombres repetidos se renombran ("A 2"), los
+destinos que no existen o forman un ciclo pasan a Master, y los efectos de tipo desconocido se ignoran. En `params`
+solo hace falta lo que cambia respecto al valor por defecto. `AudioSource` guarda `"bus"` solo si no es Master.
+
 ## Partida guardada — `partida.json`
 
 `{"format": "titan.save", "version": 1, "data": { ... }}`, escrito de forma atómica con copia `.bak`. Lo crea `Save.*`

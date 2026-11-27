@@ -9,7 +9,7 @@
 //     return Nave
 //
 // Cada entidad con componente Script recibe su propia instancia (self) con self.entity.
-// La API pública está documentada en docs/ENGINE_API.md.
+// La API pública está documentada en docs/TITAN_ENGINE_API.md.
 //
 // Seguridad: sin io, os, package, load ni dofile; límite de memoria del intérprete y
 // límite de tiempo por llamada para que un bucle infinito no congele el juego ni el editor.

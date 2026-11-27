@@ -1,5 +1,5 @@
 #pragma once
-// Matemáticas del motor. Convenciones (ver docs/ARCHITECTURE.md):
+// Matemáticas del motor. Convenciones (ver docs/TITAN_ENGINE_ARCHITECTURE.md):
 // - Sistema diestro, Y hacia arriba, "delante" = -Z (como las cámaras de OpenGL y glTF).
 // - Matrices 4x4 en orden de columnas: m[columna * 4 + fila].
 // - Ángulos en radianes salvo que el nombre diga "Degrees".
