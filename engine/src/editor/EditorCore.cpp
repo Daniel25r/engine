@@ -618,6 +618,9 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
             scene.transform(e).setPosition({spawnPoint().x, spawnPoint().y, 10});
         }
         scene.world().add<Camera>(e, c);
+    } else if (kind == "Sonda de reflexión") {
+        scene.transform(e).setPosition(spawnPoint() + Vec3{0, 1.5f, 0});
+        scene.world().add<ReflectionProbe>(e);
     } else if (kind == "Luz direccional") {
         scene.transform(e).setPosition({0, 5, 0});
         scene.transform(e).setEulerDegrees({-50, 30, 0});

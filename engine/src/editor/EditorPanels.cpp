@@ -305,7 +305,7 @@ void Editor::Impl::drawUI() {
 void Editor::Impl::drawCreateMenu() {
     static const char* basic[] = {"Vacío", "Cámara", "Cámara en tercera persona", "Sprite"};
     static const char* shapes[] = {"Cubo", "Esfera", "Plano", "Cilindro", "Cono", "Cápsula"};
-    static const char* lights[] = {"Luz direccional", "Luz puntual", "Foco"};
+    static const char* lights[] = {"Luz direccional", "Luz puntual", "Foco", "Sonda de reflexión"};
     for (const char* k : basic)
         if (ImGui::MenuItem(k)) createEntityOfKind(k);
     if (ImGui::BeginMenu("Formas")) {
@@ -635,6 +635,7 @@ const char* Editor::Impl::typeLabel(Entity e) {
     if (w.has<ParticleSystem>(e)) return "Partículas";
     if (w.has<Terrain>(e)) return "Terreno";
     if (w.has<VoxelTerrain>(e)) return "Mundo de bloques";
+    if (w.has<ReflectionProbe>(e)) return "Sonda de reflexión";
     if (w.has<NavAgent>(e)) return "Agente IA";
     if (w.has<CharacterController>(e)) return "Personaje";
     if (w.has<UIJoystick>(e)) return "Joystick";
@@ -1401,6 +1402,14 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         dragF("Recalcular cada", a.repathInterval, 0.01f, 0.05f, 10, "%.2f s");
         propLabel("");
         ImGui::TextDisabled("e:setDestination(x, y, z) o e:setDestination(jugador); AI.canSee(e, jugador)");
+    } else if (name == "ReflectionProbe") {
+        ReflectionProbe& rp = *w.get<ReflectionProbe>(e);
+        dragF("Intensidad", rp.intensity, 0.01f, 0, 4, "%.2f");
+        propLabel("Resolución");
+        ImGui::SliderInt("##rpres", &rp.resolution, 32, 512, "%d px");
+        track();
+        propLabel("");
+        ImGui::TextDisabled("Se captura al pulsar Jugar, desde su posición.\nColócala en el centro de la zona que refleja.");
     } else if (name == "VoxelTerrain") {
         VoxelTerrain& v = *w.get<VoxelTerrain>(e);
         propLabel("Semilla");

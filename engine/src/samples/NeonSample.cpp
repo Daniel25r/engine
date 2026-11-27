@@ -203,6 +203,11 @@ bool buildCity(Project& p, UUID scriptId, UUID& sceneId) {
         tl->castShadows = false;
     }
 
+    // Sonda de reflexión en mitad de la calle: el barniz del coche y los charcos reflejan neones y ventanas.
+    Entity probe = s.createEntity("Sonda de reflexión");
+    s.transform(probe).setPosition({0, 2.0f, 2});
+    s.world().add<ReflectionProbe>(probe);
+
     // Cámara que recorre la calle.
     Entity cam = s.createEntity("Cámara");
     s.transform(cam).setPosition({0, 1.7f, 14});

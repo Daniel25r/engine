@@ -77,7 +77,8 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 | Valores inválidos (NaN/Inf) en HDR: el SSR y el SSAO descartan normales degeneradas (geometría muy fina), el SSR se sanea, y el TAA, el bloom y la composición nunca propagan un píxel inválido | ✅ | Escena de neón: de 144-240 píxeles negros en algunos fotogramas a 0 en 6 fotogramas |
 | Niveles de detalle automáticos (meshoptimizer, MIT): al cargar un modelo, cada parte de 256+ triángulos recibe versiones al 50 % y 25 % (mismos vértices, un solo búfer de índices); se elige por el tamaño en pantalla, también para las sombras; los perfiles bajos simplifican antes (lodBias) | ✅ | 40 personajes: 65 090 → 45 842 triángulos con la misma imagen; error de simplificación 0,3 % y 0,9 % |
 | Exposición automática (adaptación del ojo, con HDR): media logarítmica de la luminancia (64×64) y adaptación gradual en el tiempo; la exposición manual actúa de compensación | ✅ | Brillo medio medido: noche 20 → 46,7, día 156 → 139 |
-| Sondas de reflexión con cubemaps, lightmaps, GI, volumétricas | ❌ | Ver `docs/TITAN_RUMBO_AAA.md` |
+| Sonda de reflexión (Crear › Luces): al pulsar Jugar se captura la escena en un cubemap desde su posición (con el pipeline normal, sin posprocesado) y sus niveles de detalle hacen de reflejo rugoso y luz ambiental; los materiales y el barniz la usan en vez del degradado del cielo | ✅ | Comparación con suelo naranja: las esferas metálicas reflejan el suelo y a sus vecinas; captura de 6 caras a 128 px en ~0,8 s (render por software) |
+| Varias sondas con mezcla y corrección de paralaje, lightmaps, GI, volumétricas | ❌ | Ver `docs/TITAN_RUMBO_AAA.md` (hoy: una sonda por escena) |
 | TAA, DoF, motion blur, aberración cromática, grano, auto exposición | ❌ | |
 
 ## 3. Materiales y shaders

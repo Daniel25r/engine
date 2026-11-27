@@ -129,6 +129,7 @@ private:
     void applyPendingSceneLoad();
     void render(const Viewport& viewport);
     void startVoxel(); // si la escena tiene un VoxelTerrain
+    void captureProbes(); // si la escena tiene una ReflectionProbe
     bool cameraPosition(Vec3& out);
 
 

@@ -146,6 +146,10 @@ uniform ivec4 uGraphOut;       // registros de color base, metal, rugosidad y em
 uniform sampler2D uGraphTex0;
 uniform sampler2D uGraphTex1;
 uniform float uTime;
+uniform samplerCube uProbe;
+uniform int uProbeOn;
+uniform float uProbeMips;
+uniform float uProbeIntensity;
 uniform int uHdr;
 vec3 invAces(vec3 y) { // inversa de la curva ACES: tras el tonemapping final queda el color original
     y = clamp(y, 0.0, 0.99);
@@ -394,6 +398,12 @@ void main() {
     vec3 sharpSky = ry > 0.0 ? mix(horizon, sky, pow(ry, 0.55)) : mix(horizon, ground, pow(-ry, 0.35));
     vec3 blurSky = mix(ground, mix(horizon, sky, max(ry, 0.0)), ry * 0.5 + 0.5);
     vec3 env = mix(sharpSky, blurSky, smoothstep(0.0, 0.8, rough));
+    if (uProbeOn == 1) {
+        // La captura está tonemapeada en sRGB: se vuelve a luz lineal (inversa de ACES y de la exposición).
+        float ex = max(uExposure, 0.01);
+        env = invAces(toLinear(textureLod(uProbe, r, rough * uProbeMips).rgb)) / ex * uProbeIntensity;
+        hemi = invAces(toLinear(textureLod(uProbe, n, uProbeMips * 0.85).rgb)) / ex * uProbeIntensity;
+    }
     // El reflejo que apunta "dentro" de la superficie (normal map) no ve el cielo: oclusión de horizonte.
     float horizonOcc = clamp(1.0 + dot(reflect(-v, n), vNormal * (gl_FrontFacing ? 1.0 : -1.0)), 0.0, 1.0);
     // Oclusión especular de Lagarde a partir de la oclusión ambiental.
@@ -411,6 +421,8 @@ void main() {
         float Fv = 0.04 + 0.96 * pow(1.0 - cndv, 5.0);
         vec3 cr3 = reflect(-v, cn);
         vec3 coatEnv = cr3.y > 0.0 ? mix(horizon, sky, pow(cr3.y, 0.55)) : mix(horizon, ground, pow(-cr3.y, 0.35));
+        if (uProbeOn == 1)
+            coatEnv = invAces(toLinear(textureLod(uProbe, cr3, cr * uProbeMips).rgb)) / max(uExposure, 0.01) * uProbeIntensity;
         // La capa de abajo recibe menos luz (la que refleja el barniz) y se le suma el brillo del barniz.
         color = color * (1.0 - Fv * uClearcoat.x) + (coatDirect + coatEnv * Fv * specAo * uAmbientI) * uClearcoat.x;
         specTint = specTint * (1.0 - Fv * uClearcoat.x) + vec3(Fv * uClearcoat.x * specAo);
@@ -673,6 +685,7 @@ bool Renderer::createGpuObjects() {
     uCascadeTexel_ = u("uCascadeTexel");
     uGraphCount_ = u("uGraphCount"); uGraph_ = u("uGraph[0]"); uGraphOut_ = u("uGraphOut");
     uGraphTex0_ = u("uGraphTex0"); uGraphTex1_ = u("uGraphTex1"); uTime_ = u("uTime");
+    uProbe_ = u("uProbe"); uProbeOn_ = u("uProbeOn"); uProbeMips_ = u("uProbeMips"); uProbeIntensity_ = u("uProbeIntensity");
     uAlphaCutoff_ = u("uAlphaCutoff"); uSpot_ = u("uSpot"); uSpotInner_ = u("uSpotInner");
     uInstanced_ = u("uInstanced");
     uShadowInstanced_ = glGetUniformLocation(shadowProgram_, "uInstanced");
@@ -1167,6 +1180,46 @@ void Renderer::shutdown() {
 
 void Renderer::setLodEnabled(bool on) { lodEnabled_ = on; }
 
+bool Renderer::beginProbeCapture(int size) {
+    size = std::clamp(size, 16, 512);
+    if (!probeTex_ || probeSize_ != size) {
+        if (probeTex_) glDeleteTextures(1, &probeTex_);
+        if (probeFbo_) glDeleteFramebuffers(1, &probeFbo_);
+        if (probeDepth_) glDeleteRenderbuffers(1, &probeDepth_);
+        glGenTextures(1, &probeTex_);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, probeTex_);
+        for (int f = 0; f < 6; ++f)
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f, 0, GL_RGBA8, size, size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        for (GLenum w : {GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T, GL_TEXTURE_WRAP_R})
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, w, GL_CLAMP_TO_EDGE);
+        glGenRenderbuffers(1, &probeDepth_);
+        glBindRenderbuffer(GL_RENDERBUFFER, probeDepth_);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, size, size);
+        glGenFramebuffers(1, &probeFbo_);
+        probeSize_ = size;
+    }
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &probePrevFbo_);
+    forceDirect_ = true;
+    return true;
+}
+
+void Renderer::probeFace(int face) {
+    glBindFramebuffer(GL_FRAMEBUFFER, probeFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, probeTex_, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, probeDepth_);
+}
+
+void Renderer::endProbeCapture(float intensity) {
+    glBindTexture(GL_TEXTURE_CUBE_MAP, probeTex_);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP); // los niveles pequeños hacen de reflejo rugoso y de luz ambiental
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(probePrevFbo_));
+    forceDirect_ = false;
+    probeOn_ = true;
+    probeIntensity_ = intensity;
+}
+
 void Renderer::setHdrUniforms(bool on) {
     for (GLuint p : {meshProgram_, spriteProgram_, skyProgram_}) {
         if (!p) continue;
@@ -1185,7 +1238,7 @@ void Renderer::beginFrame(const Viewport& vp, Color clear) {
     // Con posprocesado la escena se dibuja en un render target (a la escala del perfil) y se compone al final.
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &targetFbo_);
     sceneInTarget_ = false;
-    if (quality_.postProcess) {
+    if (quality_.postProcess && !forceDirect_) {
         const int sw = std::max(1, static_cast<int>(viewport_.width * quality_.renderScale + 0.5f));
         const int sh = std::max(1, static_cast<int>(viewport_.height * quality_.renderScale + 0.5f));
         sceneInTarget_ = post_->begin(sw, sh, hdrRequested_ && caps_.halfFloatTargets);
@@ -1344,6 +1397,13 @@ void Renderer::setLighting(const SceneLighting& l) {
         glUniform4f(uCascadeTexel_, l.cascadeTexel[0], l.cascadeTexel[1], l.cascadeTexel[2], l.cascadeTexel[3]);
     }
     glUniform1i(uShadowMap_, 1);
+    // Sonda: unidad 9 (durante la captura no se usa: no se refleja a sí misma).
+    glUniform1i(uProbe_, 9);
+    glUniform1i(uProbeOn_, (probeOn_ && !forceDirect_) ? 1 : 0);
+    glUniform1f(uProbeMips_, probeSize_ > 0 ? std::log2(float(probeSize_)) : 0.0f);
+    glUniform1f(uProbeIntensity_, probeIntensity_);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, probeTex_);
     glUniform1i(uTex_, 0);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, shadowTex_);

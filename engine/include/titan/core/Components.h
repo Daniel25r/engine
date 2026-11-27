@@ -171,6 +171,13 @@ struct Environment {
     float adaptationSpeed = 1.5f; // por segundo
 };
 
+// Sonda de reflexión: al empezar el juego se captura la escena en las 6 direcciones desde su posición; los
+// materiales reflejan ese entorno (también lo que queda fuera de pantalla) en vez del degradado del cielo.
+struct ReflectionProbe {
+    float intensity = 1.0f;
+    int resolution = 128; // por cara
+};
+
 struct Light {
     enum class Type { Directional, Point, Spot };
     Type type = Type::Directional; // la direccional y el foco iluminan hacia su forward() (-Z local)

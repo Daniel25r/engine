@@ -364,6 +364,14 @@ ComponentRegistry ComponentRegistry::createDefault() {
             readMaterialFields(m, rd);
         });
 
+    r.addSimple<ReflectionProbe>(
+        "ReflectionProbe",
+        [](const ReflectionProbe& p) { return Json{{"intensity", toJson(p.intensity)}, {"resolution", p.resolution}}; },
+        [](ReflectionProbe& p, FieldReader& rd) {
+            rd.read("intensity", p.intensity);
+            rd.read("resolution", p.resolution);
+        });
+
     r.addSimple<Environment>(
         "Environment",
         [](const Environment& e) {

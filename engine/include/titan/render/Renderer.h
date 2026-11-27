@@ -140,6 +140,13 @@ public:
     void endShadowPass();
 
     void beginFrame(const Viewport& viewport, Color clear);
+    // Sonda de reflexión: beginProbeCapture crea el cubemap; para cada cara se llama a probeFace y se dibuja la escena
+    // (sin posprocesado); endProbeCapture genera los niveles de rugosidad y la activa para los materiales.
+    bool beginProbeCapture(int size);
+    void probeFace(int face);
+    void endProbeCapture(float intensity);
+    void clearProbe() { probeOn_ = false; }
+    bool probeActive() const { return probeOn_; }
     void setCamera(const Mat4& view, const Mat4& projection);
     void setLighting(const SceneLighting& lighting);
     void drawSky();
@@ -350,7 +357,7 @@ private:
         uEmissiveTex_ = -1, uOcclusionTex_ = -1, uHasNormal_ = -1, uHasMR_ = -1, uHasOcclusion_ = -1,
         uNormalStrength_ = -1, uClearcoat_ = -1, uCascades_ = -1, uCascadeVP_ = -1, uCascadeSplit_ = -1,
         uCascadeTexel_ = -1, uGraphCount_ = -1, uGraph_ = -1, uGraphOut_ = -1, uGraphTex0_ = -1, uGraphTex1_ = -1,
-        uTime_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
+        uTime_ = -1, uProbe_ = -1, uProbeOn_ = -1, uProbeMips_ = -1, uProbeIntensity_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
         uLayerTiling_ = -1;
     int uLayers_[4] = {-1, -1, -1, -1};
     int uInstanced_ = -1, uShadowInstanced_ = -1;
@@ -390,6 +397,11 @@ private:
     Mat4 viewProj_;
     Mat4 projection_;
     bool specBuffersOn_ = false;
+    uint32_t probeTex_ = 0, probeFbo_ = 0, probeDepth_ = 0;
+    int probeSize_ = 0;
+    int probePrevFbo_ = 0; // propio: la pasada de sombras usa prevFbo_ durante la captura
+    bool probeOn_ = false, forceDirect_ = false;
+    float probeIntensity_ = 1.0f;
     bool lodEnabled_ = true;
     int chooseLod(const Model& m, const ModelPart& p, const Mat4& world) const;
     // TAA: proyección desplazada una fracción de píxel cada fotograma; la cámara del fotograma anterior reproyecta.

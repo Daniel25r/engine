@@ -104,3 +104,16 @@ TEST("calidad: barniz y reflejos en pantalla se guardan; los proyectos antiguos 
     Environment edef;
     CHECK(def.clearcoat == 0.0f && !edef.ssr && !edef.taa && !edef.hdr && !edef.autoExposure);
 }
+
+TEST("calidad: la sonda de reflexión se guarda con la escena") {
+    const ComponentRegistry reg = ComponentRegistry::createDefault();
+    Scene a("a");
+    ReflectionProbe rp;
+    rp.intensity = 0.6f;
+    rp.resolution = 256;
+    a.world().add<ReflectionProbe>(a.createEntity("Sonda"), rp);
+    Scene b("b");
+    CHECK(deserializeScene(serializeScene(a, reg), b, reg).ok());
+    const ReflectionProbe* r = b.world().get<ReflectionProbe>(b.findByName("Sonda"));
+    CHECK(r && std::abs(r->intensity - 0.6f) < 1e-5f && r->resolution == 256);
+}

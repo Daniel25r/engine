@@ -158,6 +158,7 @@ bool Runtime::activateScene(const std::string& text, const std::string& name) {
     TransformSystem::update(*scene_);
     physics_.build(*scene_);
     startVoxel();
+    captureProbes();
     physicsDestroySub_ = events_.subscribe<EntityDestroyedEvent>([this](const EntityDestroyedEvent& ev) {
         if (ev.scene != scene_.get()) return;
         physics_.removeEntity(ev.entity);
@@ -571,6 +572,43 @@ void Runtime::startVoxel() {
     TITAN_INFO("voxel", "Mundo de bloques iniciado: %zu chunks cerca de la cámara", voxel_.world()->loadedChunks());
 }
 
+void Runtime::captureProbes() {
+    renderer_->clearProbe();
+    Entity probe;
+    scene_->world().each<ReflectionProbe>([&](Entity e, ReflectionProbe&) {
+        if (probe.isNull() && scene_->isActiveInHierarchy(e)) probe = e;
+    });
+    if (probe.isNull()) return;
+    const ReflectionProbe& rp = *scene_->world().get<ReflectionProbe>(probe);
+    TransformSystem::update(*scene_);
+    const Vec3 eye = scene_->computeWorldMatrix(probe).translation();
+    if (!renderer_->beginProbeCapture(rp.resolution)) return;
+    // Caras del cubemap de OpenGL (+X, -X, +Y, -Y, +Z, -Z): dirección y "arriba" de cada una.
+    const Vec3 dirs[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+    const Vec3 ups[6] = {{0, -1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, -1, 0}};
+    const auto t0 = Clock::now();
+    for (int f = 0; f < 6; ++f) {
+        const Vec3 fwd = dirs[f], up = ups[f];
+        const Vec3 right = cross(fwd, up).normalized();
+        Mat4 world;
+        world.m[0] = right.x; world.m[1] = right.y; world.m[2] = right.z;
+        world.m[4] = up.x; world.m[5] = up.y; world.m[6] = up.z;
+        world.m[8] = -fwd.x; world.m[9] = -fwd.y; world.m[10] = -fwd.z;
+        world.m[12] = eye.x; world.m[13] = eye.y; world.m[14] = eye.z;
+        SceneView v;
+        v.view = world.inverted();
+        v.projection = Mat4::perspective(90.0f * kDegToRad, 1.0f, 0.1f, 500.0f);
+        v.perspective = true;
+        renderer_->probeFace(f);
+        sceneRenderer_.extraModels = voxel_.drawables();
+        sceneRenderer_.render(*scene_, *renderer_, Viewport{0, 0, rp.resolution, rp.resolution}, v,
+                              [this](AssetRef r) { return cache_->texture(r); }, [this](AssetRef r) { return cache_->model(r); },
+                              [this](AssetRef r) { return cache_->material(r); });
+    }
+    renderer_->endProbeCapture(rp.intensity);
+    TITAN_INFO("render", "Sonda de reflexión capturada (%d px por cara, %.0f ms)", rp.resolution, msSince(t0));
+}
+
 int Runtime::scriptVoxelSave() {
     VoxelWorld* w = voxel_.world();
     return w ? w->saveModified() : 0;
@@ -592,6 +630,7 @@ void Runtime::shutdown() {
     scripts_.reset();
     cache_->setJobs(nullptr); // espera las lecturas en curso: el JobSystem y el FileSource pueden desaparecer
     cache_->clear();
+    renderer_->clearProbe(); // la sonda es de la escena del juego, no del visor del editor
     if (!usesSharedRenderer()) renderer_->shutdown(); // el del editor lo cierra el editor
     renderer_ = &ownRenderer_;
     cache_ = &ownCache_;
