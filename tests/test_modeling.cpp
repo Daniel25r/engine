@@ -256,3 +256,78 @@ TEST("importar: STL ASCII y binario (Z arriba → Y arriba) y PLY ASCII y binari
     }
     CHECK(isConvertibleModel("x.BLEND") && isConvertibleModel("y.obj") && !isConvertibleModel("z.glb"));
 }
+
+// ---- Escultura, rayo contra la malla y exportación a OBJ
+#include "titan/core/MeshSculpt.h"
+
+TEST("escultura: rayo contra la malla, dibujar, inflar, suavizar, aplanar, pellizcar y agarrar") {
+    EditMesh m = EditMesh::plane(2, 16); // rejilla densa en y = 0
+    MeshRayHit hit;
+    CHECK(raycastEditMesh(m, {0.1f, 5, 0.1f}, {0, -1, 0}, hit));
+    CHECK_NEAR(hit.distance, 5.0f, 1e-4f);
+    CHECK_NEAR(hit.normal.y, 1.0f, 1e-5f);
+    CHECK(!raycastEditMesh(m, {5, 5, 5}, {0, -1, 0}, hit)); // fuera de la rejilla
+
+    SculptStroke st;
+    st.begin(m, {0, 0, 0});
+    const int moved = sculptMesh(m, st, MeshBrush::Draw, {0, 0, 0}, 0.5f, 0.2f, false);
+    CHECK(moved > 0);
+    float centerY = -1, edgeY = -1;
+    for (const Vec3& v : m.verts) {
+        if (std::fabs(v.x) < 1e-4f && std::fabs(v.z) < 1e-4f) centerY = v.y;
+        if (std::fabs(v.x - 1) < 1e-4f && std::fabs(v.z - 1) < 1e-4f) edgeY = v.y;
+    }
+    CHECK_NEAR(centerY, 0.2f, 1e-4f); // el centro sube la fuerza completa
+    CHECK_NEAR(edgeY, 0.0f, 1e-6f);   // fuera del radio no se mueve
+    // Invertido: hunde.
+    st.begin(m, {0, 0, 0});
+    sculptMesh(m, st, MeshBrush::Draw, {0, 0, 0}, 0.5f, 0.4f, true);
+    for (const Vec3& v : m.verts)
+        if (v.length() < 0.3f && std::fabs(v.x) < 1e-4f && std::fabs(v.z) < 1e-4f) CHECK(v.y < 0);
+    // Suavizar repetidamente devuelve la zona casi al plano.
+    for (int i = 0; i < 60; ++i) {
+        st.begin(m, {0, 0, 0});
+        sculptMesh(m, st, MeshBrush::Smooth, {0, 0, 0}, 0.8f, 1.0f, false);
+    }
+    float maxAbs = 0;
+    for (const Vec3& v : m.verts) maxAbs = std::max(maxAbs, std::fabs(v.y));
+    CHECK(maxAbs < 0.05f);
+    // Aplanar lleva al plano medio.
+    m.verts[100].y = 0.3f;
+    st.begin(m, m.verts[100]);
+    for (int i = 0; i < 5; ++i) sculptMesh(m, st, MeshBrush::Flatten, m.verts[100], 0.6f, 1.0f, false);
+    CHECK(std::fabs(m.verts[100].y) < 0.15f);
+    // Agarrar mueve la zona con el ratón, sin acumular entre pasos.
+    EditMesh g = EditMesh::plane(2, 8);
+    st.begin(g, {0, 0, 0});
+    sculptMesh(g, st, MeshBrush::Grab, {0, 0, 0}, 0.6f, 1, false, {0, 0.5f, 0});
+    sculptMesh(g, st, MeshBrush::Grab, {0, 0, 0}, 0.6f, 1, false, {0, 0.5f, 0});
+    for (const Vec3& v : g.verts)
+        if (std::fabs(v.x) < 1e-4f && std::fabs(v.z) < 1e-4f) CHECK_NEAR(v.y, 0.5f, 1e-4f);
+    // Inflar una esfera la hace más grande; pellizcar acerca al centro del pincel.
+    EditMesh s = EditMesh::uvSphere(0.5f, 16, 8);
+    st.begin(s, {0, 0, 0});
+    sculptMesh(s, st, MeshBrush::Inflate, {0, 0, 0}, 10, 0.1f, false);
+    for (const Vec3& v : s.verts) CHECK_NEAR(v.length(), 0.5f + 0.1f * std::pow(1 - std::pow(0.5f / 10, 2.0f), 2.0f), 2e-3f);
+    EditMesh p = EditMesh::plane(2, 4);
+    const Vec3 before = p.verts[6];
+    st.begin(p, {0, 0, 0});
+    sculptMesh(p, st, MeshBrush::Pinch, {0, 0, 0}, 1.5f, 0.3f, false);
+    CHECK(p.verts[6].length() < before.length());
+}
+
+TEST("exportar: OBJ con MTL que se vuelve a importar igual") {
+    const std::string dir = tempDir("exportar");
+    EditMesh m = EditMesh::cube(1);
+    m.materials[0].name = "Piedra";
+    m.materials[0].color = {0.4f, 0.4f, 0.45f, 1};
+    std::string err;
+    CHECK(writeObj(m.build(), dir + "/cubo.obj", "cubo.mtl", &err));
+    MeshBuild back;
+    ImportReport rep;
+    CHECK(loadObj(dir + "/cubo.obj", back, &rep, &err));
+    CHECK_EQ(back.triangleCount(), 12u);
+    CHECK_EQ(back.materials.size(), 1u);
+    CHECK_EQ(back.materials[0].name, std::string("Piedra"));
+    CHECK_NEAR(back.materials[0].color.b, 0.45f, 1e-5f);
+}
