@@ -70,6 +70,7 @@ add_library(titan_core STATIC
     engine/src/core/MeshSculpt.cpp
     engine/src/core/Rig.cpp
     engine/src/core/Voxel.cpp
+    engine/src/core/MaterialGraph.cpp
     engine/src/core/Log.cpp
     engine/src/core/Uuid.cpp
     engine/src/core/FileIO.cpp
@@ -275,7 +276,7 @@ else()
             tests/test_audio_mixer.cpp
             tests/test_jobs.cpp
             tests/test_modeling.cpp
-            tests/test_voxel.cpp
+            tests/test_voxel.cpp tests/test_material_graph.cpp
             tests/test_ui.cpp
             tests/test_bounds.cpp
             tests/test_quality.cpp
