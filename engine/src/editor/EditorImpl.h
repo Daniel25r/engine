@@ -299,6 +299,13 @@ struct Editor::Impl {
     void meshEditChanged();
     // Mezclador de audio (EditorMixer.cpp): edita assets/audio_buses.json; en Jugar, los cambios suenan al momento.
     bool showMixer = false;
+    // Material por nodos
+    bool showMatGraph = false;
+    UUID matGraphEntity;
+    ImVec2 matGraphPan{0, 0};
+    int matGraphLinkFrom = 0, matGraphSelected = 0;
+    void openMaterialGraph(Entity e);
+    void drawMaterialGraph();
     AudioBusLayout mixerLayout;
     std::string mixerProject;              // proyecto del que se cargó mixerLayout
     std::vector<std::array<float, 2>> mixerMeters; // nivel mostrado por bus (dB), con caída suave
@@ -341,7 +348,16 @@ struct Editor::Impl {
     void viewportPointerUp(int id, ImVec2 p);
     void viewportScroll(float amount);
     bool insideViewport(ImVec2 p) const {
-        return vpVisible && p.x >= vpMin.x && p.y >= vpMin.y && p.x < vpMax.x && p.y < vpMax.y;
+        if (!vpVisible || p.x < vpMin.x || p.y < vpMin.y || p.x >= vpMax.x || p.y >= vpMax.y) return false;
+        for (const auto& [a, b] : floatingRects) // una ventana flotante encima del visor se lleva el clic
+            if (p.x >= a.x && p.y >= a.y && p.x < b.x && p.y < b.y) return false;
+        return true;
+    }
+    // Rectángulos de las ventanas flotantes de este fotograma (mezclador, nodos...).
+    std::vector<std::pair<ImVec2, ImVec2>> floatingRects;
+    void noteFloatingWindow() {
+        const ImVec2 p = ImGui::GetWindowPos(), s = ImGui::GetWindowSize();
+        floatingRects.push_back({p, ImVec2(p.x + s.x, p.y + s.y)});
     }
     Vec3 spawnPoint() const;
     bool worldToScreen(const Vec3& p, ImVec2& out) const;

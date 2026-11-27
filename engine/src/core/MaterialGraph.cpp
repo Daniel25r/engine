@@ -83,6 +83,14 @@ MaterialGraph MaterialGraph::makeDefault() {
     return g;
 }
 
+const MatGraphProgram& MaterialGraph::program() const {
+    if (dirty_) {
+        cached_ = compile();
+        dirty_ = false;
+    }
+    return cached_;
+}
+
 MatGraphNode* MaterialGraph::find(int id) {
     for (MatGraphNode& n : nodes)
         if (n.id == id) return &n;
@@ -98,6 +106,7 @@ int MaterialGraph::add(MatNode type, Vec2 pos) {
     n.pos = pos;
     n.inputs.assign(matNodeInfo(type).inputs.size(), 0);
     nodes.push_back(n);
+    dirty_ = true;
     return n.id;
 }
 
@@ -106,6 +115,7 @@ void MaterialGraph::remove(int id) {
     for (MatGraphNode& n : nodes)
         for (int& in : n.inputs)
             if (in == id) in = 0;
+    dirty_ = true;
 }
 
 bool MaterialGraph::connect(int from, int to, int pin) {
@@ -123,12 +133,14 @@ bool MaterialGraph::connect(int from, int to, int pin) {
     };
     if (reaches(from)) return false;
     dst->inputs[size_t(pin)] = from;
+    dirty_ = true;
     return true;
 }
 
 void MaterialGraph::disconnect(int to, int pin) {
     MatGraphNode* dst = find(to);
     if (dst && pin >= 0 && pin < int(dst->inputs.size())) dst->inputs[size_t(pin)] = 0;
+    dirty_ = true;
 }
 
 MatGraphProgram MaterialGraph::compile() const {
@@ -285,7 +297,9 @@ bool MaterialGraph::fromJson(const std::string& text, std::string* error) {
         g.nextId = std::max(g.nextId, n.id + 1);
         g.nodes.push_back(n);
     }
-    *this = std::move(g);
+    nodes = std::move(g.nodes);
+    nextId = g.nextId;
+    dirty_ = true;
     return true;
 }
 

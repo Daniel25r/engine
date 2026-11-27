@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "titan/core/Math.h"
+#include "titan/core/MaterialGraph.h"
 #include "titan/core/Uuid.h"
 #include "titan/core/World.h"
 
@@ -117,6 +118,8 @@ struct MeshRenderer {
     // Barniz (clear coat): capa transparente y brillante encima (pintura de coche, madera barnizada, fibra de carbono).
     float clearcoat = 0.0f;           // 0 = sin barniz, 1 = barniz completo
     float clearcoatRoughness = 0.05f; // rugosidad del barniz
+    // Material por nodos (opcional): si compila, calcula el color base, metal, rugosidad y emisión.
+    std::shared_ptr<MaterialGraph> graph;
     AssetRef metallicRoughnessMap; // convención glTF: G = rugosidad, B = metálico (multiplican a los valores)
     AssetRef emissionMap;        // multiplica al color de emisión (si este es negro, se usa blanco)
     AssetRef occlusionMap;       // R = oclusión ambiental

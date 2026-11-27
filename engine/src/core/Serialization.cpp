@@ -226,6 +226,7 @@ void writeMaterialFields(const MeshRenderer& m, Json& j) {
     j["normalStrength"] = toJson(m.normalStrength);
     j["clearcoat"] = toJson(m.clearcoat);
     j["clearcoatRoughness"] = toJson(m.clearcoatRoughness);
+    if (m.graph) j["graph"] = Json::parse(m.graph->toJson());
     j["metallicRoughnessMap"] = assetToJson(m.metallicRoughnessMap);
     j["emissionMap"] = assetToJson(m.emissionMap);
     j["occlusionMap"] = assetToJson(m.occlusionMap);
@@ -248,6 +249,12 @@ void readMaterialFields(MeshRenderer& m, FieldReader& rd) {
     rd.read("normalStrength", m.normalStrength);
     rd.read("clearcoat", m.clearcoat);
     rd.read("clearcoatRoughness", m.clearcoatRoughness);
+    std::string graph;
+    rd.readRaw("graph", graph);
+    if (!graph.empty() && graph != "null") {
+        auto g = std::make_shared<MaterialGraph>();
+        if (g->fromJson(graph)) m.graph = g;
+    }
     rd.readAsset("metallicRoughnessMap", m.metallicRoughnessMap);
     rd.readAsset("emissionMap", m.emissionMap);
     rd.readAsset("occlusionMap", m.occlusionMap);

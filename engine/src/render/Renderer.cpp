@@ -133,6 +133,12 @@ uniform int uCascades;
 uniform mat4 uCascadeVP[4];
 uniform vec4 uCascadeSplit;
 uniform vec4 uCascadeTexel;
+uniform int uGraphCount;       // material por nodos: instrucciones (0 = sin grafo)
+uniform vec4 uGraph[96];       // 3 vec4 por instrucción
+uniform ivec4 uGraphOut;       // registros de color base, metal, rugosidad y emisión (-1 = sin conectar)
+uniform sampler2D uGraphTex0;
+uniform sampler2D uGraphTex1;
+uniform float uTime;
 uniform float uAlphaCutoff; // < 0: sin recorte
 uniform sampler2DShadow uShadowMap;
 uniform vec4 uColor;
@@ -257,6 +263,44 @@ float coatSpec(vec3 n, vec3 v, vec3 l, float rough, out float Fc) {
     return a2 / (PI * d * d) * V * Fc * ndl;
 }
 
+float hash21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float valueNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y);
+}
+// Máquina virtual de los materiales por nodos (los opcodes coinciden con MatOp en MaterialGraph.h).
+vec4 R_[16];
+void runGraph(vec3 n, vec3 v) {
+    R_[0] = vec4(vUV, 0.0, 1.0);
+    for (int i = 0; i < 32; ++i) {
+        if (i >= uGraphCount) break;
+        vec4 h = uGraph[i * 3];
+        vec4 k = uGraph[i * 3 + 2];
+        int op = int(h.x + 0.5);
+        vec4 A = R_[int(h.z + 0.5)], B = R_[int(h.w + 0.5)], C = R_[int(uGraph[i * 3 + 1].x + 0.5)];
+        vec4 r = k;
+        if (op == 1) r = vec4(vUV * k.xy, 0.0, 1.0);
+        else if (op == 2) r = vec4(uTime);
+        else if (op == 3) r = vec4(vWorld, 1.0);
+        else if (op == 4) r = vec4(n, 1.0);
+        else if (op == 5) r = vec4(pow(1.0 - max(dot(n, v), 0.0), k.x));
+        else if (op == 6) r = k.x < 0.5 ? texture(uGraphTex0, A.xy) : texture(uGraphTex1, A.xy);
+        else if (op == 7) r = A + B;
+        else if (op == 8) r = A - B;
+        else if (op == 9) r = A * B;
+        else if (op == 10) r = mix(A, B, C.x);
+        else if (op == 11) r = 1.0 - A;
+        else if (op == 12) r = pow(max(A, 0.0), vec4(k.x));
+        else if (op == 13) r = sin(A * k.x);
+        else if (op == 14) r = vec4(valueNoise(A.xy * k.x) * 0.5 + valueNoise(A.xy * k.x * 2.03) * 0.3 + valueNoise(A.xy * k.x * 4.1) * 0.2);
+        else if (op == 15) r = vec4(A.xy + uTime * k.xy, 0.0, 1.0);
+        else if (op == 16) r = vec4(mod(floor(A.x * k.x) + floor(A.y * k.x), 2.0));
+        else if (op == 17) r = clamp(A, 0.0, 1.0);
+        R_[int(h.y + 0.5)] = r;
+    }
+}
+
 void main() {
     outSpec = vec4(0.0);
     vec4 tex = texture(uTex, vUV);
@@ -292,6 +336,14 @@ void main() {
     }
     float ao = uHasOcclusion == 1 ? texture(uOcclusionTex, vUV).r : 1.0;
     vec3 v = normalize(uCameraPos - vWorld);
+    vec3 graphEmission = vec3(0.0);
+    if (uGraphCount > 0) { // los colores del grafo están en sRGB, como el resto de colores del material
+        runGraph(n, v);
+        if (uGraphOut.x >= 0) albedo = toLinear(clamp(R_[uGraphOut.x].rgb, 0.0, 1.0));
+        if (uGraphOut.y >= 0) metal = clamp(R_[uGraphOut.y].x, 0.0, 1.0);
+        if (uGraphOut.z >= 0) rough = R_[uGraphOut.z].x;
+        if (uGraphOut.w >= 0) graphEmission = toLinear(max(R_[uGraphOut.w].rgb, 0.0));
+    }
     rough = clamp(rough, 0.04, 1.0);
     vec3 color = brdf(n, v, normalize(-uDirDir), albedo, metal, rough, uDirColor * 2.4) * shadowFactor();
     for (int i = 0; i < 8; ++i) {
@@ -351,7 +403,7 @@ void main() {
         smoothness = max(smoothness, (1.0 - cr) * step(0.5, uClearcoat.x));
     }
     outSpec = vec4(clamp(specTint, 0.0, 1.0), smoothness);
-    color += toLinear(uEmission * texture(uEmissiveTex, vUV).rgb) * 2.0;
+    color += toLinear(uEmission * texture(uEmissiveTex, vUV).rgb) * 2.0 + graphEmission * 2.0;
 
     color = pow(aces(color * uExposure), vec3(1.0 / 2.2));
     float fog = 1.0 - exp(-uFogDensity * length(uCameraPos - vWorld));
@@ -590,6 +642,8 @@ bool Renderer::createGpuObjects() {
     uHasMR_ = u("uHasMR"); uHasOcclusion_ = u("uHasOcclusion"); uNormalStrength_ = u("uNormalStrength"); uClearcoat_ = u("uClearcoat");
     uCascades_ = u("uCascades"); uCascadeVP_ = u("uCascadeVP[0]"); uCascadeSplit_ = u("uCascadeSplit");
     uCascadeTexel_ = u("uCascadeTexel");
+    uGraphCount_ = u("uGraphCount"); uGraph_ = u("uGraph[0]"); uGraphOut_ = u("uGraphOut");
+    uGraphTex0_ = u("uGraphTex0"); uGraphTex1_ = u("uGraphTex1"); uTime_ = u("uTime");
     uAlphaCutoff_ = u("uAlphaCutoff"); uSpot_ = u("uSpot"); uSpotInner_ = u("uSpotInner");
     uInstanced_ = u("uInstanced");
     uShadowInstanced_ = glGetUniformLocation(shadowProgram_, "uInstanced");
@@ -1188,6 +1242,7 @@ void Renderer::setLighting(const SceneLighting& l) {
     glUniform1f(uFogDensity_, std::max(e.fogDensity, 0.0f));
     glUniform1f(uExposure_, std::max(e.exposure, 0.01f));
     glUniform1i(uShadowsOn_, l.shadows ? 1 : 0);
+    glUniform1f(uTime_, std::chrono::duration<float>(std::chrono::steady_clock::now() - startTime_).count());
     glUniformMatrix4fv(uLightVP_, 1, GL_FALSE, l.lightViewProjection.m);
     {
         float vps[64];
@@ -1326,6 +1381,7 @@ void Renderer::drawMesh(MeshPrimitive type, const Mat4& world, const MeshRendere
     s.normalStrength = mat.normalStrength;
     s.clearcoat = mat.clearcoat;
     s.clearcoatRoughness = mat.clearcoatRoughness;
+    s.graph = mat.graph && mat.graph->program().ok() ? &mat.graph->program() : nullptr;
     drawSurface(mesh.vao, mesh.indexCount, false, world, s);
 }
 
@@ -1365,6 +1421,18 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
     glUniform1f(uAlphaCutoff_, s.alphaCutoff);
     glUniform1f(uNormalStrength_, s.normalStrength);
     glUniform2f(uClearcoat_, std::clamp(s.clearcoat, 0.0f, 1.0f), std::clamp(s.clearcoatRoughness, 0.02f, 1.0f));
+    if (s.graph) { // material por nodos: el programa y sus texturas (unidades 7 y 8)
+        glUniform1i(uGraphCount_, s.graph->count);
+        glUniform4fv(uGraph_, s.graph->count * 3, &s.graph->code[0].r);
+        glUniform4i(uGraphOut_, s.graph->outBase, s.graph->outMetal, s.graph->outRough, s.graph->outEmission);
+        glUniform1i(uGraphTex0_, 7);
+        glUniform1i(uGraphTex1_, 8);
+        bindMap(7, s.maps.graph0);
+        bindMap(8, s.maps.graph1);
+        glActiveTexture(GL_TEXTURE0);
+    } else {
+        glUniform1i(uGraphCount_, 0);
+    }
     // Reflejos en pantalla: los opacos escriben además su reflectancia en el segundo destino del render target.
     const bool opaque = s.color.a >= 0.999f || s.alphaCutoff >= 0.0f;
     if (sceneInTarget_ && post_->hasSpecTarget()) {

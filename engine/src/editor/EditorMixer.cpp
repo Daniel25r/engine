@@ -112,6 +112,7 @@ void Editor::Impl::drawMixer() {
         ImGui::End();
         return;
     }
+    noteFloatingWindow();
     bool changed = false, structural = false, commit = false;
     if (ImGui::Button("+ Bus")) {
         AudioBusSettings b;

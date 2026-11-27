@@ -6,6 +6,9 @@
 // Orden dentro de un fotograma:
 //   beginFrame(viewport) → setCamera → setLights → drawMesh... → drawSprite... → drawLine... → drawText... → endFrame
 // Las mallas se dibujan al llamar; sprites, líneas y texto se acumulan y se vuelcan en endFrame.
+#include <chrono>
+
+#include "titan/core/MaterialGraph.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -73,6 +76,7 @@ struct PointLightData {
 struct MaterialTextures {
     TextureHandle base = kWhiteTexture, normal = kWhiteTexture, metallicRoughness = kWhiteTexture,
                   emission = kWhiteTexture, occlusion = kWhiteTexture;
+    TextureHandle graph0 = kWhiteTexture, graph1 = kWhiteTexture; // texturas del material por nodos
 };
 
 // Todo lo que afecta a la luz de un fotograma: ambiente (cielo, niebla, exposición), sol y luces puntuales.
@@ -265,6 +269,7 @@ private:
         float alphaCutoff = -1;
         float normalStrength = 1;
         float clearcoat = 0, clearcoatRoughness = 0.05f;
+        const MatGraphProgram* graph = nullptr; // material por nodos (compilado)
     };
     struct AnimNode {
         int parent = -1;
@@ -333,7 +338,8 @@ private:
         uShadowsOn_ = -1, uSkinned_ = -1, uJoints_ = -1, uUVTransform_ = -1, uNormalTex_ = -1, uMRTex_ = -1,
         uEmissiveTex_ = -1, uOcclusionTex_ = -1, uHasNormal_ = -1, uHasMR_ = -1, uHasOcclusion_ = -1,
         uNormalStrength_ = -1, uClearcoat_ = -1, uCascades_ = -1, uCascadeVP_ = -1, uCascadeSplit_ = -1,
-        uCascadeTexel_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
+        uCascadeTexel_ = -1, uGraphCount_ = -1, uGraph_ = -1, uGraphOut_ = -1, uGraphTex0_ = -1, uGraphTex1_ = -1,
+        uTime_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
         uLayerTiling_ = -1;
     int uLayers_[4] = {-1, -1, -1, -1};
     int uInstanced_ = -1, uShadowInstanced_ = -1;
@@ -372,7 +378,8 @@ private:
     Viewport viewport_;
     Mat4 viewProj_;
     Mat4 projection_;
-    bool specBuffersOn_ = false; // se dibuja también en el destino de reflectancia (SSR) // de la cámara actual (el SSAO reconstruye posiciones desde la profundidad)
+    bool specBuffersOn_ = false;
+    std::chrono::steady_clock::time_point startTime_ = std::chrono::steady_clock::now(); // uTime de los materiales // se dibuja también en el destino de reflectancia (SSR) // de la cámara actual (el SSAO reconstruye posiciones desde la profundidad)
     Vec3 cameraPos_;
     Vec3 camRight_{1, 0, 0}, camUp_{0, 1, 0};
     std::vector<LoadedFont> fonts_;

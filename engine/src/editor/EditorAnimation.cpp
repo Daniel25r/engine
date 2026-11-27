@@ -35,6 +35,7 @@ void Editor::Impl::drawMachineEditor() {
         ImGui::End();
         return;
     }
+    noteFloatingWindow();
     auto clipCombo = [&](const char* id, std::string& clip) {
         if (ImGui::BeginCombo(id, clip.empty() ? "(ninguno)" : clip.c_str())) {
             for (const std::string& c : clips)

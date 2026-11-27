@@ -177,6 +177,7 @@ std::string identifierFrom(const std::string& name) {
 
 void Editor::Impl::drawUI() {
     vpVisible = false;
+    floatingRects.clear();
     if (!project || showBrowser) {
         drawBrowser();
         return;
@@ -187,6 +188,7 @@ void Editor::Impl::drawUI() {
     if (showMachineEditor) drawMachineEditor();
     if (soundCheckRunning || showDiagnostics) drawDiagnostics();
     if (showMixer) drawMixer();
+    if (showMatGraph) drawMaterialGraph();
     const float menuH = ImGui::GetFrameHeight();
     const float rowH = ImGui::GetFrameHeight() + st.WindowPadding.y * 2;
     drawToolbar(ImVec2(0, menuH), ImVec2(W, rowH));
@@ -1025,6 +1027,18 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
             propLabel(label);
             assetCombo((std::string("##") + label).c_str(), AssetType::Texture, ref);
         };
+        propLabel("Nodos");
+        if (shared) {
+            ImGui::TextDisabled("Quita el material compartido para usar nodos en este objeto");
+        } else if (ImGui::Button(m.graph ? "Editar material por nodos" : "Material por nodos", ImVec2(-1, 0))) {
+            openMaterialGraph(e);
+        }
+        if (m.graph && !shared) {
+            const MatGraphProgram& gp = m.graph->program();
+            propLabel("");
+            if (gp.ok()) ImGui::TextDisabled("Los nodos mandan sobre lo que conectes en la Salida");
+            else ImGui::TextColored(ImVec4(1, 0.6f, 0.3f, 1), "Nodos sin aplicar: %s", gp.error.c_str());
+        }
         map("Textura", mat.texture);
         color("Color base", mat.color);
         dragF("Metálico", mat.metallic, 0.01f, 0, 1, "%.2f");

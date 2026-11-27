@@ -46,14 +46,14 @@ namespace {
 // Dos primitivas se pueden dibujar juntas si son la misma malla y su material es idéntico y sin texturas.
 bool instanceable(const MeshRenderer& m, const MaterialTextures& t) {
     return m.model.isNull() && t.base == kWhiteTexture && t.normal == kWhiteTexture && t.metallicRoughness == kWhiteTexture &&
-           t.emission == kWhiteTexture && t.occlusion == kWhiteTexture && !m.alphaClip;
+           t.emission == kWhiteTexture && t.occlusion == kWhiteTexture && !m.alphaClip && !m.graph;
 }
 bool sameMaterial(const MeshRenderer& a, const MeshRenderer& b) {
     return a.mesh == b.mesh && a.color.r == b.color.r && a.color.g == b.color.g && a.color.b == b.color.b &&
            a.color.a == b.color.a && a.metallic == b.metallic && a.roughness == b.roughness && a.emission.r == b.emission.r &&
            a.emission.g == b.emission.g && a.emission.b == b.emission.b && a.prototypeGrid == b.prototypeGrid &&
            a.unlit == b.unlit && a.doubleSided == b.doubleSided && a.clearcoat == b.clearcoat &&
-           a.clearcoatRoughness == b.clearcoatRoughness;
+           a.clearcoatRoughness == b.clearcoatRoughness && a.graph == b.graph;
 }
 } // namespace
 
@@ -171,8 +171,13 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
             skinned = renderer.modelHasSkin(model);
             if (skinned) local = local.inflated(0.5f);
         }
-        const MaterialTextures maps{textures(m.texture), textures(m.normalMap), textures(m.metallicRoughnessMap),
-                                    textures(m.emissionMap), textures(m.occlusionMap)};
+        MaterialTextures maps{textures(m.texture), textures(m.normalMap), textures(m.metallicRoughnessMap),
+                              textures(m.emissionMap), textures(m.occlusionMap)};
+        if (m.graph && m.graph->program().ok()) {
+            const MatGraphProgram& gp = m.graph->program();
+            if (!gp.textures[0].isNull()) maps.graph0 = textures(gp.textures[0]);
+            if (!gp.textures[1].isNull()) maps.graph1 = textures(gp.textures[1]);
+        }
         candidates_.push_back({{&m, &t.worldMatrix(), maps, dot(d, d), model, -1},
                                transformAABB(local, t.worldMatrix()), skinned, e});
         anyCaster = anyCaster || (m.castShadows && !m.unlit && (m.color.a >= 0.999f || m.alphaClip));

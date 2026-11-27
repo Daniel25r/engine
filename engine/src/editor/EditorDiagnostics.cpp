@@ -48,6 +48,7 @@ void Editor::Impl::drawDiagnostics() {
         ImGui::End();
         return;
     }
+    noteFloatingWindow();
     if (!open) {
         showDiagnostics = false;
         if (soundCheckRunning) {

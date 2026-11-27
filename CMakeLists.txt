@@ -202,6 +202,7 @@ add_library(titan_editor STATIC
     engine/src/editor/EditorMixer.cpp
     engine/src/editor/EditorLauncher.cpp
     engine/src/editor/EditorModeling.cpp
+    engine/src/editor/EditorMaterialGraph.cpp
 )
 target_link_libraries(titan_editor PUBLIC titan_runtime titan_imgui titan_lua titan_samples)
 target_include_directories(titan_editor PRIVATE third_party/stb)

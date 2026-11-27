@@ -76,9 +76,16 @@ public:
     bool connect(int from, int to, int pin);
     void disconnect(int to, int pin);
     MatGraphProgram compile() const;
+    // Programa compilado guardado: se recompila solo tras un cambio (touch() o las funciones de edición).
+    const MatGraphProgram& program() const;
+    void touch() { dirty_ = true; }
 
     std::string toJson() const;
     bool fromJson(const std::string& text, std::string* error = nullptr);
+
+private:
+    mutable MatGraphProgram cached_;
+    mutable bool dirty_ = true;
 };
 
 // Opcodes de la máquina virtual del sombreador (deben coincidir con Renderer.cpp).

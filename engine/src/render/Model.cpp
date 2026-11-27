@@ -371,6 +371,9 @@ void Renderer::drawModel(int model, const Mat4& world, const MeshRenderer& mat, 
         s.normalStrength = mat.normalStrength;
         s.clearcoat = mat.clearcoat;
         s.clearcoatRoughness = mat.clearcoatRoughness;
+        s.graph = mat.graph && mat.graph->program().ok() ? &mat.graph->program() : nullptr;
+        s.maps.graph0 = o.graph0;
+        s.maps.graph1 = o.graph1;
         drawSurface(p.mesh.vao, p.mesh.indexCount, true, world, s);
     }
     currentJoints_ = nullptr;
