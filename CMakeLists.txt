@@ -195,7 +195,7 @@ file(WRITE ${CMAKE_BINARY_DIR}/generated/DemoSandboxScripts.inc.tmp "${_sandbox_
 configure_file(${CMAKE_BINARY_DIR}/generated/DemoSandboxScripts.inc.tmp
                ${CMAKE_BINARY_DIR}/generated/DemoSandboxScripts.inc COPYONLY)
 add_library(titan_samples STATIC engine/src/samples/PlatformerSample.cpp engine/src/samples/SampleSounds.cpp
-    engine/src/samples/SandboxSample.cpp)
+    engine/src/samples/SandboxSample.cpp engine/src/samples/NeonSample.cpp)
 target_include_directories(titan_samples PRIVATE ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(titan_samples PUBLIC titan_core titan_audio)
 target_compile_options(titan_samples PRIVATE ${TITAN_WARNINGS})

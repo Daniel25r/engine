@@ -33,6 +33,7 @@ const char* paramLabel(MatNode t, int& count) {
     case MatNode::Sine: return "Frecuencia";
     case MatNode::Noise: case MatNode::Checker: return "Escala";
     case MatNode::Panner: count = 2; return "Velocidad";
+    case MatNode::Component: return "Canal (0-3)";
     default: count = 0; return nullptr;
     }
 }

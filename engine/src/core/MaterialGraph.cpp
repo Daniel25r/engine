@@ -35,6 +35,7 @@ const TypeDef kTypes[] = {
     {"panner", {"Desplazar UV", {"UV"}, true}, {0.1f, 0, 0, 0}},
     {"checker", {"Tablero", {"UV"}, true}, {8, 0, 0, 0}},
     {"clamp", {"Limitar 0..1", {"x"}, true}, {0, 0, 0, 0}},
+    {"component", {"Componente", {"x"}, true}, {0, 0, 0, 0}},
 };
 static_assert(sizeof(kTypes) / sizeof(kTypes[0]) == size_t(MatNode::Count), "falta un tipo de nodo");
 
@@ -67,6 +68,7 @@ int opFor(MatNode t) {
     case MatNode::Panner: return kOpPanner;
     case MatNode::Checker: return kOpChecker;
     case MatNode::Clamp: return kOpClamp;
+    case MatNode::Component: return kOpComponent;
     default: return -1;
     }
 }

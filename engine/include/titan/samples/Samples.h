@@ -13,4 +13,7 @@ bool createPlatformerSample(const std::string& dir, const std::string& name, std
 // con guardado automático. Todo con VoxelTerrain y un script Lua (Voxel.*).
 bool createSandboxSample(const std::string& dir, const std::string& name, std::string* error = nullptr);
 
+// "Ciudad de neón": escaparate del render (HDR, reflejos, nodos, barniz, luces, TAA). Calle de noche con cámara en Lua.
+bool createNeonSample(const std::string& dir, const std::string& name, std::string* error = nullptr);
+
 } // namespace titan

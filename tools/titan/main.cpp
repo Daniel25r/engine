@@ -43,6 +43,7 @@ int usage() {
         "  titan benchmark <carpeta>                  crear el proyecto de pruebas de rendimiento\n"
         "  titan demo-plataformas <carpeta>           crear la demo de plataformas 3D (menú, nivel, victoria)\n"
         "  titan demo-bloques <carpeta>               crear el sandbox de bloques (mundo infinito, romper y colocar)\n"
+        "  titan demo-neon <carpeta>                  crear el escaparate del render (calle de neón de noche)\n"
         "  titan import <carpeta> <archivo>           importar (OBJ, STL, PLY y .blend se convierten a GLB)\n"
         "  titan audiotest <archivo.wav>              grabar la prueba de sonido del motor en un WAV\n\n"
         "Opción: --scene <ruta dentro de assets/> para trabajar en otra escena.\n",
@@ -475,6 +476,15 @@ int main(int argc, char** argv) {
     if (cmd == "benchmark") return cmdBenchmark(dir);
     if (cmd == "demo-plataformas") return cmdDemoPlatformer(dir);
     if (cmd == "demo-bloques") return cmdDemoSandbox(dir);
+    if (cmd == "demo-neon") {
+        std::string err;
+        if (!createNeonSample(dir, "Ciudad de neón", &err)) {
+            std::fprintf(stderr, "Error: %s\n", err.c_str());
+            return 1;
+        }
+        std::printf("Escaparate creado en %s. Ábrelo en el editor y pulsa Jugar.\n", dir.c_str());
+        return 0;
+    }
 
     if (cmd == "new") {
         if (args.size() < 3) return usage();

@@ -51,6 +51,11 @@ const TemplateInfo kTemplates[] = {
      "Un sandbox de construcción: mundo infinito por chunks con biomas (llanura, bosque, desierto, montaña, nieve, "
      "océano, volcánico), cuevas y árboles. Rompe y coloca bloques; el mundo se guarda solo y se carga al volver.",
      "Mundo de bloques · Personaje · Cámara 3ª persona · 1 script Lua (Voxel.*)"},
+    {"Ciudad de neón", "Escaparate del render",
+     "Una calle de noche para ver de qué es capaz el render de Titán: HDR con bloom de neón, asfalto mojado con "
+     "reflejos, ventanas generadas con materiales por nodos, coche con barniz, farolas, sombras en cascada, SSAO y "
+     "antialiasing temporal. Una cámara recorre la calle. Todo hecho con primitivas (sin recursos de terceros).",
+     "1 escena · materiales por nodos · 4 luces · cámara en Lua"},
 };
 
 std::string relativeTime(fs::file_time_type t) {
@@ -142,6 +147,29 @@ void drawPreviewSandbox(ImDrawList* dl, ImVec2 a, ImVec2 b, float s) {
     // Bloque que se está colocando (marco blanco).
     const float bx = a.x + 9 * t, by = floorY - 8 * t;
     dl->AddRect(ImVec2(bx, by), ImVec2(bx + t, by + t), IM_COL32(255, 255, 255, 230), 0, 0, 2 * s);
+}
+
+void drawPreviewNeon(ImDrawList* dl, ImVec2 a, ImVec2 b, float s) {
+    gradient(dl, a, b, IM_COL32(8, 6, 20, 255), IM_COL32(40, 22, 60, 255));
+    const float W = b.x - a.x, H = b.y - a.y;
+    // Edificios con ventanas encendidas.
+    for (int i = 0; i < 9; ++i) {
+        const float x0 = a.x + W * (i / 9.0f), x1 = x0 + W / 9.0f - 3 * s, top = a.y + H * (0.15f + 0.08f * float((i * 5) % 4));
+        dl->AddRectFilled(ImVec2(x0, top), ImVec2(x1, a.y + H * 0.72f), IM_COL32(24, 24, 34, 255));
+        for (float y = top + 5 * s; y < a.y + H * 0.68f; y += 8 * s)
+            for (float x = x0 + 3 * s; x < x1 - 4 * s; x += 7 * s)
+                if ((int(x * 13 + y * 7) / 5) % 3 == 0) dl->AddRectFilled(ImVec2(x, y), ImVec2(x + 3 * s, y + 4 * s), IM_COL32(255, 200, 120, 220));
+    }
+    // Neones y su reflejo en el suelo mojado.
+    const ImU32 cols[] = {IM_COL32(255, 46, 154, 255), IM_COL32(35, 230, 255, 255), IM_COL32(255, 224, 58, 255)};
+    for (int i = 0; i < 3; ++i) {
+        const float x = a.x + W * (0.2f + 0.3f * i), y = a.y + H * 0.42f;
+        dl->AddRectFilled(ImVec2(x - 2 * s, y), ImVec2(x + 2 * s, y + H * 0.22f), cols[i], 2 * s);
+        dl->AddRectFilled(ImVec2(x - 2 * s, a.y + H * 0.76f), ImVec2(x + 2 * s, a.y + H * 0.95f), (cols[i] & 0x00FFFFFF) | 0x50000000);
+    }
+    dl->AddRectFilled(ImVec2(a.x, a.y + H * 0.72f), b, IM_COL32(12, 12, 18, 160));
+    // Coche rojo.
+    dl->AddRectFilled(ImVec2(a.x + W * 0.38f, a.y + H * 0.66f), ImVec2(a.x + W * 0.62f, a.y + H * 0.76f), IM_COL32(176, 16, 26, 255), 4 * s);
 }
 
 void drawPreviewPlatformer(ImDrawList* dl, ImVec2 a, ImVec2 b, float s) {
@@ -387,15 +415,17 @@ void Editor::Impl::drawBrowser() {
         const float prevH = std::clamp(cardW * 0.5f, 80 * s, 150 * s), cardH = prevH + 64 * s;
         ImGui::BeginChild("##galeria", ImVec2(galleryW, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
         ImDrawList* gl = ImGui::GetWindowDrawList();
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 5; ++i) {
             if (i % cols) ImGui::SameLine(0, gap);
             ImGui::PushID(i);
             const ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + cardW, a.y + cardH);
             if (ImGui::InvisibleButton("##plantilla", ImVec2(cardW, cardH))) {
                 newProjectTemplate = i;
                 // Nombre sugerido: el del ejemplo, salvo que el usuario ya haya escrito uno propio.
-                const bool suggested = newProjectName == "Mi juego" || newProjectName == "Isla Estelar" || newProjectName == "Mundo de bloques";
-                if (suggested) newProjectName = i == 2 ? "Isla Estelar" : i == 3 ? "Mundo de bloques" : "Mi juego";
+                const bool suggested = newProjectName == "Mi juego" || newProjectName == "Isla Estelar" || newProjectName == "Mundo de bloques" ||
+                                       newProjectName == "Ciudad de neón";
+                if (suggested)
+                    newProjectName = i == 2 ? "Isla Estelar" : i == 3 ? "Mundo de bloques" : i == 4 ? "Ciudad de neón" : "Mi juego";
             }
             const bool hover = ImGui::IsItemHovered(), sel = newProjectTemplate == i;
             gl->AddRectFilled(a, b, hover ? kCardHover : kCard, 8 * s);
@@ -404,7 +434,8 @@ void Editor::Impl::drawBrowser() {
             if (i == 0) drawPreview3D(gl, a, pb, s);
             else if (i == 1) drawPreview2D(gl, a, pb, s);
             else if (i == 2) drawPreviewPlatformer(gl, a, pb, s);
-            else drawPreviewSandbox(gl, a, pb, s);
+            else if (i == 3) drawPreviewSandbox(gl, a, pb, s);
+            else drawPreviewNeon(gl, a, pb, s);
             gl->PopClipRect();
             gl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.1f, ImVec2(a.x + 14 * s, pb.y + 12 * s), kText, kTemplates[i].title);
             gl->AddText(ImVec2(a.x + 14 * s, pb.y + 36 * s), i >= 2 ? IM_COL32(255, 200, 61, 255) : kDimText, kTemplates[i].tag);
@@ -415,7 +446,7 @@ void Editor::Impl::drawBrowser() {
         // Detalles y creación
         ImGui::SameLine(0, 24 * s);
         ImGui::BeginChild("##detalle", ImVec2(detailW, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
-        const TemplateInfo& t = kTemplates[std::clamp(newProjectTemplate, 0, 3)];
+        const TemplateInfo& t = kTemplates[std::clamp(newProjectTemplate, 0, 4)];
         ImDrawList* d2 = ImGui::GetWindowDrawList();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         d2->AddRectFilled(p, ImVec2(p.x + detailW, p.y + 2 * s), kAccent);
@@ -446,6 +477,7 @@ void Editor::Impl::drawBrowser() {
             bool ok = false;
             if (newProjectTemplate == 2) ok = createPlatformerSample(dir, newProjectName, &err);
             else if (newProjectTemplate == 3) ok = createSandboxSample(dir, newProjectName, &err);
+            else if (newProjectTemplate == 4) ok = createNeonSample(dir, newProjectName, &err);
             else ok = createProjectFromTemplate(dir, newProjectName,
                                                 newProjectTemplate == 0 ? ProjectTemplate::Empty3D : ProjectTemplate::Empty2D, &err) != nullptr;
             if (ok) {

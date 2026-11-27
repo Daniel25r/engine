@@ -3,7 +3,7 @@
 **Motor de videojuegos 3D para PC (Windows y Linux)**, escrito en C++17. Tiene editor visual, scripts en Lua, física
 Jolt, render PBR moderno y herramientas de modelado, escultura y animación integradas.
 
-![Render de Titán: reflejos en pantalla, barniz, metales y sombras en cascada](docs/img/render-materiales.png)
+![Ciudad de neón, el escaparate incluido: HDR, reflejos en el asfalto mojado, materiales por nodos y barniz](docs/img/ciudad-neon.png)
 
 **Versión 0.14.** Lo que se lista aquí existe en el código y tiene pruebas automáticas (131) o se ha comprobado
 con capturas. Detalle función por función, con lo que falta, en
@@ -36,6 +36,9 @@ Descomprime el zip y abre `titan_editor.exe`.
 
 - **Isla Estelar**: plataformas 3D completo (menú, nivel, enemigos con IA, monedas, victoria, música).
 - **Mundo de bloques**: sandbox para explorar, romper y colocar bloques.
+- **Ciudad de neón**: escaparate del render (HDR, reflejos, materiales por nodos, barniz, luces, TAA).
+
+![Materiales: metal, barniz y oro de rugosidad 0 a 1](docs/img/render-materiales.png)
 
 Se crean desde la pantalla de proyectos del editor.
 

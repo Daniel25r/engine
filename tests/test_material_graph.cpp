@@ -32,6 +32,7 @@ V4 run(const MatGraphProgram& p, int outReg, V4 uv, float time) {
         case kOpSin: r = f(A, A, [&](float a, float) { return std::sin(a * k.r); }); break;
         case kOpPanner: r = {A.x + time * k.r, A.y + time * k.g, 0, 1}; break;
         case kOpClamp: r = f(A, A, [](float a, float) { return std::clamp(a, 0.0f, 1.0f); }); break;
+        case kOpComponent: { const float c = k.r < 0.5f ? A.x : k.r < 1.5f ? A.y : k.r < 2.5f ? A.z : A.w; r = {c, c, c, c}; } break;
         default: break;
         }
         R[d] = r;
@@ -74,6 +75,18 @@ TEST("material por nodos: rugosidad animada con tiempo y seno, entradas sin cone
     CHECK(p.ok());
     CHECK_NEAR(run(p, p.outRough, {0, 0, 0, 1}, 0.5f).x, std::clamp(std::sin(1.0f), 0.0f, 1.0f), 1e-5f);
     CHECK_NEAR(run(p, p.outMetal, {0, 0, 0, 1}, 0.0f).x, 0.3f, 1e-5f);
+}
+
+TEST("material por nodos: componente separa U y V (rejilla de ventanas)") {
+    MaterialGraph g = MaterialGraph::makeDefault();
+    const int out = g.nodes[0].id;
+    const int uv = g.add(MatNode::TexCoord, {}), cu = g.add(MatNode::Component, {}), cv = g.add(MatNode::Component, {});
+    g.find(cv)->value.r = 1;
+    const int m = g.add(MatNode::Multiply, {});
+    CHECK(g.connect(uv, cu, 0) && g.connect(uv, cv, 0) && g.connect(cu, m, 0) && g.connect(cv, m, 1) && g.connect(m, out, 3));
+    const MatGraphProgram p = g.compile();
+    CHECK(p.ok());
+    CHECK_NEAR(run(p, p.outEmission, {0.5f, 0.25f, 0, 1}, 0).x, 0.125f, 1e-6f); // u × v
 }
 
 TEST("material por nodos: ciclos rechazados, límites y errores claros") {

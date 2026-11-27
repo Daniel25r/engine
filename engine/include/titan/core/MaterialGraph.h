@@ -33,6 +33,7 @@ enum class MatNode {
     Panner,     // A.xy + tiempo × (value.x, value.y)
     Checker,    // tablero de A.xy × value.x
     Clamp,      // a 0..1
+    Component,  // un componente de A (value.x: 0 = x/u/rojo, 1 = y/v/verde, 2 = z/azul, 3 = w) en los cuatro
     Count
 };
 
@@ -91,7 +92,7 @@ private:
 // Opcodes de la máquina virtual del sombreador (deben coincidir con Renderer.cpp).
 enum MatOp {
     kOpConst = 0, kOpTexCoord, kOpTime, kOpWorldPos, kOpNormal, kOpFresnel, kOpTexture, kOpAdd, kOpSub, kOpMul,
-    kOpLerp, kOpOneMinus, kOpPow, kOpSin, kOpNoise, kOpPanner, kOpChecker, kOpClamp
+    kOpLerp, kOpOneMinus, kOpPow, kOpSin, kOpNoise, kOpPanner, kOpChecker, kOpClamp, kOpComponent
 };
 constexpr int kMatGraphMaxInstructions = 32;
 constexpr int kMatGraphRegisters = 16; // el 0 es la UV de la malla

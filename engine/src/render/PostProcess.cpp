@@ -34,6 +34,8 @@ void main() {
     s += texture(uSrc, vUV + vec2(uTexel.x, -uTexel.y)).rgb + texture(uSrc, vUV - vec2(uTexel.x, -uTexel.y)).rgb;
     s *= 0.125;
     if (uPrefilter == 1) {
+        if (any(isnan(s)) || any(isinf(s))) s = vec3(0.0);
+        s = min(s, vec3(64.0)); // limita brillos extremos (luciérnagas) antes de difuminar
         float b = max(s.r, max(s.g, s.b));
         float knee = clamp(b - uThreshold + 0.1, 0.0, 0.2);   // transición suave alrededor del umbral
         float soft = knee * knee / 0.8;
@@ -112,6 +114,7 @@ void main() {
         c = c * (1.0 - luma(tint) * r.a) + r.rgb * tint * r.a;
     }
     if (uBloomOn == 1) c += texture(uBloom, vUV).rgb * uBloomIntensity;
+    if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0); // red de seguridad: nunca un píxel inválido en pantalla
     if (uHdr == 1) c = pow(acesTone(max(c, 0.0)), vec3(1.0 / 2.2)); // HDR: el tonemapping se hace aquí
     c = (c - 0.5) * uContrast + 0.5;
     c = mix(vec3(luma(c)), c, uSaturation);
@@ -150,7 +153,9 @@ void main() {
     vec3 b = viewPos(vUV - vec2(0.0, uTexel.y)), t = viewPos(vUV + vec2(0.0, uTexel.y));
     vec3 dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l;
     vec3 dy = abs(t.z - P.z) < abs(P.z - b.z) ? t - P : P - b;
-    vec3 N = normalize(cross(dx, dy));
+    vec3 cn = cross(dx, dy);
+    if (dot(cn, cn) < 1e-20) { outColor = vec4(1.0, P.z, 0.0, 1.0); return; } // geometría muy fina: sin normal fiable
+    vec3 N = normalize(cn);
     float screenR = uRadius * uProj.x / max(-P.z, 0.1) * 0.5; // radio en UV
     if (screenR < uTexel.x * 1.5) { outColor = vec4(1.0); return; } // demasiado lejos: nada que ocluir
     screenR = min(screenR, 0.25);
@@ -226,7 +231,9 @@ void main() {
     vec3 b = viewPos(vUV - vec2(0.0, uTexel.y)), t = viewPos(vUV + vec2(0.0, uTexel.y));
     vec3 dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l;
     vec3 dy = abs(t.z - P.z) < abs(P.z - b.z) ? t - P : P - b;
-    vec3 N = normalize(cross(dx, dy));
+    vec3 cn = cross(dx, dy);
+    if (dot(cn, cn) < 1e-20) { outColor = vec4(0.0); return; } // geometría muy fina: sin normal fiable
+    vec3 N = normalize(cn);
     vec3 R = reflect(normalize(P), N);
     float towardCam = clamp(1.0 - R.z * 2.0, 0.0, 1.0);
     if (towardCam <= 0.0) { outColor = vec4(0.0); return; }
@@ -269,7 +276,10 @@ void main() {
     vec2 edge = min(uv, 1.0 - uv);
     float fade = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * (1.0 - float(i) / float(STEPS)) * towardCam;
     if (texture(uDepth, uv).r >= 1.0) fade = 0.0; // el cielo ya está en el reflejo del sombreador
-    outColor = vec4(texture(uScene, uv).rgb, clamp(fade * uIntensity * smoothstep(0.35, 0.85, sp.a), 0.0, 1.0));
+    vec4 res = vec4(texture(uScene, uv).rgb, fade * uIntensity * smoothstep(0.35, 0.85, sp.a));
+    // Casos degenerados (rayo rasante, precisión): sin reflejo en vez de un valor inválido que se extendería.
+    if (any(isnan(res)) || any(isinf(res))) res = vec4(0.0);
+    outColor = vec4(res.rgb, clamp(res.a, 0.0, 1.0));
 }
 )";
 
@@ -286,6 +296,7 @@ void main() {
     for (int y = -2; y < 2; ++y)
         for (int x = -2; x < 2; ++x) {
             vec4 s = texture(uSrc, vUV + (vec2(x, y) + 0.5) * uTexel);
+            if (any(isnan(s)) || any(isinf(s))) continue;
             col += s.rgb * s.a;
             wsum += s.a;
             asum += s.a;
@@ -313,6 +324,7 @@ vec3 toYCoCg(vec3 c) { return vec3(0.25 * c.r + 0.5 * c.g + 0.25 * c.b, 0.5 * c.
 vec3 toRgb(vec3 c) { return vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z); }
 void main() {
     vec3 cur = texture(uCur, vUV).rgb;
+    if (any(isnan(cur)) || any(isinf(cur))) cur = vec3(0.0); // un valor inválido no debe quedarse en la historia
     if (uReset == 1) { outColor = vec4(cur, 1.0); return; }
     vec3 m1 = vec3(0.0), m2 = vec3(0.0);
     float d = 1.0;
@@ -331,6 +343,7 @@ void main() {
     vec2 puv = pc.xy / pc.w * 0.5 + 0.5;
     if (pc.w <= 0.0 || puv.x < 0.0 || puv.y < 0.0 || puv.x > 1.0 || puv.y > 1.0) { outColor = vec4(cur, 1.0); return; }
     vec3 hist = clamp(toYCoCg(texture(uHist, puv).rgb), mean - sd * 1.25, mean + sd * 1.25);
+    if (any(isnan(hist))) hist = toYCoCg(cur);
     // Más peso al presente cuando la imagen se desplaza mucho (menos desenfoque al mover la cámara).
     float moved = length((vUV - puv) / uTexel);
     float a = mix(0.1, 0.25, clamp(moved / 16.0, 0.0, 1.0));

@@ -310,6 +310,7 @@ void runGraph(vec3 n, vec3 v) {
         else if (op == 15) r = vec4(A.xy + uTime * k.xy, 0.0, 1.0);
         else if (op == 16) r = vec4(mod(floor(A.x * k.x) + floor(A.y * k.x), 2.0));
         else if (op == 17) r = clamp(A, 0.0, 1.0);
+        else if (op == 18) { int c = int(k.x + 0.5); r = vec4(c == 0 ? A.x : c == 1 ? A.y : c == 2 ? A.z : A.w); }
         R_[int(h.y + 0.5)] = r;
     }
 }
