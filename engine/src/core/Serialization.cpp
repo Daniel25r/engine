@@ -440,6 +440,11 @@ ComponentRegistry ComponentRegistry::createDefault() {
             Json j{{"clip", a.clip}, {"playing", a.playing}, {"loop", a.loop}, {"speed", toJson(a.speed)},
                    {"fadeDuration", toJson(a.fadeDuration)}};
             if (!a.machine.empty()) j["machine"] = machineToJson(a.machine);
+            if (!a.animationSources.empty()) {
+                Json src = Json::array();
+                for (AssetRef r : a.animationSources) src.push_back(assetToJson(r));
+                j["animationSources"] = src;
+            }
             return j;
         },
         [](Animator& a, FieldReader& rd) {
@@ -451,6 +456,14 @@ ComponentRegistry ComponentRegistry::createDefault() {
             std::string raw;
             rd.readRaw("machine", raw);
             if (!raw.empty()) machineFromJson(Json::parse(raw, nullptr, false), a.machine);
+            std::string src;
+            rd.readRaw("animationSources", src);
+            const Json js = src.empty() ? Json() : Json::parse(src, nullptr, false);
+            if (js.is_array())
+                for (const Json& v : js) {
+                    UUID id;
+                    if (v.is_string() && UUID::parse(v.get<std::string>(), id)) a.animationSources.push_back(id);
+                }
         });
 
     r.addSimple<AudioSource>(

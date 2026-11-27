@@ -250,6 +250,9 @@ struct AnimStateMachine {
 
 struct Animator {
     std::string clip;      // nombre del clip ("Walk", "Run"...); vacío = el primero
+    // Modelos (o bibliotecas de animación sin malla, p. ej. de Mixamo "Without Skin") cuyos clips se añaden a este
+    // modelo, emparejando los huesos por nombre.
+    std::vector<AssetRef> animationSources;
     bool playing = true;
     bool loop = true;
     float speed = 1.0f;

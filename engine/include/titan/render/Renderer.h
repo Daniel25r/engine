@@ -7,6 +7,7 @@
 //   beginFrame(viewport) → setCamera → setLights → drawMesh... → drawSprite... → drawLine... → drawText... → endFrame
 // Las mallas se dibujan al llamar; sprites, líneas y texto se acumulan y se vuelcan en endFrame.
 #include <chrono>
+#include <set>
 
 #include "titan/core/MaterialGraph.h"
 #include <cstdint>
@@ -191,6 +192,9 @@ public:
     std::string modelAnimationName(int model, int anim) const;
     float modelAnimationDuration(int model, int anim) const;
     int modelAnimationIndex(int model, const std::string& name) const; // -1 si no existe; "" = la primera
+    // Añade a "target" los clips de "source" cuyos huesos coinciden por nombre (animaciones de Mixamo descargadas
+    // aparte). Cada pareja se aplica una sola vez; devuelve cuántos clips se añadieron.
+    int addAnimationsFrom(int target, int source);
     bool modelHasSkin(int model) const;
     // Calcula las matrices de los huesos del primer esqueleto del modelo en el instante "time".
     bool computePose(int model, int anim, float time, bool loop, std::vector<Mat4>& joints) const;
@@ -290,6 +294,7 @@ private:
         int firstIndex = 0;                     // primer índice (niveles de detalle)
     };
     struct AnimNode {
+        std::string name; // para pasar animaciones entre modelos con el mismo esqueleto (Mixamo)
         int parent = -1;
         Vec3 t;
         Quat r;
@@ -403,6 +408,7 @@ private:
     bool probeOn_ = false, forceDirect_ = false;
     float probeIntensity_ = 1.0f;
     bool lodEnabled_ = true;
+    std::set<std::pair<int, int>> mergedAnimations_;
     int chooseLod(const Model& m, const ModelPart& p, const Mat4& world) const;
     // TAA: proyección desplazada una fracción de píxel cada fotograma; la cámara del fotograma anterior reproyecta.
     bool taaRequested_ = false, taaActive_ = false, prevValid_ = false;

@@ -109,6 +109,13 @@ bool loadFbx(const std::string& path, MeshBuild& out, ImportReport* report, std:
         if (moves)
             for (const ufbx_node* a = node; a && !a->is_root; a = a->parent) boneSet.insert(a);
     }
+    // FBX solo de animación (Mixamo "Without Skin"): no hay pieles; el esqueleto son los nodos hueso o animados.
+    if (scene->meshes.count == 0)
+        for (size_t ni = 0; ni < scene->nodes.count; ++ni) {
+            const ufbx_node* n = scene->nodes.data[ni];
+            if (n->is_root || !(n->bone || animated.count(n))) continue;
+            for (const ufbx_node* a = n; a && !a->is_root; a = a->parent) boneSet.insert(a);
+        }
     std::map<const ufbx_node*, int> boneIndex;
     std::vector<const ufbx_node*> boneNodes;
     std::vector<std::pair<const ufbx_node*, int>> stack{{scene->root_node, -1}};
@@ -227,9 +234,9 @@ bool loadFbx(const std::string& path, MeshBuild& out, ImportReport* report, std:
     }
     out.parts.erase(std::remove_if(out.parts.begin(), out.parts.end(), [](const MeshBuildPart& p) { return p.indices.empty(); }),
                     out.parts.end());
-    if (out.parts.empty()) {
-        if (error) *error = scene->anim_stacks.count ? "el FBX solo trae animación, sin malla (en Mixamo descarga \"With Skin\")"
-                                                     : "el FBX no tiene mallas";
+    const bool animationOnly = out.parts.empty();
+    if (animationOnly && (out.bones.empty() || !scene->anim_stacks.count)) {
+        if (error) *error = "el FBX no tiene mallas ni animaciones";
         return false;
     }
 
@@ -275,6 +282,12 @@ bool loadFbx(const std::string& path, MeshBuild& out, ImportReport* report, std:
         }
         if (!clip.channels.empty()) out.clips.push_back(std::move(clip));
     }
+    if (animationOnly && out.clips.empty()) {
+        if (error) *error = "el FBX no tiene mallas y sus animaciones no mueven ningún hueso";
+        return false;
+    }
+    if (animationOnly && report)
+        report->warnings.push_back("solo animación: añádela a un personaje con el mismo esqueleto en su Animator (\"Animaciones de\")");
     return true;
 }
 

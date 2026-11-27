@@ -117,3 +117,16 @@ TEST("calidad: la sonda de reflexión se guarda con la escena") {
     const ReflectionProbe* r = b.world().get<ReflectionProbe>(b.findByName("Sonda"));
     CHECK(r && std::abs(r->intensity - 0.6f) < 1e-5f && r->resolution == 256);
 }
+
+TEST("animaciones: la lista \"Animaciones de\" del Animator se guarda") {
+    const ComponentRegistry reg = ComponentRegistry::createDefault();
+    Scene a("a");
+    Animator an;
+    an.clip = "Correr";
+    an.animationSources = {UUID{0x1234}, UUID{0xABCD}};
+    a.world().add<Animator>(a.createEntity("Personaje"), an);
+    Scene b("b");
+    CHECK(deserializeScene(serializeScene(a, reg), b, reg).ok());
+    const Animator* r = b.world().get<Animator>(b.findByName("Personaje"));
+    CHECK(r && r->animationSources.size() == 2 && r->animationSources[1].value == 0xABCD && r->clip == "Correr");
+}

@@ -2,6 +2,7 @@
 // Se leen todas las mallas de triángulos con su transformación de nodo ya aplicada, sus normales, UV,
 // materiales PBR (color, metálico, rugosidad, emisión, doble cara) y las texturas de color incrustadas.
 // También se leen los nodos, el primer esqueleto (skin) y los clips de animación para el skinning en la GPU.
+#include <map>
 #include <GLES3/gl3.h>
 
 #include <algorithm>
@@ -101,6 +102,7 @@ bool Renderer::buildModel(Model& m) {
     for (size_t i = 0; i < data->nodes_count; ++i) {
         const cgltf_node& n = data->nodes[i];
         AnimNode& an = m.nodes[i];
+        an.name = n.name ? n.name : "";
         an.parent = n.parent ? static_cast<int>(n.parent - data->nodes) : -1;
         if (n.has_matrix) {
             Mat4 mm;
@@ -342,6 +344,10 @@ bool Renderer::buildModel(Model& m) {
     }
     cgltf_free(data);
     if (m.parts.empty()) {
+        if (!m.clips.empty()) { // biblioteca de animaciones (esqueleto sin malla): sirve para otros modelos
+            TITAN_INFO("render", "'%s': %zu animaciones sin malla (para usar en otros modelos)", m.path.c_str(), m.clips.size());
+            return true;
+        }
         TITAN_ERROR("render", "'%s' no contiene mallas de triángulos", m.path.c_str());
         return false;
     }
@@ -366,6 +372,37 @@ bool Renderer::modelBounds(int model, Vec3& min, Vec3& max) const {
 
 int Renderer::modelTriangles(int model) const {
     return model < 0 || model >= static_cast<int>(models_.size()) ? 0 : models_[model].triangles;
+}
+
+int Renderer::addAnimationsFrom(int target, int source) {
+    if (target < 0 || source < 0 || target == source || target >= int(models_.size()) || source >= int(models_.size())) return 0;
+    if (!mergedAnimations_.insert({target, source}).second) return 0;
+    Model& dst = models_[size_t(target)];
+    const Model& src = models_[size_t(source)];
+    std::map<std::string, int> byName;
+    for (size_t i = 0; i < dst.nodes.size(); ++i)
+        if (!dst.nodes[i].name.empty()) byName.emplace(dst.nodes[i].name, int(i));
+    int added = 0;
+    for (const AnimClip& clip : src.clips) {
+        if (modelAnimationIndex(target, clip.name) >= 0 && !clip.name.empty()) continue; // ya tiene uno con ese nombre
+        AnimClip copy;
+        copy.name = clip.name;
+        copy.duration = clip.duration;
+        for (const AnimChannel& ch : clip.channels) {
+            if (ch.node < 0 || ch.node >= int(src.nodes.size())) continue;
+            auto it = byName.find(src.nodes[size_t(ch.node)].name);
+            if (it == byName.end()) continue; // hueso que este modelo no tiene
+            AnimChannel c = ch;
+            c.node = it->second;
+            copy.channels.push_back(std::move(c));
+        }
+        if (copy.channels.empty()) continue;
+        dst.clips.push_back(std::move(copy));
+        ++added;
+    }
+    if (added) TITAN_INFO("render", "%d animaciones de '%s' añadidas a '%s'", added, src.path.c_str(), dst.path.c_str());
+    else TITAN_WARN("render", "'%s' no comparte huesos con '%s': no se añadió ninguna animación", src.path.c_str(), dst.path.c_str());
+    return added;
 }
 
 // Nivel de detalle según lo que ocupa el modelo en pantalla: radio de su caja / distancia × escala de la proyección.

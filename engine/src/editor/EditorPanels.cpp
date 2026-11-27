@@ -1148,6 +1148,33 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         Animator& a = *w.get<Animator>(e);
         const MeshRenderer* mr = w.get<MeshRenderer>(e);
         const int model = mr ? editorModel(mr->model) : -1;
+        // Animaciones de otros archivos (Mixamo: personaje "With Skin" + animaciones "Without Skin").
+        for (size_t k = 0; k < a.animationSources.size(); ++k) {
+            ImGui::PushID(int(k) + 7000);
+            propLabel(k == 0 ? "Animaciones de" : "");
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28 * scale);
+            AssetRef r = a.animationSources[k];
+            if (assetCombo("##src", AssetType::Model, r) && r != a.animationSources[k]) {
+                pushUndo();
+                a.animationSources[k] = r;
+            }
+            ImGui::SameLine();
+            const bool remove = ImGui::SmallButton("x");
+            ImGui::PopID();
+            if (remove) {
+                pushUndo();
+                a.animationSources.erase(a.animationSources.begin() + long(k));
+                break;
+            }
+            if (model >= 0 && !r.isNull()) renderer.addAnimationsFrom(model, editorModel(r));
+        }
+        propLabel(a.animationSources.empty() ? "Animaciones de" : "");
+        if (ImGui::SmallButton("+ Añadir animaciones de otro modelo")) {
+            pushUndo();
+            a.animationSources.push_back({});
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("Usa los clips de otro archivo con el mismo esqueleto (p. ej. animaciones de Mixamo descargadas sin piel)");
         const int count = renderer.modelAnimationCount(model);
         propLabel("Clip");
         if (count == 0) {

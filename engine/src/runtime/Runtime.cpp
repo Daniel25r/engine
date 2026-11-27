@@ -320,6 +320,8 @@ void Runtime::frame(const Viewport& viewport) {
         w.each<Animator>([&](Entity e, Animator& a) {
             const MeshRenderer* mr = w.get<MeshRenderer>(e);
             const int model = mr && !mr->model.isNull() ? cache_->model(mr->model) : -1;
+            for (AssetRef src : a.animationSources) // animaciones de otros archivos (se añaden una sola vez)
+                if (model >= 0 && !src.isNull()) renderer_->addAnimationsFrom(model, cache_->model(src));
             updateAnimator(a, dt, [&](const std::string& c) {
                 return renderer_->modelAnimationDuration(model, renderer_->modelAnimationIndex(model, c));
             });

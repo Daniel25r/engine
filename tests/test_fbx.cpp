@@ -87,3 +87,35 @@ TEST("fbx: archivos dañados o sin malla dan un error claro") {
     CHECK(!loadFbx(std::string(TITAN_TEST_DATA_DIR) + "/tono440.mp3", m, nullptr, &err)); // no es un FBX
     CHECK(!err.empty());
 }
+
+TEST("animaciones: biblioteca sin malla (estilo Mixamo \"Without Skin\") es un GLB válido") {
+    MeshBuild lib;
+    MeshBuildBone hips;
+    hips.name = "mixamorig:Hips";
+    hips.restLocal = {0, 1, 0};
+    lib.bones.push_back(hips);
+    MeshBuildClip clip;
+    clip.name = "Correr";
+    MeshBuildChannel ch;
+    ch.bone = 0;
+    ch.path = 1;
+    ch.times = {0, 0.5f};
+    ch.values = {0, 0, 0, 1, 0, 0.3826834f, 0, 0.9238795f};
+    clip.channels.push_back(ch);
+    lib.clips.push_back(clip);
+    std::vector<uint8_t> glb;
+    std::string err;
+    CHECK(writeGlb(lib, glb, &err));
+    cgltf_options opt{};
+    cgltf_data* data = nullptr;
+    CHECK(cgltf_parse(&opt, glb.data(), glb.size(), &data) == cgltf_result_success);
+    if (data) {
+        CHECK_EQ(data->meshes_count, size_t(0));
+        CHECK_EQ(data->animations_count, size_t(1));
+        CHECK(data->nodes_count >= 2 && std::string(data->nodes[1].name) == "mixamorig:Hips");
+        CHECK(cgltf_validate(data) == cgltf_result_success);
+        cgltf_free(data);
+    }
+    MeshBuild empty; // sin malla ni animaciones: no se escribe
+    CHECK(!writeGlb(empty, glb, &err));
+}

@@ -24,7 +24,7 @@ Descomprime el zip y abre `titan_editor.exe`.
 | **Juego** | Scripts en Lua (con entorno aislado), acciones de entrada (teclado, mando, táctil), cámara en tercera persona, navegación e IA, partículas, animación esquelética con máquina de estados, interfaz de juego, partidas guardadas |
 | **Audio** | miniaudio con mezclador de buses y efectos (reverberación, eco, filtros, limitador...) |
 | **Editor** | Escena, jerarquía, inspector, gizmos, contenido, consola, botón Jugar. Modelado (extruir, inset, subdividir, simetría), escultura (6 pinceles), esqueleto automático y animación por claves |
-| **Importar** | FBX con esqueleto y animaciones (Mixamo, Maya, 3ds Max, Prisma 3D), glTF/GLB, OBJ, STL, PLY y .blend. Arrastra el archivo a la ventana del editor |
+| **Importar** | FBX con esqueleto y animaciones (Mixamo, Maya, 3ds Max, Prisma 3D; animaciones de Mixamo descargadas aparte se aplican al personaje), glTF/GLB, OBJ, STL, PLY y .blend. Arrastra el archivo a la ventana del editor |
 
 | Mundo de bloques | Editor |
 |---|---|

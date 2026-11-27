@@ -44,7 +44,8 @@ size_t append(std::vector<uint8_t>& bin, const T* data, size_t count) {
 } // namespace
 
 bool writeGlb(const MeshBuild& mesh, std::vector<uint8_t>& out, std::string* error) {
-    if (mesh.triangleCount() == 0) {
+    const bool animationOnly = mesh.triangleCount() == 0 && !mesh.bones.empty() && !mesh.clips.empty();
+    if (mesh.triangleCount() == 0 && !animationOnly) {
         if (error) *error = "la malla no tiene triángulos";
         return false;
     }
@@ -110,7 +111,7 @@ bool writeGlb(const MeshBuild& mesh, std::vector<uint8_t>& out, std::string* err
         primitives.push_back(Json{{"attributes", attributes}, {"indices", aIdx}, {"material", mat}, {"mode", 4}});
     }
     // Esqueleto: un nodo por hueso (después del nodo de la malla), skin con las matrices inversas de reposo.
-    Json nodes = Json::array({Json{{"mesh", 0}, {"name", "Malla"}}});
+    Json nodes = animationOnly ? Json::array({Json{{"name", "Raíz"}}}) : Json::array({Json{{"mesh", 0}, {"name", "Malla"}}});
     Json sceneNodes = Json::array({0});
     Json skins = Json::array(), animations = Json::array();
     if (!mesh.bones.empty()) {
@@ -140,8 +141,10 @@ bool writeGlb(const MeshBuild& mesh, std::vector<uint8_t>& out, std::string* err
                 parent["children"].push_back(int(b + 1));
             }
         const int aIbm = accessor(view(append(bin, ibm.data(), ibm.size()), ibm.size() * 4, 0), 5126, mesh.bones.size(), "MAT4");
-        skins.push_back(Json{{"joints", jointList}, {"inverseBindMatrices", aIbm}, {"skeleton", jointList[0]}});
-        nodes[0]["skin"] = 0;
+        if (!animationOnly) { // sin malla no hay piel: solo huesos y animaciones
+            skins.push_back(Json{{"joints", jointList}, {"inverseBindMatrices", aIbm}, {"skeleton", jointList[0]}});
+            nodes[0]["skin"] = 0;
+        }
         for (const MeshBuildClip& clip : mesh.clips) {
             Json samplers = Json::array(), channels = Json::array();
             for (const MeshBuildChannel& ch : clip.channels) {
@@ -166,11 +169,15 @@ bool writeGlb(const MeshBuild& mesh, std::vector<uint8_t>& out, std::string* err
               {"scene", 0},
               {"scenes", Json::array({Json{{"nodes", sceneNodes}}})},
               {"nodes", nodes},
-              {"meshes", Json::array({Json{{"primitives", primitives}}})},
+              {"meshes", animationOnly ? Json::array() : Json::array({Json{{"primitives", primitives}}})},
               {"materials", materials},
               {"buffers", Json::array({Json{{"byteLength", bin.size()}}})},
               {"bufferViews", bufferViews},
               {"accessors", accessors}};
+    if (animationOnly) { // glTF no admite listas vacías
+        gltf.erase("meshes");
+        if (materials.empty()) gltf.erase("materials");
+    }
     if (!skins.empty()) gltf["skins"] = skins;
     if (!animations.empty()) gltf["animations"] = animations;
     if (!images.empty()) {

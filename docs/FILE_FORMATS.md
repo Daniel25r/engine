@@ -68,6 +68,7 @@ Reglas comunes:
 | `MeshRenderer` | `mesh`, `model`, `material` (recurso .mat), `castShadows`, `visible` y los campos de material: `texture`, `color`, `metallic`, `roughness`, `emission`, `prototypeGrid`, `unlit`, `normalMap`, `normalStrength`, `clearcoat`, `clearcoatRoughness` (barniz), `graph` (material por nodos: `{"format": "titan-material-graph", "version": 1, "nextId", "nodes": [{"id", "type", "value" [4], "texture", "pos" [2], "inputs" [ids]}]}`), `metallicRoughnessMap`, `emissionMap`, `occlusionMap`, `tiling` [2], `offset` [2], `alphaClip`, `alphaCutoff`, `doubleSided` |
 | `Light` | `type` ("directional"/"point"/"spot"), `color`, `intensity`, `range`, `spotAngle`, `spotSoftness` |
 | `ReflectionProbe` | `intensity`, `resolution` (píxeles por cara) |
+| `Animator` (además) | `animationSources`: ids de modelos cuyos clips se añaden por nombre de hueso |
 | `Environment` | cielo, niebla, sombras y posprocesado: `bloom`, `bloomIntensity`, `bloomThreshold`, `vignette`, `contrast`, `saturation`, `temperature`, `ssao`, `ssaoIntensity`, `ssaoRadius` (oclusión en pantalla), `ssr`, `ssrIntensity` (reflejos en pantalla), `taa` (antialiasing temporal), `hdr` (escena en coma flotante), `autoExposure`, `adaptationSpeed`; si faltan, desactivados |
 | `Animator` | `clip`, `playing`, `loop`, `speed`, `fadeDuration`, `machine` (opcional: `params`, `states` con `blend` y `events`, `transitions` con `conditions`) |
 | `AudioSource` | `clip`, `volume`, `pitch`, `loop`, `playOnStart`, `spatial`, `minDistance`, `maxDistance` |
