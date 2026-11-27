@@ -185,6 +185,7 @@ void Editor::Impl::drawUI() {
     drawMenuBar();
     if (showMachineEditor) drawMachineEditor();
     if (soundCheckRunning || showDiagnostics) drawDiagnostics();
+    if (showMixer) drawMixer();
     const float menuH = ImGui::GetFrameHeight();
     const float rowH = ImGui::GetFrameHeight() + st.WindowPadding.y * 2;
     drawToolbar(ImVec2(0, menuH), ImVec2(W, rowH));
@@ -366,6 +367,7 @@ void Editor::Impl::drawMenuBar() {
         ImGui::MenuItem("Rejilla", nullptr, &showGrid);
         ImGui::MenuItem("Gizmos", nullptr, &showGizmos);
         ImGui::MenuItem("Interfaz del juego", nullptr, &showUI);
+        ImGui::MenuItem("Mezclador de audio", nullptr, &showMixer);
         if (ImGui::BeginMenu("Calidad gráfica")) {
             const QualityLevel rec = recommendedQuality(renderer.caps());
             for (QualityLevel l : {QualityLevel::VeryLow, QualityLevel::Low, QualityLevel::Medium, QualityLevel::High,
@@ -1229,6 +1231,19 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         dragF("Tono", a.pitch, 0.01f, 0.1f, 4, "%.2f");
         check("Repetir", a.loop);
         check("Al empezar", a.playOnStart);
+        propLabel("Bus");
+        if (mixerProject != project->root()) loadMixer();
+        if (ImGui::BeginCombo("##busaudio", a.bus.empty() ? "Master" : a.bus.c_str())) {
+            for (const AudioBusSettings& b : mixerLayout.buses)
+                if (ImGui::Selectable(b.name.c_str(), (a.bus.empty() ? "Master" : a.bus) == b.name)) {
+                    a.bus = b.name == "Master" ? std::string() : b.name;
+                    dirty = true;
+                }
+            if (ImGui::Selectable("Abrir el mezclador...")) showMixer = true;
+            ImGui::EndCombo();
+        }
+        if (!a.bus.empty() && mixerLayout.find(a.bus) < 0)
+            ImGui::TextColored(ImVec4(1, 0.6f, 0.3f, 1), "El bus '%s' no existe: sonará en Master", a.bus.c_str());
         check("Sonido 3D", a.spatial);
         if (a.spatial) {
             dragF("Distancia mín.", a.minDistance, 0.05f, 0.01f, 1000, "%.1f m");

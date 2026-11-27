@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "titan/audio/AudioBus.h"
 #include "titan/core/FileSource.h"
 #include "titan/core/Math.h"
 #include "titan/core/World.h"
@@ -21,6 +22,12 @@ struct PlayParams {
     float minDistance = 1.0f;
     float maxDistance = 30.0f;
     Entity owner; // la voz sigue a esta entidad (o se para si se destruye)
+    std::string bus;  // bus del mezclador ("" o desconocido = Master)
+};
+
+// Nivel de un bus en el último intervalo (para medidores): pico lineal por canal.
+struct AudioBusLevel {
+    float peakLeft = 0, peakRight = 0;
 };
 
 class AudioEngine {
@@ -60,6 +67,26 @@ public:
     std::string deviceInfo() const;
     // false si no hay salida real: sin dispositivo, o miniaudio usa su "dispositivo nulo" (no suena nada).
     bool hasRealOutput() const;
+
+    // ---- Mezclador (buses con efectos; ver AudioBus.h) ----
+    // Rehace los buses: las voces que suenan se paran. Sin llamarla solo existe Master, sin efectos.
+    void setBusLayout(const AudioBusLayout& layout);
+    // Estado actual (incluye los cambios hechos con las funciones de abajo).
+    AudioBusLayout busLayout() const;
+    bool hasBus(const std::string& bus) const;
+    bool setBusVolumeDb(const std::string& bus, float db);
+    bool setBusMute(const std::string& bus, bool mute);
+    bool setBusBypass(const std::string& bus, bool bypass);
+    // Añade un efecto al final de la cadena del bus; devuelve su índice (-1 si el bus no existe).
+    int addBusEffect(const std::string& bus, AudioEffectType type);
+    bool removeBusEffect(const std::string& bus, int index);
+    bool setBusEffectEnabled(const std::string& bus, int index, bool enabled);
+    bool setBusEffectParam(const std::string& bus, int index, const std::string& param, float value);
+    bool getBusEffectParam(const std::string& bus, int index, const std::string& param, float& value) const;
+    // Pico desde la última lectura (y lo pone a cero). false si el bus no existe.
+    bool readBusLevel(const std::string& bus, AudioBusLevel& out);
+    // Vacía colas de reverberación y eco de todos los buses (al cambiar de escena).
+    void resetBusEffects();
 
     struct Impl;
 

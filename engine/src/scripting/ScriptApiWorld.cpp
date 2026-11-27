@@ -388,6 +388,7 @@ int e_setDestination(lua_State* L) { // e:setDestination(x, y, z) o e:setDestina
     a.repathTimer = 0;
     return 0;
 }
+int e_setNavSpeed(lua_State* L) { agent(L, live(L, 1)).speed = std::max(0.0f, float(luaL_checknumber(L, 2))); return 0; }
 int e_stopNavigation(lua_State* L) {
     NavAgent& a = agent(L, live(L, 1));
     a.hasDestination = false;
@@ -484,7 +485,7 @@ int ai_distance(lua_State* L) {
 const luaL_Reg kAIGlobals[] = {{"canSee", ai_canSee}, {"distance", ai_distance}, {nullptr, nullptr}};
 
 const luaL_Reg kWorldEntityMethods[] = {
-    {"setDestination", e_setDestination}, {"stopNavigation", e_stopNavigation},
+    {"setDestination", e_setDestination}, {"stopNavigation", e_stopNavigation}, {"setNavSpeed", e_setNavSpeed},
     {"hasReachedDestination", e_hasReachedDestination}, {"hasPath", e_hasPath}, {"remainingDistance", e_remainingDistance},
     {"shakeCamera", e_shakeCamera}, {"setCameraTarget", e_setCameraTarget}, {"setCameraDistance", e_setCameraDistance},
     {"setCameraAngles", e_setCameraAngles},

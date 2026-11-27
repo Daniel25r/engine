@@ -104,6 +104,44 @@ en `third_party/` con su versión fijada, así la compilación no depende de la 
 | Alternativas | Oboe (solo Android, solo salida), OpenAL Soft (LGPL), FMOD/Wwise (comerciales) |
 | Motivo | Un archivo, sin dependencias, multiplataforma, licencia libre |
 
+### Código adaptado de Godot Engine (efectos de audio)
+| | |
+|---|---|
+| Función | Procesado de señal de los efectos del mezclador: reverberación, eco, filtros biquad, compresor, limitador y distorsión |
+| Licencia | MIT. Copyright (c) 2014-present Godot Engine contributors; Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur. Texto completo abajo |
+| Origen | `github.com/godotengine/godot` (rama `master`, versión 4.8-rc, copia de `github.com/Daniel25r/godot`), archivos `servers/audio/effects/reverb_filter.cpp`, `audio_effect_reverb.cpp`, `audio_effect_delay.cpp`, `audio_effect_filter.cpp`, `audio_effect_compressor.cpp`, `audio_effect_hard_limiter.cpp`, `audio_effect_distortion.cpp` y `servers/audio/audio_filter_sw.cpp` |
+| Dónde está | `engine/src/audio/AudioEffects.cpp` (la cabecera `AudioEffects.h` lleva el aviso de copyright) |
+| Qué se cambió | Sin `AudioServer`, `Ref<>` ni `ClassDB`: cada efecto es una clase con parámetros por nombre y rango; búferes estéreo intercalados en lugar de `AudioFrame`; `std::vector` en lugar de `memnew_arr`; frecuencia de muestreo pasada al crear el efecto. El cálculo de cada muestra es el del original. El filtro solo porta los modos paso bajo, paso alto y paso banda. El compresor no porta la entrada lateral (sidechain) |
+| Qué NO es de Godot | Los buses (`AudioEngine.cpp`, nodos de miniaudio), `AudioBus.cpp` (formato `audio_buses.json`), el mezclador del editor y la API de Lua |
+| Android | Sí: C++17 sin dependencias |
+| Coste | Solo cuando un bus tiene efectos. La reverberación usa 8 filtros peine + 4 pasa-todo por canal. Coste de CPU aún sin medir (pendiente: benchmark de efectos en PC y teléfono) |
+| Pruebas | `tests/test_audio_mixer.cpp`: miden la señal (atenuación de los filtros, cola de reverberación, tiempo y nivel del eco, techo del limitador, compresión y armónicos de la distorsión) |
+
+Licencia de Godot Engine (MIT):
+
+```
+Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md).
+Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ### Bibliotecas del sistema
 - Android: `libandroid`, `libEGL`, `libGLESv3`, `liblog` (NDK r26.3, API mínima 24) y `native_app_glue` del NDK (Apache 2.0).
 - Escritorio: GLFW 3.3 (zlib) y Mesa `libGLESv2` (MIT). Solo para desarrollo y pruebas; no van en el APK.

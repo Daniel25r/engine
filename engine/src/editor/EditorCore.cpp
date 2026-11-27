@@ -1111,6 +1111,7 @@ void Editor::showPanel(const std::string& name) {
     else if (name == "esculpir") m.terrainTool = 0;
     else if (name == "sonido") m.startSoundCheck();
     else if (name == "diagnostico") m.showDiagnostics = true;
+    else if (name == "mezclador") m.showMixer = true;
     else if (name == "pintar") m.terrainTool = 4;
     else if (name == "maquina" && !m.selected.isNull()) { m.machineEditorFor = m.selected; m.showMachineEditor = true; }
 }

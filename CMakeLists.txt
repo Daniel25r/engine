@@ -10,11 +10,28 @@ option(TITAN_BUILD_TOOLS "Compilar la herramienta de línea de comandos" ON)
 
 if(MSVC)
     set(TITAN_WARNINGS /W4)
+    # Los fuentes son UTF-8 (textos con acentos y eñes): sin /utf-8, MSVC los leería con la página de códigos local.
+    add_compile_options(/utf-8 /bigobj)
 else()
     set(TITAN_WARNINGS -Wall -Wextra -Wno-unused-parameter)
 endif()
 
+if(WIN32)
+    add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS) # windows.h no debe definir min/max
+endif()
+
 # ------------------------------------------------------------------ Dependencias
+
+# OpenGL ES 3.0: en Android y Linux lo da el sistema; en Windows, ANGLE (traduce GLES a Direct3D 11, lo mismo que
+# usan Chrome y Godot). Se instala con vcpkg (vcpkg.json); ver .github/workflows/build_windows.yml.
+if(WIN32 AND NOT ANDROID)
+    find_package(unofficial-angle CONFIG REQUIRED)
+    set(TITAN_GLES_LIBS unofficial::angle::libGLESv2 unofficial::angle::libEGL)
+elseif(ANDROID)
+    set(TITAN_GLES_LIBS GLESv3)
+else()
+    set(TITAN_GLES_LIBS GLESv2)
+endif()
 
 # Lua 5.4.7 (MIT). Ver docs/DEPENDENCIES.md
 file(GLOB LUA_SOURCES ${CMAKE_SOURCE_DIR}/third_party/lua/*.c)
@@ -58,7 +75,7 @@ endif()
 # ------------------------------------------------------------------ titan_scripting (Lua)
 
 add_library(titan_scripting STATIC engine/src/scripting/ScriptSystem.cpp engine/src/scripting/ScriptApiWorld.cpp)
-target_link_libraries(titan_scripting PUBLIC titan_core titan_lua)
+target_link_libraries(titan_scripting PUBLIC titan_core titan_lua titan_audio)
 target_compile_options(titan_scripting PRIVATE ${TITAN_WARNINGS} $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fexceptions>)
 
 # ------------------------------------------------------------------ Jolt Physics 5.2.0 (MIT) y titan_physics
@@ -76,7 +93,8 @@ target_compile_options(titan_physics PRIVATE ${TITAN_WARNINGS})
 
 # ------------------------------------------------------------------ titan_audio (miniaudio 0.11.21, dominio público / MIT-0)
 
-add_library(titan_audio STATIC engine/src/audio/AudioEngine.cpp engine/src/audio/SoundCheck.cpp)
+add_library(titan_audio STATIC engine/src/audio/AudioEngine.cpp engine/src/audio/SoundCheck.cpp
+    engine/src/audio/AudioEffects.cpp engine/src/audio/AudioBus.cpp)
 target_link_libraries(titan_audio PUBLIC titan_core)
 target_compile_options(titan_audio PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>)
 if(NOT WIN32)
@@ -101,11 +119,7 @@ add_library(titan_render STATIC
 target_include_directories(titan_render PRIVATE third_party/stb)
 target_link_libraries(titan_render PUBLIC titan_core titan_ui)
 target_compile_options(titan_render PRIVATE ${TITAN_WARNINGS})
-if(ANDROID)
-    target_link_libraries(titan_render PUBLIC GLESv3)
-else()
-    target_link_libraries(titan_render PUBLIC GLESv2)
-endif()
+target_link_libraries(titan_render PUBLIC ${TITAN_GLES_LIBS})
 
 # ------------------------------------------------------------------ titan_runtime (bucle + sistemas)
 
@@ -126,11 +140,7 @@ add_library(titan_imgui STATIC
 )
 target_include_directories(titan_imgui PUBLIC third_party/imgui)
 target_compile_definitions(titan_imgui PUBLIC IMGUI_IMPL_OPENGL_ES3 IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
-if(ANDROID)
-    target_link_libraries(titan_imgui PUBLIC GLESv3)
-else()
-    target_link_libraries(titan_imgui PUBLIC GLESv2)
-endif()
+target_link_libraries(titan_imgui PUBLIC ${TITAN_GLES_LIBS})
 
 # ------------------------------------------------------------------ titan_editor (el editor, común a Android y escritorio)
 
@@ -141,6 +151,7 @@ add_library(titan_editor STATIC
     engine/src/editor/EditorAnimation.cpp
     engine/src/editor/EditorTerrain.cpp
     engine/src/editor/EditorDiagnostics.cpp
+    engine/src/editor/EditorMixer.cpp
 )
 target_link_libraries(titan_editor PUBLIC titan_runtime titan_imgui titan_lua)
 target_include_directories(titan_editor PRIVATE third_party/stb)
@@ -172,8 +183,31 @@ else()
     target_link_libraries(titan_editor_desktop PRIVATE titan_editor glfw)
     target_compile_definitions(titan_editor_desktop PRIVATE TITAN_ENGINE_ASSETS="${CMAKE_SOURCE_DIR}/engine/assets")
 
+    # Windows: los .exe se distribuyen con "engine_assets" al lado (el programa la busca allí antes que en la ruta
+    # de compilación) y con las DLL de ANGLE y GLFW.
+    if(WIN32)
+        foreach(_exe titan_player titan_editor_desktop)
+            add_custom_command(TARGET ${_exe} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/engine/assets $<TARGET_FILE_DIR:${_exe}>/engine_assets)
+        endforeach()
+    endif()
+
     if(TITAN_BUILD_TOOLS)
-        add_executable(titan tools/titan/main.cpp tools/titan/Benchmark.cpp)
+        # Los scripts de la demo de plataformas son archivos .lua normales; se incrustan en la herramienta.
+        file(GLOB TITAN_DEMO_LUA CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/titan/demo/plataformas/*.lua)
+        set(_demo_inc "")
+        foreach(_lua ${TITAN_DEMO_LUA})
+            get_filename_component(_name ${_lua} NAME)
+            file(READ ${_lua} _code)
+            string(APPEND _demo_inc "{\"${_name}\", R\"TITANLUA(${_code})TITANLUA\"},\n")
+        endforeach()
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${TITAN_DEMO_LUA})
+        file(WRITE ${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc.tmp "${_demo_inc}")
+        configure_file(${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc.tmp
+                       ${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc COPYONLY)
+        add_executable(titan tools/titan/main.cpp tools/titan/Benchmark.cpp tools/titan/DemoPlatformer.cpp
+                             tools/titan/DemoSounds.cpp)
+        target_include_directories(titan PRIVATE ${CMAKE_BINARY_DIR}/generated tools/titan)
         target_link_libraries(titan PRIVATE titan_core titan_scripting titan_audio)
         target_compile_options(titan PRIVATE ${TITAN_WARNINGS})
     endif()
@@ -192,6 +226,7 @@ else()
             tests/test_geometry.cpp
             tests/test_physics.cpp
             tests/test_audio.cpp
+            tests/test_audio_mixer.cpp
             tests/test_ui.cpp
             tests/test_bounds.cpp
             tests/test_quality.cpp

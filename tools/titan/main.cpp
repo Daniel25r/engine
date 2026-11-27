@@ -37,6 +37,7 @@ int usage() {
         "  titan check <carpeta>                      validar escenas y referencias\n"
         "  titan package <carpeta> <salida>           generar el paquete de juego para el runtime\n"
         "  titan benchmark <carpeta>                  crear el proyecto de pruebas de rendimiento\n"
+        "  titan demo-plataformas <carpeta>           crear la demo de plataformas 3D (menú, nivel, victoria)\n"
         "  titan audiotest <archivo.wav>              grabar la prueba de sonido del motor en un WAV\n\n"
         "Opción: --scene <ruta dentro de assets/> para trabajar en otra escena.\n",
         kEngineName, kEngineVersion);
@@ -344,6 +345,7 @@ int cmdSet(Context& ctx, Entity e, const std::string& target, const std::vector<
 // Graba en un WAV lo que mezcla el motor de audio durante la prueba de sonido (tono, melodía y pasos 3D).
 // Sirve para escuchar el resultado en cualquier aparato aunque el ordenador que lo genera no tenga altavoces.
 int cmdBenchmark(const std::string& dir); // Benchmark.cpp
+int cmdDemoPlatformer(const std::string& dir); // DemoPlatformer.cpp
 
 int cmdAudioTest(const std::string& outPath) {
     MemoryFileSource files;
@@ -406,6 +408,7 @@ int main(int argc, char** argv) {
 
     if (cmd == "audiotest") return cmdAudioTest(dir); // aquí "dir" es el archivo WAV de salida
     if (cmd == "benchmark") return cmdBenchmark(dir);
+    if (cmd == "demo-plataformas") return cmdDemoPlatformer(dir);
 
     if (cmd == "new") {
         if (args.size() < 3) return usage();

@@ -268,6 +268,7 @@ struct AudioSource {
     bool spatial = false;    // 3D: suena desde la posición de la entidad y se atenúa con la distancia
     float minDistance = 1.0f;
     float maxDistance = 30.0f;
+    std::string bus;         // bus del mezclador (vacío = Master); ver assets/audio_buses.json
 };
 
 // ---- Física (mismos conceptos que Rigidbody/Collider de Unity) ----

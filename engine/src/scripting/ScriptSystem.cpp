@@ -9,6 +9,7 @@
 #include "lauxlib.h"
 #include "lua.h"
 #include "lualib.h"
+#include "titan/audio/AudioEngine.h"
 #include "titan/core/FileIO.h"
 #include "titan/core/Log.h"
 #include "ScriptInternal.h"
@@ -235,8 +236,22 @@ int e_addForce(lua_State* L) { const Entity e = body(L); physics(L).addForce(e, 
 int e_addImpulse(lua_State* L) { const Entity e = body(L); physics(L).addForce(e, check3(L, 2, {}), true); return 0; }
 int e_addTorque(lua_State* L) { const Entity e = body(L); physics(L).addTorque(e, check3(L, 2, {})); return 0; }
 int e_setVelocity(lua_State* L) { const Entity e = body(L); physics(L).setVelocity(e, check3(L, 2, {})); return 0; }
-int e_getVelocity(lua_State* L) { const Entity e = body(L); return push3(L, physics(L).velocity(e)); }
-int e_teleport(lua_State* L) { const Entity e = body(L); physics(L).teleport(e, check3(L, 2, {})); return 0; }
+// Velocidad y teletransporte valen también para un CharacterController (no tiene cuerpo, pero sí velocidad).
+Entity bodyOrCharacter(lua_State* L) {
+    const Entity e = live(L, 1);
+    if (!physics(L).hasBody(e) && !scene(L).world().has<CharacterController>(e))
+        luaL_error(L, "'%s' no tiene cuerpo físico (añade Collider y Rigidbody, o CharacterController)", scene(L).info(e).name.c_str());
+    return e;
+}
+int e_getVelocity(lua_State* L) { const Entity e = bodyOrCharacter(L); return push3(L, physics(L).velocity(e)); }
+int e_teleport(lua_State* L) {
+    const Entity e = bodyOrCharacter(L);
+    const Vec3 p = check3(L, 2, {});
+    // Un personaje sigue a su Transform: se mueve también, y la física anula la velocidad vertical.
+    if (scene(L).world().has<CharacterController>(e)) scene(L).transform(e).setPosition(p);
+    physics(L).teleport(e, p);
+    return 0;
+}
 
 Animator& animator(lua_State* L, Entity e) {
     World& w = scene(L).world();
@@ -267,7 +282,7 @@ int e_setAnimationSpeed(lua_State* L) { animator(L, live(L, 1)).speed = static_c
 int e_playSound(lua_State* L) {
     const Entity e = live(L, 1);
     if (lua_isnoneornil(L, 2)) sys(L).host().scriptPlayEntitySound(e); // su AudioSource
-    else sys(L).host().scriptPlaySound(luaL_checkstring(L, 2), e, true, {}, float(luaL_optnumber(L, 3, 1)));
+    else sys(L).host().scriptPlaySound(luaL_checkstring(L, 2), e, true, {}, float(luaL_optnumber(L, 3, 1)), luaL_optstring(L, 4, ""));
     return 0;
 }
 int e_stopSound(lua_State* L) { sys(L).host().scriptStopSound(live(L, 1)); return 0; }
@@ -425,17 +440,100 @@ int p_setGravity(lua_State* L) { physics(L).setGravity(check3(L, 1, {})); return
 int p_getGravity(lua_State* L) { return push3(L, physics(L).gravity()); }
 const luaL_Reg kPhysicsGlobals[] = {{"raycast", p_raycast}, {"setGravity", p_setGravity}, {"getGravity", p_getGravity}, {nullptr, nullptr}};
 
-int a_play(lua_State* L) {
-    lua_pushboolean(L, sys(L).host().scriptPlaySound(luaL_checkstring(L, 1), {}, false, {}, float(luaL_optnumber(L, 2, 1))));
+int a_play(lua_State* L) { // Audio.play(sonido [, volumen [, bus]])
+    lua_pushboolean(L, sys(L).host().scriptPlaySound(luaL_checkstring(L, 1), {}, false, {}, float(luaL_optnumber(L, 2, 1)),
+                                                     luaL_optstring(L, 3, "")));
     return 1;
 }
-int a_playAt(lua_State* L) {
+int a_playAt(lua_State* L) { // Audio.playAt(sonido, x, y, z [, volumen [, bus]])
     const Vec3 p = check3(L, 2, {});
-    lua_pushboolean(L, sys(L).host().scriptPlaySound(luaL_checkstring(L, 1), {}, true, p, float(luaL_optnumber(L, 5, 1))));
+    lua_pushboolean(L, sys(L).host().scriptPlaySound(luaL_checkstring(L, 1), {}, true, p, float(luaL_optnumber(L, 5, 1)),
+                                                     luaL_optstring(L, 6, "")));
     return 1;
 }
 int a_setVolume(lua_State* L) { sys(L).host().scriptSetVolume(float(luaL_checknumber(L, 1))); return 0; }
-const luaL_Reg kAudioGlobals[] = {{"play", a_play}, {"playAt", a_playAt}, {"setVolume", a_setVolume}, {nullptr, nullptr}};
+
+// ---- Mezclador. Los efectos se numeran desde 1 en Lua.
+AudioEngine& mixer(lua_State* L) {
+    AudioEngine* a = sys(L).host().scriptAudio();
+    if (!a || !a->ready()) luaL_error(L, "Audio: no hay mezclador (el audio no se pudo iniciar)");
+    return *a;
+}
+const char* busArg(lua_State* L, int idx) {
+    const char* name = luaL_checkstring(L, idx);
+    if (!mixer(L).hasBus(name)) luaL_error(L, "Audio: no existe el bus '%s' (ver assets/audio_buses.json)", name);
+    return name;
+}
+int effectArg(lua_State* L, int idx) { return int(luaL_checkinteger(L, idx)) - 1; }
+int a_buses(lua_State* L) {
+    const AudioBusLayout l = mixer(L).busLayout();
+    lua_createtable(L, int(l.buses.size()), 0);
+    for (size_t i = 0; i < l.buses.size(); ++i) {
+        lua_pushstring(L, l.buses[i].name.c_str());
+        lua_rawseti(L, -2, lua_Integer(i + 1));
+    }
+    return 1;
+}
+int a_setBusVolume(lua_State* L) { mixer(L).setBusVolumeDb(busArg(L, 1), float(luaL_checknumber(L, 2))); return 0; }
+int a_getBusVolume(lua_State* L) {
+    const AudioBusLayout l = mixer(L).busLayout();
+    lua_pushnumber(L, l.buses[size_t(l.find(busArg(L, 1)))].volumeDb);
+    return 1;
+}
+int a_setBusMute(lua_State* L) { mixer(L).setBusMute(busArg(L, 1), lua_toboolean(L, 2)); return 0; }
+int a_setBusBypass(lua_State* L) { mixer(L).setBusBypass(busArg(L, 1), lua_toboolean(L, 2)); return 0; }
+// Audio.addEffect(bus, "reverb" [, {wet = 0.3, room_size = 0.9}]) → índice
+int a_addEffect(lua_State* L) {
+    const char* bus = busArg(L, 1);
+    AudioEffectType type;
+    if (!audioEffectFromName(luaL_checkstring(L, 2), type))
+        luaL_error(L, "Audio.addEffect: tipo '%s' desconocido (reverb, delay, lowpass, highpass, bandpass, compressor, "
+                      "limiter, distortion)", lua_tostring(L, 2));
+    const int index = mixer(L).addBusEffect(bus, type);
+    if (lua_istable(L, 3)) {
+        lua_pushnil(L);
+        while (lua_next(L, 3)) {
+            if (lua_type(L, -2) == LUA_TSTRING && lua_isnumber(L, -1) &&
+                !mixer(L).setBusEffectParam(bus, index, lua_tostring(L, -2), float(lua_tonumber(L, -1))))
+                luaL_error(L, "Audio.addEffect: el efecto %s no tiene el parámetro '%s'", audioEffectName(type), lua_tostring(L, -2));
+            lua_pop(L, 1);
+        }
+    }
+    lua_pushinteger(L, index + 1);
+    return 1;
+}
+int a_removeEffect(lua_State* L) { lua_pushboolean(L, mixer(L).removeBusEffect(busArg(L, 1), effectArg(L, 2))); return 1; }
+int a_setEffectEnabled(lua_State* L) {
+    lua_pushboolean(L, mixer(L).setBusEffectEnabled(busArg(L, 1), effectArg(L, 2), lua_toboolean(L, 3)));
+    return 1;
+}
+int a_setEffectParam(lua_State* L) {
+    const char* bus = busArg(L, 1);
+    if (!mixer(L).setBusEffectParam(bus, effectArg(L, 2), luaL_checkstring(L, 3), float(luaL_checknumber(L, 4))))
+        luaL_error(L, "Audio.setEffectParam: el bus '%s' no tiene efecto %d con el parámetro '%s'", bus, int(lua_tointeger(L, 2)),
+                   lua_tostring(L, 3));
+    return 0;
+}
+int a_getEffectParam(lua_State* L) {
+    float v = 0;
+    if (!mixer(L).getBusEffectParam(busArg(L, 1), effectArg(L, 2), luaL_checkstring(L, 3), v)) return 0; // nil
+    lua_pushnumber(L, v);
+    return 1;
+}
+int a_busLevel(lua_State* L) { // pico desde la última lectura, en dB (-80 = silencio), izquierda y derecha
+    AudioBusLevel lv;
+    mixer(L).readBusLevel(busArg(L, 1), lv);
+    auto db = [](float x) { return x > 1e-4f ? 20.0f * std::log10(x) : -80.0f; };
+    lua_pushnumber(L, db(lv.peakLeft));
+    lua_pushnumber(L, db(lv.peakRight));
+    return 2;
+}
+const luaL_Reg kAudioGlobals[] = {{"play", a_play}, {"playAt", a_playAt}, {"setVolume", a_setVolume},
+                                  {"buses", a_buses}, {"setBusVolume", a_setBusVolume}, {"getBusVolume", a_getBusVolume},
+                                  {"setBusMute", a_setBusMute}, {"setBusBypass", a_setBusBypass},
+                                  {"addEffect", a_addEffect}, {"removeEffect", a_removeEffect},
+                                  {"setEffectEnabled", a_setEffectEnabled}, {"setEffectParam", a_setEffectParam},
+                                  {"getEffectParam", a_getEffectParam}, {"busLevel", a_busLevel}, {nullptr, nullptr}};
 
 
 } // namespace

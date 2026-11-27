@@ -425,9 +425,11 @@ ComponentRegistry ComponentRegistry::createDefault() {
     r.addSimple<AudioSource>(
         "AudioSource",
         [](const AudioSource& a) {
-            return Json{{"clip", assetToJson(a.clip)}, {"volume", toJson(a.volume)}, {"pitch", toJson(a.pitch)},
-                        {"loop", a.loop}, {"playOnStart", a.playOnStart}, {"spatial", a.spatial},
-                        {"minDistance", toJson(a.minDistance)}, {"maxDistance", toJson(a.maxDistance)}};
+            Json j{{"clip", assetToJson(a.clip)}, {"volume", toJson(a.volume)}, {"pitch", toJson(a.pitch)},
+                   {"loop", a.loop}, {"playOnStart", a.playOnStart}, {"spatial", a.spatial},
+                   {"minDistance", toJson(a.minDistance)}, {"maxDistance", toJson(a.maxDistance)}};
+            if (!a.bus.empty()) j["bus"] = a.bus; // las escenas sin buses se guardan igual que antes
+            return j;
         },
         [](AudioSource& a, FieldReader& rd) {
             rd.readAsset("clip", a.clip);
@@ -438,6 +440,7 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("spatial", a.spatial);
             rd.read("minDistance", a.minDistance);
             rd.read("maxDistance", a.maxDistance);
+            rd.read("bus", a.bus);
         });
 
     r.addSimple<Terrain>(

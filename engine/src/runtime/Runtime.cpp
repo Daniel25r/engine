@@ -46,6 +46,7 @@ bool Runtime::initSystems(FileSource& files) {
     }
     if (cache_ == &ownCache_) cache_->bind(renderer_, &assets_, &files); // la del editor ya apunta a su proyecto
     audio_.init(files, true); // sin tarjeta de sonido el juego sigue funcionando en silencio
+    loadBusLayout(files);
     scripts_ = std::make_unique<ScriptSystem>(*this, registry_, [this](AssetRef id, std::string& name, std::string& src) {
         const AssetRecord* r = assets_.find(id);
         if (!r || r->type != AssetType::Script) return false;
@@ -55,6 +56,19 @@ bool Runtime::initSystems(FileSource& files) {
     started_ = true;
     last_ = Clock::now();
     return true;
+}
+
+// Mezclador del proyecto: assets/audio_buses.json (opcional; sin él solo existe Master).
+void Runtime::loadBusLayout(FileSource& files) {
+    std::string text, error;
+    if (!files.readText("assets/audio_buses.json", text)) return;
+    AudioBusLayout layout;
+    if (!AudioBusLayout::fromJson(text, layout, &error)) {
+        TITAN_ERROR("audio", "audio_buses.json: %s; se usa solo Master", error.c_str());
+        return;
+    }
+    audio_.setBusLayout(layout);
+    TITAN_INFO("audio", "Mezclador: %zu buses", layout.buses.size());
 }
 
 bool Runtime::start(FileSource& files) {
@@ -128,6 +142,7 @@ bool Runtime::activateScene(const std::string& text, const std::string& name) {
         audio_.stopOwner(ev.entity);
     });
     audio_.stopAll();
+    audio_.resetBusEffects(); // sin colas de reverberación o eco de la escena anterior
     scene_->world().each<AudioSource>([&](Entity e, AudioSource& a) {
         if (a.playOnStart && scene_->isActiveInHierarchy(e)) scriptPlayEntitySound(e);
     });
@@ -157,7 +172,8 @@ bool Runtime::scriptLoadScene(const std::string& nameOrPath) {
     return false;
 }
 
-bool Runtime::scriptPlaySound(const std::string& path, Entity owner, bool spatial, const Vec3& at, float volume) {
+bool Runtime::scriptPlaySound(const std::string& path, Entity owner, bool spatial, const Vec3& at, float volume,
+                              const std::string& bus) {
     std::string file = path;
     if (!assets_.findByPath(path)) {
         // Se admite también el nombre sin carpeta ni extensión: "disparo".
@@ -172,6 +188,7 @@ bool Runtime::scriptPlaySound(const std::string& path, Entity owner, bool spatia
     p.owner = owner;
     p.spatial = spatial;
     p.position = owner.isNull() ? at : scene_->computeWorldMatrix(owner).translation();
+    p.bus = bus;
     return audio_.play("assets/" + file, p) != 0;
 }
 
@@ -188,6 +205,7 @@ void Runtime::scriptPlayEntitySound(Entity e) {
     p.maxDistance = a->maxDistance;
     p.owner = e;
     p.position = scene_->computeWorldMatrix(e).translation();
+    p.bus = a->bus;
     audio_.play("assets/" + r->path, p);
 }
 

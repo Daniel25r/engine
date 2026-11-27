@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <chrono>
 // Estado interno del editor, compartido por EditorCore.cpp, EditorPanels.cpp y EditorViewport.cpp.
 #include <deque>
@@ -236,6 +237,15 @@ struct Editor::Impl {
     void startSoundCheck();
     void updateSoundCheck(float dt);
     void drawDiagnostics();
+    // Mezclador de audio (EditorMixer.cpp): edita assets/audio_buses.json; en Jugar, los cambios suenan al momento.
+    bool showMixer = false;
+    AudioBusLayout mixerLayout;
+    std::string mixerProject;              // proyecto del que se cargó mixerLayout
+    std::vector<std::array<float, 2>> mixerMeters; // nivel mostrado por bus (dB), con caída suave
+    void loadMixer();
+    void saveMixer();
+    void applyMixerLive(bool structural);
+    void drawMixer();
     // Herramientas de terreno (EditorTerrain.cpp)
     int terrainTool = -1;        // -1 ninguna; si no, SculptTool
     int terrainLayer = 1;

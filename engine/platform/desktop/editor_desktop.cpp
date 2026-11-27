@@ -7,6 +7,7 @@
 #define GLFW_INCLUDE_ES3
 #include <GLFW/glfw3.h>
 
+#include "EngineAssets.h"
 #include "GlfwInput.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -137,7 +138,7 @@ struct ScriptedTouch {
 int main(int argc, char** argv) {
     DesktopPlatform platform;
     platform.projects = (std::filesystem::current_path() / "TitanProyectos").generic_string();
-    platform.engine.root = TITAN_ENGINE_ASSETS;
+    platform.engine.root = titan::desktop::engineAssetsDir(argv[0], TITAN_ENGINE_ASSETS);
     std::string openPath, newName, panel, selectName, createKinds, scriptPath, screenshot;
     int templ = 2;
     long frames = 0;

@@ -85,7 +85,11 @@ public:
     void scriptDrawText(float x, float y, float size, const std::string& text, Color color) override;
     PhysicsApi* scriptPhysics() override { return &physics_; }
     Entity scriptInstantiate(const std::string& prefab, const Vec3& position) override;
-    bool scriptPlaySound(const std::string& path, Entity owner, bool spatial, const Vec3& at, float volume) override;
+    bool scriptPlaySound(const std::string& path, Entity owner, bool spatial, const Vec3& at, float volume,
+                         const std::string& bus) override;
+    AudioEngine* scriptAudio() override { return &audio_; }
+    // Mezclador del proyecto (assets/audio_buses.json); el editor lo vuelve a leer al pulsar Jugar.
+    void loadBusLayout(FileSource& files);
     void scriptPlayEntitySound(Entity e) override;
     void scriptStopSound(Entity e) override { audio_.stopOwner(e); }
     void scriptSetVolume(float v) override { audio_.setMasterVolume(v); }

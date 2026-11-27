@@ -5,8 +5,11 @@
 
 #include "titan/audio/AudioEngine.h"
 
+#include <atomic>
 #include <cmath>
+#include <cstring>
 #include <list>
+#include <mutex>
 #include <unordered_map>
 
 #include "titan/core/Log.h"
@@ -19,6 +22,61 @@ struct Clip {
     ma_uint64 frames = 0;
     ~Clip() { if (pcm) ma_free(pcm, nullptr); }
 };
+// ---- Bus del mezclador: un grupo de miniaudio (suma sus voces y sub-buses) seguido de un nodo propio que aplica la
+// cadena de efectos, el volumen y mide el nivel. Grupo → efectos → grupo del bus de destino (o altavoces).
+struct Bus;
+struct FxNode {
+    ma_node_base base; // debe ir primero (miniaudio trata el puntero como ma_node_base*)
+    Bus* bus = nullptr;
+};
+struct Bus {
+    AudioBusSettings settings;
+    ma_sound_group group{};
+    FxNode node{};
+    bool groupReady = false, nodeReady = false;
+    std::mutex mutex; // protege effects/enabled frente al hilo de audio
+    std::vector<std::unique_ptr<AudioEffect>> effects;
+    std::vector<char> enabled;
+    std::atomic<float> gain{1.0f};
+    std::atomic<bool> bypass{false};
+    std::atomic<float> peakL{0}, peakR{0};
+    void updateGain() { gain = settings.mute ? 0.0f : std::pow(10.0f, settings.volumeDb / 20.0f); }
+};
+
+void atomicMax(std::atomic<float>& a, float v) {
+    float cur = a.load(std::memory_order_relaxed);
+    while (v > cur && !a.compare_exchange_weak(cur, v, std::memory_order_relaxed)) {}
+}
+
+void fxProcess(ma_node* pNode, const float** ppIn, ma_uint32* pFrameCountIn, float** ppOut, ma_uint32* pFrameCountOut) {
+    Bus& b = *reinterpret_cast<FxNode*>(pNode)->bus;
+    const ma_uint32 n = *pFrameCountOut;
+    float* out = ppOut[0];
+    const float* in = ppIn ? ppIn[0] : nullptr;
+    const ma_uint32 avail = (in && pFrameCountIn) ? std::min(*pFrameCountIn, n) : 0;
+    if (avail > 0 && out != in) std::memmove(out, in, size_t(avail) * 2 * sizeof(float));
+    if (avail < n) std::memset(out + size_t(avail) * 2, 0, size_t(n - avail) * 2 * sizeof(float));
+    if (!b.bypass.load(std::memory_order_relaxed)) {
+        std::lock_guard<std::mutex> lock(b.mutex);
+        for (size_t i = 0; i < b.effects.size(); ++i)
+            if (b.enabled[i]) b.effects[i]->process(out, out, int(n));
+    }
+    const float g = b.gain.load(std::memory_order_relaxed);
+    float pl = 0, pr = 0;
+    for (ma_uint32 i = 0; i < n; ++i) {
+        out[i * 2] *= g;
+        out[i * 2 + 1] *= g;
+        pl = std::max(pl, std::fabs(out[i * 2]));
+        pr = std::max(pr, std::fabs(out[i * 2 + 1]));
+    }
+    atomicMax(b.peakL, pl);
+    atomicMax(b.peakR, pr);
+    if (pFrameCountIn) *pFrameCountIn = avail;
+}
+
+ma_node_vtable gFxVtable = {fxProcess, nullptr, 1, 1,
+                            MA_NODE_FLAG_CONTINUOUS_PROCESSING | MA_NODE_FLAG_ALLOW_NULL_INPUT};
+
 struct Voice {
     uint32_t id = 0;
     ma_audio_buffer_ref buffer;
@@ -35,6 +93,68 @@ struct AudioEngine::Impl {
     std::unordered_map<std::string, std::unique_ptr<Clip>> clips;
     std::list<Voice> voices; // lista: las direcciones de ma_sound no deben moverse
     uint32_t nextId = 1;
+    std::list<Bus> buses;    // lista: los nodos de miniaudio no deben moverse; el primero es Master
+
+    Bus* bus(const std::string& name) {
+        for (Bus& b : buses)
+            if (b.settings.name == name) return &b;
+        return nullptr;
+    }
+    void destroyBuses() {
+        // Primero los grupos (se desconectan sus entradas), luego los nodos de efectos.
+        for (Bus& b : buses)
+            if (b.groupReady) ma_sound_group_uninit(&b.group);
+        for (Bus& b : buses)
+            if (b.nodeReady) ma_node_uninit(&b.node, nullptr);
+        buses.clear();
+    }
+    void configureEffect(Bus& b, const AudioBusEffectSettings& fx) {
+        auto e = AudioEffect::create(fx.type, float(ma_engine_get_sample_rate(&engine)));
+        for (const auto& [k, v] : fx.params)
+            if (!e->setParam(k, v))
+                TITAN_WARN("audio", "Bus '%s': el efecto %s no tiene el parámetro '%s'", b.settings.name.c_str(),
+                           audioEffectName(fx.type), k.c_str());
+        b.effects.push_back(std::move(e));
+        b.enabled.push_back(fx.enabled ? 1 : 0);
+    }
+    bool buildBuses(AudioBusLayout layout) {
+        destroyBuses();
+        layout.normalize();
+        ma_uint32 channels = 2;
+        for (const AudioBusSettings& s : layout.buses) {
+            buses.emplace_back();
+            Bus& b = buses.back();
+            b.settings = s;
+            b.settings.effects.clear(); // la verdad está en b.effects; busLayout() la reconstruye
+            b.node.bus = &b;
+            if (ma_sound_group_init(&engine, 0, nullptr, &b.group) != MA_SUCCESS) {
+                TITAN_ERROR("audio", "No se pudo crear el bus '%s'", s.name.c_str());
+                destroyBuses();
+                return false;
+            }
+            b.groupReady = true;
+            ma_node_config cfg = ma_node_config_init();
+            cfg.vtable = &gFxVtable;
+            cfg.pInputChannels = &channels;
+            cfg.pOutputChannels = &channels;
+            if (ma_node_init(ma_engine_get_node_graph(&engine), &cfg, nullptr, &b.node) != MA_SUCCESS) {
+                TITAN_ERROR("audio", "No se pudo crear la cadena de efectos del bus '%s'", s.name.c_str());
+                destroyBuses();
+                return false;
+            }
+            b.nodeReady = true;
+            ma_node_attach_output_bus(&b.group, 0, &b.node, 0);
+            for (const AudioBusEffectSettings& fx : s.effects) configureEffect(b, fx);
+            b.bypass = s.bypassEffects;
+            b.updateGain();
+        }
+        for (Bus& b : buses) {
+            Bus* dest = &b == &buses.front() ? nullptr : bus(b.settings.send);
+            ma_node_attach_output_bus(&b.node, 0, dest ? static_cast<ma_node*>(&dest->group)
+                                                       : static_cast<ma_node*>(ma_engine_get_endpoint(&engine)), 0);
+        }
+        return true;
+    }
 
     Clip* load(const std::string& path) {
         auto it = clips.find(path);
@@ -90,6 +210,7 @@ bool AudioEngine::init(FileSource& files, bool withDevice) {
         return false;
     }
     impl_->initialized = true;
+    impl_->buildBuses(AudioBusLayout{}); // solo Master, sin efectos: suena igual que antes de los buses
     if (withDevice) {
         TITAN_INFO("audio", "Audio listo: %s", deviceInfo().c_str());
         if (!hasRealOutput())
@@ -102,6 +223,7 @@ bool AudioEngine::init(FileSource& files, bool withDevice) {
 void AudioEngine::shutdown() {
     if (!impl_->initialized) return;
     stopAll();
+    impl_->destroyBuses();
     ma_engine_uninit(&impl_->engine);
     impl_->clips.clear();
     impl_->initialized = false;
@@ -125,8 +247,13 @@ uint32_t AudioEngine::play(const std::string& path, const PlayParams& p) {
     // El clip ya está a la frecuencia del motor; se dice explícitamente (miniaudio 0.11 lo deja a 0 y entonces
     // supone la del motor, que es lo mismo, pero no queremos depender de ese detalle).
     v.buffer.sampleRate = ma_engine_get_sample_rate(&impl_->engine);
-    if (ma_sound_init_from_data_source(&impl_->engine, &v.buffer, p.spatial ? 0 : MA_SOUND_FLAG_NO_SPATIALIZATION, nullptr,
-                                       &v.sound) != MA_SUCCESS) {
+    Bus* bus = p.bus.empty() ? nullptr : impl_->bus(p.bus);
+    if (!bus) {
+        if (!p.bus.empty()) TITAN_WARN("audio", "El bus '%s' no existe: el sonido va a Master", p.bus.c_str());
+        bus = impl_->buses.empty() ? nullptr : &impl_->buses.front();
+    }
+    if (ma_sound_init_from_data_source(&impl_->engine, &v.buffer, p.spatial ? 0 : MA_SOUND_FLAG_NO_SPATIALIZATION,
+                                       bus ? &bus->group : nullptr, &v.sound) != MA_SUCCESS) {
         ma_audio_buffer_ref_uninit(&v.buffer);
         impl_->voices.pop_back();
         return 0;
@@ -239,6 +366,119 @@ std::string AudioEngine::deviceInfo() const {
     std::snprintf(buf, sizeof(buf), "%s, salida '%s', %u Hz, %u canales, volumen %.2f", ma_get_backend_name(d->pContext->backend),
                   d->playback.name, d->sampleRate, d->playback.channels, ma_engine_get_volume(e));
     return buf;
+}
+
+// ---------------------------------------------------------------- mezclador
+void AudioEngine::setBusLayout(const AudioBusLayout& layout) {
+    if (!impl_->initialized) return;
+    stopAll();
+    if (!impl_->buildBuses(layout)) impl_->buildBuses(AudioBusLayout{});
+}
+
+AudioBusLayout AudioEngine::busLayout() const {
+    AudioBusLayout l;
+    for (Bus& b : impl_->buses) {
+        AudioBusSettings s = b.settings;
+        std::lock_guard<std::mutex> lock(b.mutex);
+        for (size_t i = 0; i < b.effects.size(); ++i) {
+            AudioBusEffectSettings fx;
+            fx.type = b.effects[i]->type();
+            fx.enabled = b.enabled[i] != 0;
+            const auto& info = b.effects[i]->params();
+            for (size_t k = 0; k < info.size(); ++k)
+                if (b.effects[i]->values()[k] != info[k].defaultValue) fx.params.emplace_back(info[k].name, b.effects[i]->values()[k]);
+            s.effects.push_back(fx);
+        }
+        l.buses.push_back(s);
+    }
+    if (l.buses.empty()) l.normalize();
+    return l;
+}
+
+bool AudioEngine::hasBus(const std::string& name) const { return impl_->bus(name) != nullptr; }
+
+bool AudioEngine::setBusVolumeDb(const std::string& name, float db) {
+    Bus* b = impl_->bus(name);
+    if (!b) return false;
+    b->settings.volumeDb = std::clamp(db, -80.0f, 24.0f);
+    b->updateGain();
+    return true;
+}
+
+bool AudioEngine::setBusMute(const std::string& name, bool mute) {
+    Bus* b = impl_->bus(name);
+    if (!b) return false;
+    b->settings.mute = mute;
+    b->updateGain();
+    return true;
+}
+
+bool AudioEngine::setBusBypass(const std::string& name, bool bypass) {
+    Bus* b = impl_->bus(name);
+    if (!b) return false;
+    b->settings.bypassEffects = bypass;
+    b->bypass = bypass;
+    return true;
+}
+
+int AudioEngine::addBusEffect(const std::string& name, AudioEffectType type) {
+    Bus* b = impl_->bus(name);
+    if (!b) return -1;
+    AudioBusEffectSettings fx;
+    fx.type = type;
+    auto e = AudioEffect::create(type, float(sampleRate()));
+    std::lock_guard<std::mutex> lock(b->mutex);
+    b->effects.push_back(std::move(e));
+    b->enabled.push_back(1);
+    return int(b->effects.size()) - 1;
+}
+
+bool AudioEngine::removeBusEffect(const std::string& name, int index) {
+    Bus* b = impl_->bus(name);
+    if (!b || index < 0) return false;
+    std::lock_guard<std::mutex> lock(b->mutex);
+    if (size_t(index) >= b->effects.size()) return false;
+    b->effects.erase(b->effects.begin() + index);
+    b->enabled.erase(b->enabled.begin() + index);
+    return true;
+}
+
+bool AudioEngine::setBusEffectEnabled(const std::string& name, int index, bool enabled) {
+    Bus* b = impl_->bus(name);
+    if (!b || index < 0) return false;
+    std::lock_guard<std::mutex> lock(b->mutex);
+    if (size_t(index) >= b->effects.size()) return false;
+    b->enabled[size_t(index)] = enabled ? 1 : 0;
+    return true;
+}
+
+bool AudioEngine::setBusEffectParam(const std::string& name, int index, const std::string& param, float value) {
+    Bus* b = impl_->bus(name);
+    if (!b || index < 0) return false;
+    std::lock_guard<std::mutex> lock(b->mutex);
+    return size_t(index) < b->effects.size() && b->effects[size_t(index)]->setParam(param, value);
+}
+
+bool AudioEngine::getBusEffectParam(const std::string& name, int index, const std::string& param, float& value) const {
+    Bus* b = impl_->bus(name);
+    if (!b || index < 0) return false;
+    std::lock_guard<std::mutex> lock(b->mutex);
+    return size_t(index) < b->effects.size() && b->effects[size_t(index)]->getParam(param, value);
+}
+
+bool AudioEngine::readBusLevel(const std::string& name, AudioBusLevel& out) {
+    Bus* b = impl_->bus(name);
+    if (!b) return false;
+    out.peakLeft = b->peakL.exchange(0);
+    out.peakRight = b->peakR.exchange(0);
+    return true;
+}
+
+void AudioEngine::resetBusEffects() {
+    for (Bus& b : impl_->buses) {
+        std::lock_guard<std::mutex> lock(b.mutex);
+        for (auto& e : b.effects) e->reset();
+    }
 }
 
 float AudioEngine::renderForTest(int frames) {

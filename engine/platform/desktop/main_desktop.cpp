@@ -11,6 +11,7 @@
 #define GLFW_INCLUDE_ES3
 #include <GLFW/glfw3.h>
 
+#include "EngineAssets.h"
 #include "GlfwInput.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -107,7 +108,7 @@ int main(int argc, char** argv) {
     glfwSwapInterval(1);
 
     FolderSource files;
-    files.roots = {argv[1], TITAN_ENGINE_ASSETS};
+    files.roots = {argv[1], titan::desktop::engineAssetsDir(argv[0], TITAN_ENGINE_ASSETS)};
 
     int exitCode = 0;
     {

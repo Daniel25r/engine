@@ -51,7 +51,9 @@ public:
     // Crea una instancia de un prefab (nombre o ruta) en la posición dada. Nula si no existe.
     virtual Entity scriptInstantiate(const std::string& prefab, const Vec3& position) { return {}; }
     // Sonido: path = recurso del proyecto ("sonidos/disparo.wav"); owner nulo = sonido suelto.
-    virtual bool scriptPlaySound(const std::string& path, Entity owner, bool spatial, const Vec3& at, float volume) { return false; }
+    virtual bool scriptPlaySound(const std::string& path, Entity owner, bool spatial, const Vec3& at, float volume,
+                                 const std::string& bus) { return false; }
+    virtual class AudioEngine* scriptAudio() { return nullptr; } // mezclador (Audio.setBusVolume...)
     virtual void scriptPlayEntitySound(Entity e) {}
     virtual void scriptStopSound(Entity e) {}
     virtual void scriptSetVolume(float v) {}
