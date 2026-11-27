@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "titan/core/FileIO.h"
+#include "titan/samples/Samples.h"
 #include "titan/core/Log.h"
 #include "titan/audio/SoundCheck.h"
 #include "titan/core/Project.h"
@@ -356,7 +357,15 @@ int cmdSet(Context& ctx, Entity e, const std::string& target, const std::vector<
 // Graba en un WAV lo que mezcla el motor de audio durante la prueba de sonido (tono, melodía y pasos 3D).
 // Sirve para escuchar el resultado en cualquier aparato aunque el ordenador que lo genera no tenga altavoces.
 int cmdBenchmark(const std::string& dir); // Benchmark.cpp
-int cmdDemoPlatformer(const std::string& dir); // DemoPlatformer.cpp
+int cmdDemoPlatformer(const std::string& dir) {
+    std::string err;
+    if (!createPlatformerSample(dir, "Isla Estelar", &err)) {
+        std::fprintf(stderr, "Error: %s\n", err.c_str());
+        return 1;
+    }
+    std::printf("Demo de plataformas creada en %s (menú, nivel y victoria). Ábrela en el editor y pulsa Jugar.\n", dir.c_str());
+    return 0;
+}
 
 int cmdAudioTest(const std::string& outPath) {
     MemoryFileSource files;

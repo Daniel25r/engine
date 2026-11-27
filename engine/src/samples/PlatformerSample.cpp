@@ -1,4 +1,4 @@
-// "titan demo-plataformas <carpeta>": crea un juego de plataformas 3D completo (menú, nivel y victoria) hecho solo con
+// Proyecto de ejemplo "Isla Estelar" (plantilla del editor y "titan demo-plataformas <carpeta>"): crea un juego de plataformas 3D completo (menú, nivel y victoria) hecho solo con
 // lo que trae el motor: primitivas, scripts Lua, sonidos sintetizados, física de personaje, cámara en tercera persona,
 // navegación, partículas, interfaz táctil y partida guardada. Los scripts están en tools/titan/demo/plataformas/.
 #include <cmath>
@@ -7,9 +7,11 @@
 #include <map>
 #include <string>
 
-#include "DemoSounds.h"
+#include "SampleSounds.h"
+#include "titan/samples/Samples.h"
 #include "titan/audio/AudioBus.h"
 #include "titan/core/FileIO.h"
+#include "titan/core/Log.h"
 #include "titan/core/Project.h"
 #include "titan/core/Serialization.h"
 
@@ -238,7 +240,7 @@ Entity perspectiveCamera(Scene& s, Vec3 pos, Vec3 euler) {
 bool save(Ctx& c, Scene& s, const std::string& name, UUID* id = nullptr) {
     const std::string path = "scenes/" + name + ".scene";
     if (c.project->saveScene(s, c.reg, path).isNull()) {
-        std::fprintf(stderr, "Error: no se pudo guardar %s\n", path.c_str());
+        TITAN_ERROR("samples", "No se pudo guardar %s", path.c_str());
         return false;
     }
     if (id) *id = c.project->assets().findByPath(path)->id;
@@ -508,25 +510,27 @@ bool buildVictory(Ctx& c) {
 
 } // namespace
 
-int cmdDemoPlatformer(const std::string& dir) {
+bool titan::createPlatformerSample(const std::string& dir, const std::string& name, std::string* error) {
+    auto fail = [&](const std::string& why) {
+        if (error) *error = why;
+        return false;
+    };
     std::string err;
-    auto p = Project::create(dir, "Isla Estelar", ProjectDimension::ThreeD, &err);
-    if (!p) {
-        std::fprintf(stderr, "Error: %s\n", err.c_str());
-        return 1;
-    }
+    auto p = Project::create(dir, name.empty() ? "Isla Estelar" : name, ProjectDimension::ThreeD, &err);
+    if (!p) return fail(err);
     Ctx c;
     c.project = p.get();
     std::filesystem::create_directories(p->assetsDir() + "/scripts");
     std::filesystem::create_directories(p->assetsDir() + "/sounds");
     for (const LuaFile& f : kScripts) {
         const std::string rel = std::string("scripts/") + f.name;
-        if (!fileio::writeAtomic(p->assetsDir() + "/" + rel, f.source, false)) return 1;
+        if (!fileio::writeAtomic(p->assetsDir() + "/" + rel, f.source, false)) return fail("no se pudo escribir " + rel);
         c.scripts[f.name] = p->assets().import(rel);
     }
-    for (const auto& [name, data] : demo::platformerSounds()) {
+    for (const auto& [name, data] : samples::platformerSounds()) {
         const std::string rel = "sounds/" + name + ".wav";
-        if (!fileio::writeAtomic(p->assetsDir() + "/" + rel, std::string(data.begin(), data.end()), false)) return 1;
+        if (!fileio::writeAtomic(p->assetsDir() + "/" + rel, std::string(data.begin(), data.end()), false))
+            return fail("no se pudo escribir " + rel);
         c.sounds[name] = p->assets().import(rel);
     }
     // Mezclador: música y efectos por separado (el menú del juego podría bajarlos), un poco de sala en los efectos y
@@ -541,14 +545,13 @@ int cmdDemoPlatformer(const std::string& dir) {
         AudioBusEffectSettings lim;
         lim.type = AudioEffectType::Limiter;
         mix.buses[0].effects.push_back(lim);
-        if (!fileio::writeAtomic(p->assetsDir() + "/audio_buses.json", mix.toJson(), false)) return 1;
+        if (!fileio::writeAtomic(p->assetsDir() + "/audio_buses.json", mix.toJson(), false))
+            return fail("no se pudo escribir audio_buses.json");
         p->assets().import("audio_buses.json");
     }
     UUID menu;
-    if (!buildMenu(c, menu) || !buildLevel(c) || !buildVictory(c)) return 1;
+    if (!buildMenu(c, menu) || !buildLevel(c) || !buildVictory(c)) return fail("no se pudieron guardar las escenas");
     p->setStartScene(menu);
-    if (!p->save()) return 1;
-    std::printf("Demo de plataformas creada en %s (menú, nivel y victoria). Ábrela en el editor y pulsa Jugar.\n",
-                dir.c_str());
-    return 0;
+    if (!p->save()) return fail("no se pudo guardar el proyecto");
+    return true;
 }

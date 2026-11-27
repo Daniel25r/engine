@@ -235,7 +235,7 @@ Multihilo propio, pools, streaming, carga asíncrona, LOD, oclusión: ❌.
 | | Estado |
 |---|---|
 | Plantillas de proyecto 2D/3D vacías | ✅ |
-| `titan demo-plataformas`: juego 3D completo (menú, nivel, enemigos con IA, monedas, plataformas móviles, peligros, puntos de control, vidas, música y efectos con mezclador, guardado de récord, victoria) | ✅ ejecutado en el reproductor de escritorio (scripts sin errores, monedas recogidas por trigger, 3 buses activos) |
+| Ejemplo "Isla Estelar" (plantilla del editor y `titan demo-plataformas`): juego 3D completo (menú, nivel, enemigos con IA, monedas, plataformas móviles, peligros, puntos de control, vidas, música y efectos con mezclador, guardado de récord, victoria) | ✅ ejecutado en el reproductor de escritorio (scripts sin errores, monedas recogidas por trigger, 3 buses activos) |
 | `titan benchmark` | ✅ |
 | Resto de plantillas (top-down, primera persona, carreras, puzle, supervivencia, sandbox, multijugador) | ❌ |
 
@@ -250,6 +250,7 @@ Multihilo propio, pools, streaming, carga asíncrona, LOD, oclusión: ❌.
 
 | Fecha | Bloque | Resultado |
 |---|---|---|
+| 2026-11-27 | Nueva pantalla de inicio (lanzador): barra lateral, proyectos en tarjetas por fecha con búsqueda y borrado confirmado, galería de plantillas con ilustraciones y la plantilla de ejemplo "Isla Estelar" (juego completo) creada desde el editor | Probado con clics simulados: crear el ejemplo, abrirlo y Jugar |
 | 2026-11-27 | Interfaz del editor para PC: escala de Windows, tamaño elegible (100–200 %, Ctrl + / Ctrl −, 125 % por defecto, se recuerda), calidad alta por defecto en PC, editor sin consola | 111/111 pruebas; capturas a 1920×1080 |
 | 2026-11-27 | Compilación para Windows en GitHub Actions; el editor abre en un PC con Windows | 3 intentos: errores de MSVC (include, cabeceras GLES) y cuota de Artifacts → Releases |
 | 2026-11-27 | Carga asíncrona de texturas con precarga de escena | 111/111 pruebas; arranque 3,4 s → 0,22 s (medido) |

@@ -160,7 +160,9 @@ struct Editor::Impl {
 
     // ---- Navegador de proyectos ----
     std::string newProjectName = "Mi juego";
-    int newProjectTemplate = 2;
+    int newProjectTemplate = 0; // 0 = 3D vacío, 1 = 2D vacío, 2 = ejemplo Isla Estelar (EditorLauncher.cpp)
+    int launcherView = 0;       // 0 = proyectos, 1 = nuevo proyecto
+    std::string projectSearch;
     std::string pendingDelete;
     std::string importPath; // escritorio sin selector de archivos
 

@@ -150,6 +150,25 @@ target_include_directories(titan_imgui PUBLIC third_party/imgui)
 target_compile_definitions(titan_imgui PUBLIC IMGUI_IMPL_OPENGL_ES3 IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
 target_link_libraries(titan_imgui PUBLIC ${TITAN_GLES_LIBS})
 
+# ------------------------------------------------------------------ titan_samples (proyectos de ejemplo)
+
+# Los scripts de los ejemplos son archivos .lua normales (engine/samples/); se incrustan en la biblioteca.
+file(GLOB TITAN_SAMPLE_LUA CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/engine/samples/plataformas/*.lua)
+set(_sample_inc "")
+foreach(_lua ${TITAN_SAMPLE_LUA})
+    get_filename_component(_name ${_lua} NAME)
+    file(READ ${_lua} _code)
+    string(APPEND _sample_inc "{\"${_name}\", R\"TITANLUA(${_code})TITANLUA\"},\n")
+endforeach()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${TITAN_SAMPLE_LUA})
+file(WRITE ${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc.tmp "${_sample_inc}")
+configure_file(${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc.tmp
+               ${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc COPYONLY)
+add_library(titan_samples STATIC engine/src/samples/PlatformerSample.cpp engine/src/samples/SampleSounds.cpp)
+target_include_directories(titan_samples PRIVATE ${CMAKE_BINARY_DIR}/generated)
+target_link_libraries(titan_samples PUBLIC titan_core titan_audio)
+target_compile_options(titan_samples PRIVATE ${TITAN_WARNINGS})
+
 # ------------------------------------------------------------------ titan_editor (el editor, común a Android y escritorio)
 
 add_library(titan_editor STATIC
@@ -160,8 +179,9 @@ add_library(titan_editor STATIC
     engine/src/editor/EditorTerrain.cpp
     engine/src/editor/EditorDiagnostics.cpp
     engine/src/editor/EditorMixer.cpp
+    engine/src/editor/EditorLauncher.cpp
 )
-target_link_libraries(titan_editor PUBLIC titan_runtime titan_imgui titan_lua)
+target_link_libraries(titan_editor PUBLIC titan_runtime titan_imgui titan_lua titan_samples)
 target_include_directories(titan_editor PRIVATE third_party/stb)
 target_compile_options(titan_editor PRIVATE ${TITAN_WARNINGS})
 
@@ -212,22 +232,8 @@ else()
     endif()
 
     if(TITAN_BUILD_TOOLS)
-        # Los scripts de la demo de plataformas son archivos .lua normales; se incrustan en la herramienta.
-        file(GLOB TITAN_DEMO_LUA CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/titan/demo/plataformas/*.lua)
-        set(_demo_inc "")
-        foreach(_lua ${TITAN_DEMO_LUA})
-            get_filename_component(_name ${_lua} NAME)
-            file(READ ${_lua} _code)
-            string(APPEND _demo_inc "{\"${_name}\", R\"TITANLUA(${_code})TITANLUA\"},\n")
-        endforeach()
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${TITAN_DEMO_LUA})
-        file(WRITE ${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc.tmp "${_demo_inc}")
-        configure_file(${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc.tmp
-                       ${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc COPYONLY)
-        add_executable(titan tools/titan/main.cpp tools/titan/Benchmark.cpp tools/titan/DemoPlatformer.cpp
-                             tools/titan/DemoSounds.cpp tools/titan/WinConsole.cpp)
-        target_include_directories(titan PRIVATE ${CMAKE_BINARY_DIR}/generated tools/titan)
-        target_link_libraries(titan PRIVATE titan_core titan_scripting titan_audio)
+        add_executable(titan tools/titan/main.cpp tools/titan/Benchmark.cpp tools/titan/WinConsole.cpp)
+        target_link_libraries(titan PRIVATE titan_core titan_scripting titan_audio titan_samples)
         target_compile_options(titan PRIVATE ${TITAN_WARNINGS})
     endif()
 

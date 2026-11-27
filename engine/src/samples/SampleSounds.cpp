@@ -1,12 +1,12 @@
 // Sonidos de la demo de plataformas, sintetizados aquí (sin archivos de terceros ni licencias): efectos cortos y
 // una música en bucle. Todo en WAV PCM 16 bits mono a 44,1 kHz.
-#include "DemoSounds.h"
+#include "SampleSounds.h"
 
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 
-namespace titan::demo {
+namespace titan::samples {
 namespace {
 
 constexpr int kRate = 44100;
@@ -150,4 +150,4 @@ std::vector<std::pair<std::string, std::vector<uint8_t>>> platformerSounds() {
     return out;
 }
 
-} // namespace titan::demo
+} // namespace titan::samples
