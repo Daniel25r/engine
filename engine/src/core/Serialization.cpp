@@ -486,6 +486,18 @@ ComponentRegistry ComponentRegistry::createDefault() {
             ++t.revision;
         });
 
+    r.addSimple<NavAgent>(
+        "NavAgent",
+        [](const NavAgent& a) {
+            return Json{{"speed", toJson(a.speed)}, {"stoppingDistance", toJson(a.stoppingDistance)},
+                        {"repathInterval", toJson(a.repathInterval)}};
+        },
+        [](NavAgent& a, FieldReader& rd) {
+            rd.read("speed", a.speed);
+            rd.read("stoppingDistance", a.stoppingDistance);
+            rd.read("repathInterval", a.repathInterval);
+        });
+
     r.addSimple<BlobShadow>(
         "BlobShadow",
         [](const BlobShadow& b) {

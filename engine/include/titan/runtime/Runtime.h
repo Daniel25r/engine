@@ -96,6 +96,8 @@ public:
     std::string scriptSavePath() const override { return savePath_; }
     FrameStats scriptFrameStats() const override;
     bool scriptCameraBasis(Vec3& forward, Vec3& right) const override;
+    NavGrid* scriptNavGrid() override { return &navGrid_; }
+    int scriptBakeNav(const NavSettings* settings) override; // nulo = zona automática según la escena
     // Dónde se guarda la partida (Save.* en Lua). Lo fija la plataforma antes de start().
     void setSavePath(const std::string& path) { savePath_ = path; }
     InputActions& actions() { return actions_; }
@@ -131,6 +133,7 @@ private:
     UISystem ui_;
     InputActions actions_;
     CameraSystem cameras_;
+    NavGrid navGrid_;
     std::string savePath_;
     std::vector<Entity> clicked_;
     std::string projectName_;

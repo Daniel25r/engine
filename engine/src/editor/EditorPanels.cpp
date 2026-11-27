@@ -318,6 +318,7 @@ void Editor::Impl::drawCreateMenu() {
         if (ImGui::MenuItem("Esfera con física")) createEntityOfKind("Esfera con física");
         if (ImGui::MenuItem("Zona trigger")) createEntityOfKind("Zona trigger");
         if (ImGui::MenuItem("Personaje")) createEntityOfKind("Personaje");
+        if (ImGui::MenuItem("Enemigo que persigue")) createEntityOfKind("Enemigo");
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Efectos")) {
@@ -717,6 +718,7 @@ const char* Editor::Impl::typeLabel(Entity e) {
     if (w.has<Camera>(e)) return "Cámara";
     if (w.has<ParticleSystem>(e)) return "Partículas";
     if (w.has<Terrain>(e)) return "Terreno";
+    if (w.has<NavAgent>(e)) return "Agente IA";
     if (w.has<CharacterController>(e)) return "Personaje";
     if (w.has<UIJoystick>(e)) return "Joystick";
     if (w.has<UIButton>(e)) return "Botón";
@@ -1413,6 +1415,13 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         propLabel("Capa");
         ImGui::SliderInt("##collayer", &c.layer, 0, 15);
         track();
+    } else if (name == "NavAgent") {
+        NavAgent& a = *w.get<NavAgent>(e);
+        dragF("Velocidad", a.speed, 0.05f, 0.1f, 50, "%.1f m/s");
+        dragF("Distancia de parada", a.stoppingDistance, 0.01f, 0.05f, 20, "%.2f m");
+        dragF("Recalcular cada", a.repathInterval, 0.01f, 0.05f, 10, "%.2f s");
+        propLabel("");
+        ImGui::TextDisabled("e:setDestination(x, y, z) o e:setDestination(jugador); AI.canSee(e, jugador)");
     } else if (name == "BlobShadow") {
         BlobShadow& b = *w.get<BlobShadow>(e);
         dragF("Radio", b.radius, 0.01f, 0.05f, 20, "%.2f m");

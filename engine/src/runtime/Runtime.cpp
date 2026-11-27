@@ -131,6 +131,10 @@ bool Runtime::activateScene(const std::string& text, const std::string& name) {
     scene_->world().each<AudioSource>([&](Entity e, AudioSource& a) {
         if (a.playOnStart && scene_->isActiveInHierarchy(e)) scriptPlayEntitySound(e);
     });
+    navGrid_ = {};
+    bool anyAgent = false;
+    scene_->world().each<NavAgent>([&](Entity, NavAgent&) { anyAgent = true; });
+    if (anyAgent) scriptBakeNav(nullptr); // hay enemigos o NPC que navegan: se hornea la rejilla al cargar
     events_.emit(SceneLoadedEvent{scene_.get()});
     TITAN_INFO("runtime", "Escena '%s' cargada (%zu entidades)", scene_->name().c_str(), scene_->entityCount());
     scripts_->attach(*scene_, events_);
@@ -259,6 +263,7 @@ void Runtime::frame(const Viewport& viewport) {
     if (!paused) {
         scripts_->update(dt);
         scripts_->lateUpdate(dt);
+        if (navGrid_.baked()) updateNavAgents(*scene_, navGrid_, dt); // los agentes deciden su velocidad
     }
     scene_->flushDestroyed();
     profile_.scriptMs = msSince(t);
@@ -375,6 +380,27 @@ void Runtime::render(const Viewport& viewport) {
         renderer_->drawText({std::max(h * 0.5f, screen_.x - width - h * 0.6f), h * 0.6f}, h, text, Color{1, 1, 1, 0.75f});
     }
     renderer_->endFrame();
+}
+
+int Runtime::scriptBakeNav(const NavSettings* settings) {
+    if (!scene_) return 0;
+    const auto t0 = Clock::now();
+    const NavSettings s = settings ? *settings : navSettingsForScene(*scene_);
+    // Lo que se mueve no es suelo ni obstáculo fijo: personajes, agentes y cuerpos dinámicos.
+    std::vector<Entity> ignore;
+    World& w = scene_->world();
+    w.each<CharacterController>([&](Entity e, CharacterController&) { ignore.push_back(e); });
+    w.each<NavAgent>([&](Entity e, NavAgent&) {
+        if (std::find(ignore.begin(), ignore.end(), e) == ignore.end()) ignore.push_back(e);
+    });
+    w.each<Rigidbody>([&](Entity e, Rigidbody& rb) {
+        if (rb.type == Rigidbody::Type::Dynamic) ignore.push_back(e);
+    });
+    navGrid_.bake(physics_, s, ignore);
+    const int cells = navGrid_.walkableCells();
+    TITAN_INFO("navigation", "Rejilla de navegación: %dx%d celdas de %.2f m, %d caminables (%.0f ms)", navGrid_.width(),
+               navGrid_.depth(), s.cellSize, cells, msSince(t0));
+    return cells;
 }
 
 bool Runtime::scriptCameraBasis(Vec3& forward, Vec3& right) const {

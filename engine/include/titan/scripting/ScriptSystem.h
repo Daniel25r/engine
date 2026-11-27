@@ -22,6 +22,7 @@
 #include "titan/core/Events.h"
 #include "titan/core/Input.h"
 #include "titan/core/InputActions.h"
+#include "titan/core/Navigation.h"
 #include "titan/core/PhysicsApi.h"
 #include "titan/core/Quality.h"
 #include "titan/core/Scene.h"
@@ -70,6 +71,9 @@ public:
     virtual FrameStats scriptFrameStats() const { return {}; }
     // Delante y derecha de la cámara activa, en horizontal (para mover al jugador respecto a la cámara).
     virtual bool scriptCameraBasis(Vec3& forward, Vec3& right) const { return false; }
+    // Navegación: la rejilla de la escena (nula si no hay) y hornearla de nuevo (devuelve las celdas caminables).
+    virtual NavGrid* scriptNavGrid() { return nullptr; }
+    virtual int scriptBakeNav(const NavSettings*) { return 0; }
 };
 
 struct ScriptError {

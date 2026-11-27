@@ -39,6 +39,7 @@ add_library(titan_core STATIC
     engine/src/core/AnimationGraph.cpp
     engine/src/core/TerrainTools.cpp
     engine/src/core/CameraSystem.cpp
+    engine/src/core/Navigation.cpp
     engine/src/core/Log.cpp
     engine/src/core/Uuid.cpp
     engine/src/core/FileIO.cpp

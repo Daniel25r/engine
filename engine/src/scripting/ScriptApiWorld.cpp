@@ -372,7 +372,120 @@ int e_setCameraAngles(lua_State* L) { // yaw, pitch en grados
     return 0;
 }
 
+// ---------------------------------------------------------------- Navegación e IA
+NavAgent& agent(lua_State* L, Entity e) { return component<NavAgent>(L, e, "NavAgent"); }
+int e_setDestination(lua_State* L) { // e:setDestination(x, y, z) o e:setDestination(otraEntidad) para seguirla
+    NavAgent& a = agent(L, live(L, 1));
+    if (lua_isuserdata(L, 2)) {
+        a.follow = scene(L).info(live(L, 2)).id;
+    } else {
+        a.follow = {};
+        a.destination = check3(L, 2, {});
+    }
+    a.hasDestination = true;
+    a.reached = false;
+    a.path.clear();
+    a.repathTimer = 0;
+    return 0;
+}
+int e_stopNavigation(lua_State* L) {
+    NavAgent& a = agent(L, live(L, 1));
+    a.hasDestination = false;
+    a.follow = {};
+    a.path.clear();
+    return 0;
+}
+int e_hasReachedDestination(lua_State* L) { lua_pushboolean(L, agent(L, live(L, 1)).reached); return 1; }
+int e_hasPath(lua_State* L) {
+    const NavAgent& a = agent(L, live(L, 1));
+    lua_pushboolean(L, a.hasDestination && !a.pathFailed && !a.path.empty());
+    return 1;
+}
+int e_remainingDistance(lua_State* L) {
+    const Entity e = live(L, 1);
+    const NavAgent& a = agent(L, e);
+    float d = 0;
+    Vec3 p = scene(L).computeWorldMatrix(e).translation();
+    for (size_t i = a.next; i < a.path.size(); ++i) {
+        d += (a.path[i] - p).length();
+        p = a.path[i];
+    }
+    lua_pushnumber(L, d);
+    return 1;
+}
+int nav_bake(lua_State* L) { // Navigation.bake() automático, o (cx,cy,cz, ancho, fondo [, celda])
+    NavSettings s;
+    const bool manual = lua_gettop(L) >= 5;
+    if (manual) {
+        s.center = check3(L, 1, {});
+        s.size = {float(luaL_checknumber(L, 4)), float(luaL_checknumber(L, 5))};
+        s.cellSize = float(luaL_optnumber(L, 6, 0.5));
+        s.topY = s.center.y + 50;
+        s.bottomY = s.center.y - 50;
+    }
+    lua_pushinteger(L, sys(L).host().scriptBakeNav(manual ? &s : nullptr));
+    return 1;
+}
+int nav_findPath(lua_State* L) {
+    NavGrid* g = sys(L).host().scriptNavGrid();
+    std::vector<Vec3> path;
+    if (!g || !g->findPath(check3(L, 1, {}), check3(L, 4, {}), path)) {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_createtable(L, static_cast<int>(path.size()), 0);
+    for (size_t i = 0; i < path.size(); ++i) {
+        lua_createtable(L, 0, 3);
+        lua_pushnumber(L, path[i].x); lua_setfield(L, -2, "x");
+        lua_pushnumber(L, path[i].y); lua_setfield(L, -2, "y");
+        lua_pushnumber(L, path[i].z); lua_setfield(L, -2, "z");
+        lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
+    }
+    return 1;
+}
+int nav_isWalkable(lua_State* L) {
+    NavGrid* g = sys(L).host().scriptNavGrid();
+    lua_pushboolean(L, g && g->isWalkable(check3(L, 1, {})));
+    return 1;
+}
+const luaL_Reg kNavigationGlobals[] = {{"bake", nav_bake}, {"findPath", nav_findPath}, {"isWalkable", nav_isWalkable},
+                                       {nullptr, nullptr}};
+
+// AI.canSee(observador, objetivo [, distancia=20, campoVisión=120]): está cerca, dentro del ángulo de visión y no hay
+// nada en medio (un rayo desde los "ojos" del observador hasta el objetivo).
+int ai_canSee(lua_State* L) {
+    const Entity me = live(L, 1), target = live(L, 2);
+    const float maxDist = float(luaL_optnumber(L, 3, 20)), fov = float(luaL_optnumber(L, 4, 120));
+    const Mat4 mw = scene(L).computeWorldMatrix(me);
+    const Vec3 eye = mw.translation() + Vec3{0, 1.5f, 0};
+    const Vec3 aim = scene(L).computeWorldMatrix(target).translation() + Vec3{0, 1.0f, 0};
+    const Vec3 to = aim - eye;
+    const float dist = to.length();
+    bool sees = dist <= maxDist && dist > 1e-4f;
+    if (sees && fov < 360) {
+        const Vec3 fwd = mw.transformDirection({0, 0, -1}).normalized();
+        const Vec3 flatTo = Vec3{to.x, 0, to.z}.normalized(), flatFwd = Vec3{fwd.x, 0, fwd.z}.normalized();
+        sees = dot(flatTo, flatFwd) >= std::cos(fov * 0.5f * kDegToRad);
+    }
+    if (sees) {
+        if (PhysicsApi* p = sys(L).host().scriptPhysics()) {
+            RaycastHit hit;
+            if (p->raycast(eye, to, dist, hit, me)) sees = hit.entity == target || scene(L).isDescendantOf(hit.entity, target);
+        }
+    }
+    lua_pushboolean(L, sees);
+    return 1;
+}
+int ai_distance(lua_State* L) {
+    const Vec3 a = scene(L).computeWorldMatrix(live(L, 1)).translation(), b = scene(L).computeWorldMatrix(live(L, 2)).translation();
+    lua_pushnumber(L, (a - b).length());
+    return 1;
+}
+const luaL_Reg kAIGlobals[] = {{"canSee", ai_canSee}, {"distance", ai_distance}, {nullptr, nullptr}};
+
 const luaL_Reg kWorldEntityMethods[] = {
+    {"setDestination", e_setDestination}, {"stopNavigation", e_stopNavigation},
+    {"hasReachedDestination", e_hasReachedDestination}, {"hasPath", e_hasPath}, {"remainingDistance", e_remainingDistance},
     {"shakeCamera", e_shakeCamera}, {"setCameraTarget", e_setCameraTarget}, {"setCameraDistance", e_setCameraDistance},
     {"setCameraAngles", e_setCameraAngles},
     {"terrainHeight", e_terrainHeight},
@@ -391,6 +504,8 @@ void registerWorldEntityMethods(lua_State* L) { luaL_setfuncs(L, kWorldEntityMet
 void registerWorldGlobals(lua_State* L) {
     setGlobalTable(L, "Quality", kQualityGlobals);
     setGlobalTable(L, "Save", kSaveGlobals);
+    setGlobalTable(L, "Navigation", kNavigationGlobals);
+    setGlobalTable(L, "AI", kAIGlobals);
     lua_getglobal(L, "Input"); // se añaden a la tabla Input que ya existe
     luaL_setfuncs(L, kInputExtra, 0);
     lua_pop(L, 1);

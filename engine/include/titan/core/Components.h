@@ -480,4 +480,21 @@ struct BlobShadow {
     float height = 0;
 };
 
+// Agente de navegación (enemigos, NPC): va a su destino por el camino de la rejilla de navegación, rodeando
+// obstáculos. Con CharacterController camina con física (pendientes, escalones); sin él, desliza su Transform.
+struct NavAgent {
+    float speed = 3.5f;
+    float stoppingDistance = 0.6f;
+    float repathInterval = 0.5f; // segundos entre recálculos (para seguir a un objetivo que se mueve)
+    // En ejecución (no se guarda)
+    bool hasDestination = false;
+    Vec3 destination;
+    UUID follow;                 // si no es nulo, el destino es esta entidad
+    std::vector<Vec3> path;
+    size_t next = 0;
+    float repathTimer = 0;
+    bool reached = false;
+    bool pathFailed = false;
+};
+
 } // namespace titan

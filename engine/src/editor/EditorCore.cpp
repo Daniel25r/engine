@@ -591,6 +591,19 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
         scene.world().add<Collider>(e);
         fitCollider(e);
         scene.world().add<Rigidbody>(e);
+    } else if (kind == "Enemigo") {
+        // Personaje rojo con agente de navegación; su script decide a quién perseguir (ver docs/ENGINE_API.md).
+        scene.transform(e).setPosition({spawnPoint().x + 3, 0, spawnPoint().z});
+        scene.world().add<CharacterController>(e);
+        scene.world().add<NavAgent>(e);
+        scene.world().add<BlobShadow>(e);
+        Entity body = scene.createEntity("Cuerpo", e);
+        scene.transform(body).setPosition({0, 0.9f, 0});
+        scene.transform(body).setScale({0.7f, 1.8f, 0.7f});
+        MeshRenderer mr;
+        mr.mesh = MeshPrimitive::Capsule;
+        mr.color = Color::hex(0xD64545);
+        scene.world().add<MeshRenderer>(body, mr);
     } else if (kind == "Cámara en tercera persona") {
         // Sigue al objeto seleccionado o, si no hay, al primer personaje de la escena.
         Entity target = selectedEntity();

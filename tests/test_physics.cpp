@@ -357,3 +357,49 @@ TEST("personaje: un rayo que ignora al personaje no se choca con su cuerpo inter
     CHECK(w.raycast({0, 10, 0}, {0, -1, 0}, 20, hit)); // sin ignorar: los rayos sí ven al personaje
     CHECK(hit.entity == hero);
 }
+
+#include "titan/core/Navigation.h"
+
+TEST("navegación: hornear, rodear una pared con A* y que un agente llegue caminando") {
+    Scene s;
+    floorOf(s); // 20 x 20 m
+    Entity wall = s.createEntity("Pared"); // pared de x = -6 a x = 6 en z = 0, con huecos a los lados
+    s.transform(wall).setPosition({0, 1, 0});
+    s.transform(wall).setScale({12, 2, 1});
+    s.world().add<Collider>(wall);
+    Entity enemy = s.createEntity("Enemigo");
+    s.transform(enemy).setPosition({0, 0.05f, 5});
+    s.world().add<CharacterController>(enemy, {});
+    NavAgent agentC;
+    agentC.speed = 4;
+    s.world().add<NavAgent>(enemy, agentC);
+    PhysicsWorld w;
+    w.build(s);
+    NavSettings ns;
+    ns.size = {20, 20};
+    ns.cellSize = 0.5f;
+    NavGrid grid;
+    grid.bake(w, ns, {enemy});
+    CHECK(grid.baked());
+    // Lo alto de la pared es pisable (se podría estar encima), pero está 2 m más alto: el camino no puede subir.
+    CHECK(grid.isWalkable({0, 0, 5}));
+    CHECK(grid.isWalkable({8, 0, 0}));   // el hueco junto a la pared
+    std::vector<Vec3> path;
+    CHECK(grid.findPath({0, 0, 5}, {0, 0, -5}, path));
+    CHECK(path.size() >= 3);             // no va en línea recta: rodea
+    bool aroundTheSide = false;
+    for (const Vec3& p : path) aroundTheSide = aroundTheSide || std::fabs(p.x) > 6.2f;
+    CHECK(aroundTheSide);
+    CHECK(!grid.findPath({0, 0, 5}, {40, 0, 40}, path) || !path.empty()); // fuera de la zona: el punto caminable más cercano o nada
+    // El agente va de verdad hasta el otro lado.
+    NavAgent& a = *s.world().get<NavAgent>(enemy);
+    a.destination = {0, 0, -5};
+    a.hasDestination = true;
+    for (int i = 0; i < 60 * 10 && !a.reached; ++i) {
+        updateNavAgents(s, grid, 1.0f / 60);
+        w.step(s, 1.0f / 60);
+    }
+    CHECK(a.reached);
+    const Vec3 p = s.transform(enemy).position();
+    CHECK(p.z < -4.0f && std::fabs(p.x) < 1.5f);
+}
