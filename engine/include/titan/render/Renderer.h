@@ -129,6 +129,8 @@ public:
     static constexpr int kShadowMapSize = 2048; // por defecto; el perfil de calidad lo cambia (shadowMapSize())
     // cascade >= 0: dibuja en su cuarto del atlas (la 0 limpia el mapa entero).
     void beginShadowPass(const Mat4& lightViewProjection, int cascade = -1);
+    // Antialiasing temporal para la próxima cámara en perspectiva (antes de setCamera).
+    void setTemporalAA(bool on) { taaRequested_ = on; }
     void drawShadowCaster(MeshPrimitive mesh, const Mat4& world);
     void endShadowPass();
 
@@ -379,6 +381,11 @@ private:
     Mat4 viewProj_;
     Mat4 projection_;
     bool specBuffersOn_ = false;
+    // TAA: proyección desplazada una fracción de píxel cada fotograma; la cámara del fotograma anterior reproyecta.
+    bool taaRequested_ = false, taaActive_ = false, prevValid_ = false;
+    Mat4 unjitteredVP_, prevVP_;
+    uint32_t taaFrame_ = 0;
+    float jitterUV_[2] = {0, 0};
     std::chrono::steady_clock::time_point startTime_ = std::chrono::steady_clock::now(); // uTime de los materiales // se dibuja también en el destino de reflectancia (SSR) // de la cámara actual (el SSAO reconstruye posiciones desde la profundidad)
     Vec3 cameraPos_;
     Vec3 camRight_{1, 0, 0}, camUp_{0, 1, 0};

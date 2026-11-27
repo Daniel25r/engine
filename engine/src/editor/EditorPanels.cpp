@@ -1123,6 +1123,9 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
             ImGui::SetTooltip("La escena se refleja en el agua, los suelos pulidos, el metal y el barniz (perfiles alto y muy alto)");
         if (v.ssr) dragF("Intens. reflejos", v.ssrIntensity, 0.01f, 0, 2, "%.2f");
+        check("Antialiasing temporal (TAA)", v.taa);
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("Bordes limpios y sin parpadeo (como UE5). Sustituye al FXAA. Perfiles alto y muy alto");
         dragF("Viñeta", v.vignette, 0.005f, 0, 1, "%.2f");
         dragF("Contraste", v.contrast, 0.005f, 0.5f, 1.5f, "%.2f");
         dragF("Saturación", v.saturation, 0.005f, 0, 2, "%.2f");

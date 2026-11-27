@@ -61,6 +61,7 @@ bool buildWorld(Project& p, const std::map<std::string, UUID>& scripts, UUID& sc
     en.shadowDistance = 40;
     en.ssao = true;
     en.ssaoRadius = 0.8f;
+    en.taa = true;
     s.world().add<Environment>(env, en);
     Entity sun = s.createEntity("Sol");
     s.transform(sun).setEulerDegrees({-50, 30, 0});

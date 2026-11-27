@@ -16,7 +16,11 @@ struct PostSettings {
     float proj[4] = {1, 1, -1, -0.2f};
     // Reflejos en pantalla (SSR): lo que se ve en el agua, el suelo pulido, el metal y el barniz.
     bool ssr = false;
-    float ssrIntensity = 1.0f; // P00, P11, P22, P23 de la proyección en perspectiva
+    float ssrIntensity = 1.0f;
+    // Antialiasing temporal: matrices sin desplazamiento (actual invertida y anterior) y desplazamiento en UV.
+    bool taa = false, taaReset = false;
+    float invViewProj[16] = {}, prevViewProj[16] = {};
+    float jitter[2] = {0, 0}; // P00, P11, P22, P23 de la proyección en perspectiva
     bool bloom = false;
     float bloomIntensity = 0.5f;
     float bloomThreshold = 0.8f;
@@ -55,6 +59,9 @@ private:
     uint32_t sceneSpec_ = 0;          // reflectancia y lisura por píxel (la escriben los opacos)
     uint32_t ssr_ = 0, ssrFbo_ = 0, ssrTex_ = 0; // reflejos a media resolución
     uint32_t ssrBlur_ = 0, ssrFbo2_ = 0, ssrTex2_ = 0; // y suavizados
+    uint32_t taa_ = 0, taaFbo_[2] = {}, taaTex_[2] = {}; // historia del TAA (se alternan)
+    int taaIndex_ = 0;
+    bool historyValid_ = false;
     uint32_t bloomFbo_[kBloomLevels] = {}, bloomTex_[kBloomLevels] = {};
     int bloomW_[kBloomLevels] = {}, bloomH_[kBloomLevels] = {};
     int bloomLevels_ = 0;

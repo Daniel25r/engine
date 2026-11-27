@@ -291,6 +291,50 @@ void main() {
 }
 )";
 
+// Antialiasing temporal: cada píxel mezcla el fotograma actual (desplazado una fracción de píxel) con la historia
+// reproyectada con la profundidad y la cámara anterior. La historia se limita al rango de colores de los 9 vecinos
+// actuales (en YCoCg, por varianza): así lo que se mueve no deja estela.
+const char* kTaaFS = R"(#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uCur;
+uniform sampler2D uHist;
+uniform highp sampler2D uDepth;
+uniform mat4 uInvVP;
+uniform mat4 uPrevVP;
+uniform vec2 uTexel;
+uniform vec2 uJitter;
+uniform int uReset;
+out vec4 outColor;
+vec3 toYCoCg(vec3 c) { return vec3(0.25 * c.r + 0.5 * c.g + 0.25 * c.b, 0.5 * c.r - 0.5 * c.b, -0.25 * c.r + 0.5 * c.g - 0.25 * c.b); }
+vec3 toRgb(vec3 c) { return vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z); }
+void main() {
+    vec3 cur = texture(uCur, vUV).rgb;
+    if (uReset == 1) { outColor = vec4(cur, 1.0); return; }
+    vec3 m1 = vec3(0.0), m2 = vec3(0.0);
+    float d = 1.0;
+    for (int y = -1; y <= 1; ++y)
+        for (int x = -1; x <= 1; ++x) {
+            vec2 o = vec2(float(x), float(y)) * uTexel;
+            vec3 c = toYCoCg(texture(uCur, vUV + o).rgb);
+            m1 += c;
+            m2 += c * c;
+            d = min(d, texture(uDepth, vUV + o).r); // lo más cercano: los bordes se reproyectan con el objeto
+        }
+    vec3 mean = m1 / 9.0, sd = sqrt(max(m2 / 9.0 - mean * mean, 0.0));
+    vec4 w = uInvVP * vec4((vUV - uJitter) * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+    w /= w.w;
+    vec4 pc = uPrevVP * w;
+    vec2 puv = pc.xy / pc.w * 0.5 + 0.5;
+    if (pc.w <= 0.0 || puv.x < 0.0 || puv.y < 0.0 || puv.x > 1.0 || puv.y > 1.0) { outColor = vec4(cur, 1.0); return; }
+    vec3 hist = clamp(toYCoCg(texture(uHist, puv).rgb), mean - sd * 1.25, mean + sd * 1.25);
+    // Más peso al presente cuando la imagen se desplaza mucho (menos desenfoque al mover la cámara).
+    float moved = length((vUV - puv) / uTexel);
+    float a = mix(0.1, 0.25, clamp(moved / 16.0, 0.0, 1.0));
+    outColor = vec4(toRgb(mix(hist, toYCoCg(cur), a)), 1.0);
+}
+)";
+
 GLuint compile(GLenum type, const char* src) {
     GLuint s = glCreateShader(type);
     glShaderSource(s, 1, &src, nullptr);
@@ -347,6 +391,8 @@ bool PostProcessor::init() {
     ssaoBlur_ = link(kSsaoBlurFS);
     ssr_ = link(kSsrFS);
     ssrBlur_ = link(kSsrBlurFS);
+    taa_ = link(kTaaFS);
+    if (!taa_) TITAN_WARN("render", "TAA no disponible en esta GPU (no compiló); se usa FXAA");
     if (!ssr_) TITAN_WARN("render", "SSR no disponible en esta GPU (no compiló); se dibuja sin él");
     if (!ssao_ || !ssaoBlur_) TITAN_WARN("render", "SSAO no disponible en esta GPU (no compiló); se dibuja sin él");
     glGenVertexArrays(1, &vao_);
@@ -364,6 +410,12 @@ void PostProcessor::destroyTargets() {
     if (ssrTex2_) glDeleteTextures(1, &ssrTex2_);
     sceneFbo_ = sceneColor_ = sceneDepth_ = sceneSpec_ = ssrFbo_ = ssrTex_ = ssrFbo2_ = ssrTex2_ = 0;
     for (int i = 0; i < 2; ++i) {
+        if (taaFbo_[i]) glDeleteFramebuffers(1, &taaFbo_[i]);
+        if (taaTex_[i]) glDeleteTextures(1, &taaTex_[i]);
+        taaFbo_[i] = taaTex_[i] = 0;
+    }
+    historyValid_ = false;
+    for (int i = 0; i < 2; ++i) {
         if (aoFbo_[i]) glDeleteFramebuffers(1, &aoFbo_[i]);
         if (aoTex_[i]) glDeleteTextures(1, &aoTex_[i]);
         aoFbo_[i] = aoTex_[i] = 0;
@@ -379,7 +431,7 @@ void PostProcessor::destroyTargets() {
 
 void PostProcessor::shutdown() {
     destroyTargets();
-    for (uint32_t* p : {&composite_, &down_, &up_, &ssao_, &ssaoBlur_, &ssr_, &ssrBlur_})
+    for (uint32_t* p : {&composite_, &down_, &up_, &ssao_, &ssaoBlur_, &ssr_, &ssrBlur_, &taa_})
         if (*p) glDeleteProgram(*p), *p = 0;
     if (vao_) glDeleteVertexArrays(1, &vao_);
     vao_ = 0;
@@ -387,7 +439,9 @@ void PostProcessor::shutdown() {
 
 void PostProcessor::onContextLost() {
     composite_ = down_ = up_ = ssao_ = ssaoBlur_ = ssr_ = vao_ = sceneFbo_ = sceneColor_ = sceneDepth_ = 0;
-    sceneSpec_ = ssrFbo_ = ssrTex_ = ssrBlur_ = ssrFbo2_ = ssrTex2_ = 0;
+    sceneSpec_ = ssrFbo_ = ssrTex_ = ssrBlur_ = ssrFbo2_ = ssrTex2_ = taa_ = 0;
+    for (int i = 0; i < 2; ++i) taaFbo_[i] = taaTex_[i] = 0;
+    historyValid_ = false;
     for (int i = 0; i < 2; ++i) aoFbo_[i] = aoTex_[i] = 0;
     aoW_ = aoH_ = 0;
     for (int i = 0; i < kBloomLevels; ++i) bloomFbo_[i] = bloomTex_[i] = 0;
@@ -461,6 +515,13 @@ bool PostProcessor::createTargets(int w, int h) {
     glGenFramebuffers(1, &ssrFbo_);
     glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo_);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssrTex_, 0);
+    for (int i = 0; i < 2; ++i) { // historia del TAA, a resolución completa
+        taaTex_[i] = makeColorTexture(w, h);
+        glGenFramebuffers(1, &taaFbo_[i]);
+        glBindFramebuffer(GL_FRAMEBUFFER, taaFbo_[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, taaTex_[i], 0);
+    }
+    historyValid_ = false;
     ssrTex2_ = makeColorTexture(aoW_, aoH_);
     glGenFramebuffers(1, &ssrFbo2_);
     glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo2_);
@@ -501,6 +562,33 @@ void PostProcessor::resolve(uint32_t target, int x, int y, int w, int h, const P
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);
     glActiveTexture(GL_TEXTURE0);
+    GLuint sceneSrc = sceneColor_; // imagen de la escena (o la suavizada por el TAA)
+    if (s.taa && taa_ && taaFbo_[0] && taaFbo_[1]) {
+        const int next = taaIndex_ ^ 1;
+        glBindFramebuffer(GL_FRAMEBUFFER, taaFbo_[next]);
+        glViewport(0, 0, width_, height_);
+        glUseProgram(taa_);
+        glUniform1i(glGetUniformLocation(taa_, "uCur"), 0);
+        glUniform1i(glGetUniformLocation(taa_, "uHist"), 1);
+        glUniform1i(glGetUniformLocation(taa_, "uDepth"), 2);
+        glUniformMatrix4fv(glGetUniformLocation(taa_, "uInvVP"), 1, GL_FALSE, s.invViewProj);
+        glUniformMatrix4fv(glGetUniformLocation(taa_, "uPrevVP"), 1, GL_FALSE, s.prevViewProj);
+        glUniform2f(glGetUniformLocation(taa_, "uTexel"), 1.0f / width_, 1.0f / height_);
+        glUniform2f(glGetUniformLocation(taa_, "uJitter"), s.jitter[0], s.jitter[1]);
+        glUniform1i(glGetUniformLocation(taa_, "uReset"), (s.taaReset || !historyValid_) ? 1 : 0);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, taaTex_[taaIndex_]);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, sceneDepth_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sceneColor_);
+        drawFullscreen();
+        taaIndex_ = next;
+        historyValid_ = true;
+        sceneSrc = taaTex_[next];
+    } else {
+        historyValid_ = false;
+    }
     const bool bloom = s.bloom && s.bloomIntensity > 0 && bloomLevels_ > 0;
     if (bloom) {
         glUseProgram(down_);
@@ -511,7 +599,7 @@ void PostProcessor::resolve(uint32_t target, int x, int y, int w, int h, const P
             glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[i]);
             glViewport(0, 0, bloomW_[i], bloomH_[i]);
             const int sw = i == 0 ? width_ : bloomW_[i - 1], sh = i == 0 ? height_ : bloomH_[i - 1];
-            glBindTexture(GL_TEXTURE_2D, i == 0 ? sceneColor_ : bloomTex_[i - 1]);
+            glBindTexture(GL_TEXTURE_2D, i == 0 ? sceneSrc : bloomTex_[i - 1]);
             glUniform2f(texel, 0.5f / sw, 0.5f / sh);
             glUniform1i(pre, i == 0 ? 1 : 0);
             drawFullscreen();
@@ -606,9 +694,9 @@ void PostProcessor::resolve(uint32_t target, int x, int y, int w, int h, const P
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, ao ? aoTex_[1] : sceneColor_);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, bloom ? bloomTex_[0] : sceneColor_);
+    glBindTexture(GL_TEXTURE_2D, bloom ? bloomTex_[0] : sceneSrc);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, sceneColor_);
+    glBindTexture(GL_TEXTURE_2D, sceneSrc);
     drawFullscreen();
     glBindVertexArray(0);
 }

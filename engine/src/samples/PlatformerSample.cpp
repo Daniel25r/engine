@@ -164,6 +164,7 @@ void environment(Scene& s, bool shadows = true) {
     en.saturation = 1.1f;
     en.ssao = true;
     en.ssr = true; // el mar refleja las islas
+    en.taa = true;
     s.world().add<Environment>(env, en);
     Entity sun = s.createEntity("Sol");
     s.transform(sun).setEulerDegrees({-55, 35, 0});

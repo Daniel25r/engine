@@ -160,6 +160,8 @@ struct Environment {
     // Reflejos en pantalla (agua, suelos pulidos, metal, barniz). Desactivados por defecto como el SSAO.
     bool ssr = false;
     float ssrIntensity = 1.0f;
+    // Antialiasing temporal (TAA): bordes limpios y sin parpadeo; sustituye al FXAA. Desactivado por defecto.
+    bool taa = false;
 };
 
 struct Light {

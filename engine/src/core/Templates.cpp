@@ -66,7 +66,8 @@ std::unique_ptr<Project> createProjectFromTemplate(const std::string& dir, const
         Entity env = s.createEntity("Cielo y niebla");
         Environment en;
         en.ssao = true;
-        en.ssr = true; // sombras de contacto (solo en los perfiles alto y muy alto)
+        en.ssr = true;
+        en.taa = true; // sombras de contacto (solo en los perfiles alto y muy alto)
         s.world().add<Environment>(env, en);
         addSun(s);
         Entity floor = addMesh(s, "Suelo", MeshPrimitive::Plane, {0, 0, 0}, {60, 1, 60}, Color::hex(0x9A9A9A));

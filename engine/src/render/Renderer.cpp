@@ -930,7 +930,22 @@ void Renderer::resolveScene() {
     sceneInTarget_ = false;
     const Environment& e = lighting_.env;
     PostSettings s;
-    s.fxaa = quality_.fxaa;
+    s.taa = taaActive_ && e.taa;
+    s.fxaa = quality_.fxaa && !s.taa;
+    if (s.taa) {
+        const Mat4 inv = unjitteredVP_.inverted();
+        std::copy(inv.m, inv.m + 16, s.invViewProj);
+        const Mat4& prev = prevValid_ ? prevVP_ : unjitteredVP_;
+        std::copy(prev.m, prev.m + 16, s.prevViewProj);
+        s.jitter[0] = jitterUV_[0];
+        s.jitter[1] = jitterUV_[1];
+        s.taaReset = !prevValid_;
+        prevVP_ = unjitteredVP_;
+        prevValid_ = true;
+        ++taaFrame_;
+    } else {
+        prevValid_ = false;
+    }
     s.bloom = quality_.bloom && e.bloom;
     s.bloomIntensity = e.bloomIntensity;
     s.bloomThreshold = e.bloomThreshold;
@@ -1154,6 +1169,28 @@ void Renderer::setCamera(const Mat4& view, const Mat4& projection) {
     flushLines();
     viewProj_ = projection * view;
     projection_ = projection;
+    taaActive_ = false;
+    if (taaRequested_ && quality_.taa && sceneInTarget_ && projection.m[15] == 0.0f && post_->width() > 0) {
+        // Secuencia de Halton (2, 3) de 8 muestras: desplazamientos de -0,5 a 0,5 píxeles.
+        auto halton = [](uint32_t i, uint32_t b) {
+            float f = 1, r = 0;
+            for (; i > 0; i /= b) {
+                f /= float(b);
+                r += f * float(i % b);
+            }
+            return r;
+        };
+        const uint32_t k = taaFrame_ % 8 + 1;
+        const float jx = halton(k, 2) - 0.5f, jy = halton(k, 3) - 0.5f;
+        Mat4 jittered = projection;
+        jittered.m[8] += jx * 2.0f / float(post_->width());
+        jittered.m[9] += jy * 2.0f / float(post_->height());
+        unjitteredVP_ = viewProj_;
+        viewProj_ = jittered * view;
+        jitterUV_[0] = jx / float(post_->width());
+        jitterUV_[1] = jy / float(post_->height());
+        taaActive_ = true;
+    }
     const Mat4 camWorld = view.inverted();
     cameraPos_ = camWorld.translation();
     camRight_ = camWorld.transformDirection({1, 0, 0}).normalized();
