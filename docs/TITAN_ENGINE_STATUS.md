@@ -224,7 +224,7 @@ Multihilo propio, pools, streaming, carga asíncrona, LOD, oclusión: ❌.
 |---|---|
 | Android: editor (Kotlin + JNI, horizontal), reproductor NativeActivity, APK de 3 arquitecturas firmado y validado con `apksigner` | ✅ compilado · ❌ sin probar en un teléfono |
 | Linux: editor y reproductor (GLFW) | ✅ |
-| Windows | 🔨 Preparado sin probar: CMake con ANGLE (vcpkg) y búsqueda de `engine_assets` junto al `.exe`; flujo de GitHub Actions escrito pero **no subido ni ejecutado** |
+| Windows x86_64 | 🟡 Compila con MSVC en GitHub Actions (CMake + vcpkg + ANGLE sobre Direct3D 11), pasan las pruebas automáticas y se publica en Releases (`windows-ultima`). **El editor abre en un PC con Windows real** (navegador de proyectos visto por el usuario, 2026-11-27). Falta comprobar escenas 3D, Jugar y audio en Windows |
 | macOS | ❌ |
 | `titan package` (paquete de juego) + plantilla Gradle para APK | ✅ en PC |
 | Exportar APK/AAB desde el propio teléfono, perfiles de compilación, iconos/splash configurables | ❌ |
@@ -249,6 +249,7 @@ Multihilo propio, pools, streaming, carga asíncrona, LOD, oclusión: ❌.
 
 | Fecha | Bloque | Resultado |
 |---|---|---|
+| 2026-11-27 | Compilación para Windows en GitHub Actions; el editor abre en un PC con Windows | 3 intentos: errores de MSVC (include, cabeceras GLES) y cuota de Artifacts → Releases |
 | 2026-11-27 | Carga asíncrona de texturas con precarga de escena | 111/111 pruebas; arranque 3,4 s → 0,22 s (medido) |
 | 2026-11-27 | Job System + partículas en paralelo + tiempos de física y partículas en el perfilador | 110/110 pruebas; TSan limpio; 1,10 → 0,38 ms en partículas |
 | 2026-11-27 | Mezclador de audio (efectos de Godot), editor del mezclador, API Lua, demo de plataformas 3D | 104/104 pruebas; demo ejecutada; commit `37d14ca` |
