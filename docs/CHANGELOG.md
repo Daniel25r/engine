@@ -11,6 +11,7 @@ Render
   (diferencia media medida 0,14/255) salvo los brillos, que ahora hacen bloom de verdad.
 - Sonda de reflexión (cubemap capturado de la escena) para reflejos fuera de pantalla.
 - Niveles de detalle automáticos (meshoptimizer): 40 personajes, 65 090 → 45 842 triángulos con la misma imagen.
+- Agua con olas animadas (opción del material).
 - Saneado de NaN/Inf en HDR (SSR, SSAO, TAA, bloom y composición).
 
 Materiales
@@ -33,7 +34,7 @@ Multijugador
 
 Plantillas nuevas: Mundo de bloques, Ciudad de neón (escaparate del render), Plaza multijugador.
 Proyectos anteriores: se cargan igual y se ven igual (las opciones nuevas están desactivadas en sus escenas).
-Licencia MIT. 147 pruebas automáticas.
+Licencia MIT. 148 pruebas automáticas.
 
 ## 0.13.0 — 2026-11-22 · Gran actualización: render, materiales, partículas, controles, física, animación y terreno
 

@@ -146,6 +146,7 @@ uniform ivec4 uGraphOut;       // registros de color base, metal, rugosidad y em
 uniform sampler2D uGraphTex0;
 uniform sampler2D uGraphTex1;
 uniform float uTime;
+uniform vec3 uWater; // activo, tamaño de las olas, velocidad
 uniform samplerCube uProbe;
 uniform int uProbeOn;
 uniform float uProbeMips;
@@ -342,6 +343,23 @@ void main() {
         vec3 tn = texture(uNormalTex, vUV).xyz * 2.0 - 1.0;
         tn.xy *= uNormalStrength;
         n = normalize(cotangentFrame(n, vWorld, vUV) * tn);
+    }
+    if (uWater.x > 0.5) {
+        // Olas: suma de ondas que viajan en varias direcciones; la normal sale de sus derivadas (como Gerstner).
+        vec2 p = vWorld.xz / uWater.y;
+        float t = uTime * uWater.z;
+        vec2 grad = vec2(0.0);
+        const vec4 waves[5] = vec4[5](vec4(1.0, 0.3, 0.55, 1.0), vec4(-0.6, 1.0, 0.9, 1.3), vec4(0.3, -1.0, 1.7, 1.9),
+                                      vec4(-1.0, -0.4, 2.9, 2.6), vec4(0.8, 0.8, 4.3, 3.4)); // dirección, frecuencia, velocidad
+        for (int i = 0; i < 5; ++i) {
+            vec2 d = normalize(waves[i].xy);
+            float f = waves[i].z, a = 0.07 / f;
+            grad += d * (a * f * cos(dot(d, p) * f + t * waves[i].w));
+        }
+        // A lo lejos las olas se ven más planas (y no parpadean entre píxeles).
+        grad /= 1.0 + length(uCameraPos - vWorld) * 0.04 / uWater.y;
+        vec3 wn = normalize(vec3(-grad.x, 1.0, -grad.y));
+        n = normalize(n * wn.y + vec3(wn.x, 0.0, wn.z)); // sobre la normal de la superficie
     }
     if (uGrid == 1) albedo *= 1.0 - gridLines(n);
     if (uUnlit == 1) { outColor = vec4(uHdr == 1 ? invAces(albedo) : pow(albedo, vec3(1.0 / 2.2)), alpha); return; }
@@ -685,7 +703,7 @@ bool Renderer::createGpuObjects() {
     uCascadeTexel_ = u("uCascadeTexel");
     uGraphCount_ = u("uGraphCount"); uGraph_ = u("uGraph[0]"); uGraphOut_ = u("uGraphOut");
     uGraphTex0_ = u("uGraphTex0"); uGraphTex1_ = u("uGraphTex1"); uTime_ = u("uTime");
-    uProbe_ = u("uProbe"); uProbeOn_ = u("uProbeOn"); uProbeMips_ = u("uProbeMips"); uProbeIntensity_ = u("uProbeIntensity");
+    uWater_ = u("uWater"); uProbe_ = u("uProbe"); uProbeOn_ = u("uProbeOn"); uProbeMips_ = u("uProbeMips"); uProbeIntensity_ = u("uProbeIntensity");
     uAlphaCutoff_ = u("uAlphaCutoff"); uSpot_ = u("uSpot"); uSpotInner_ = u("uSpotInner");
     uInstanced_ = u("uInstanced");
     uShadowInstanced_ = glGetUniformLocation(shadowProgram_, "uInstanced");
@@ -1531,6 +1549,9 @@ void Renderer::drawMesh(MeshPrimitive type, const Mat4& world, const MeshRendere
     s.normalStrength = mat.normalStrength;
     s.clearcoat = mat.clearcoat;
     s.clearcoatRoughness = mat.clearcoatRoughness;
+    s.water = mat.water;
+    s.waveScale = mat.waveScale;
+    s.waveSpeed = mat.waveSpeed;
     s.graph = mat.graph && mat.graph->program().ok() ? &mat.graph->program() : nullptr;
     drawSurface(mesh.vao, mesh.indexCount, false, world, s);
 }
@@ -1571,6 +1592,7 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
     glUniform1f(uAlphaCutoff_, s.alphaCutoff);
     glUniform1f(uNormalStrength_, s.normalStrength);
     glUniform2f(uClearcoat_, std::clamp(s.clearcoat, 0.0f, 1.0f), std::clamp(s.clearcoatRoughness, 0.02f, 1.0f));
+    glUniform3f(uWater_, s.water ? 1.0f : 0.0f, std::max(0.05f, s.waveScale), s.waveSpeed);
     if (s.graph) { // material por nodos: el programa y sus texturas (unidades 7 y 8)
         glUniform1i(uGraphCount_, s.graph->count);
         glUniform4fv(uGraph_, s.graph->count * 3, &s.graph->code[0].r);

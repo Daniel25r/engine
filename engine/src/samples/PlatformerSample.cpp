@@ -174,7 +174,9 @@ void environment(Scene& s, bool shadows = true) {
     s.world().add<Light>(sun, l);
     Entity sea = shape(s, "Mar", MeshPrimitive::Plane, {0, -10, -30}, {400, 1, 400}, 0x2D7FB8);
     MeshRenderer& mr = *s.world().get<MeshRenderer>(sea);
-    mr.roughness = 0.15f;
+    mr.roughness = 0.08f;
+    mr.water = true; // olas animadas
+    mr.waveScale = 2.0f;
     mr.castShadows = false;
 }
 

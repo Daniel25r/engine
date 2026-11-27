@@ -226,6 +226,11 @@ void writeMaterialFields(const MeshRenderer& m, Json& j) {
     j["normalStrength"] = toJson(m.normalStrength);
     j["clearcoat"] = toJson(m.clearcoat);
     j["clearcoatRoughness"] = toJson(m.clearcoatRoughness);
+    if (m.water) {
+        j["water"] = true;
+        j["waveScale"] = toJson(m.waveScale);
+        j["waveSpeed"] = toJson(m.waveSpeed);
+    }
     if (m.graph) j["graph"] = Json::parse(m.graph->toJson());
     j["metallicRoughnessMap"] = assetToJson(m.metallicRoughnessMap);
     j["emissionMap"] = assetToJson(m.emissionMap);
@@ -249,6 +254,9 @@ void readMaterialFields(MeshRenderer& m, FieldReader& rd) {
     rd.read("normalStrength", m.normalStrength);
     rd.read("clearcoat", m.clearcoat);
     rd.read("clearcoatRoughness", m.clearcoatRoughness);
+    rd.read("water", m.water);
+    rd.read("waveScale", m.waveScale);
+    rd.read("waveSpeed", m.waveSpeed);
     std::string graph;
     rd.readRaw("graph", graph);
     if (!graph.empty() && graph != "null") {

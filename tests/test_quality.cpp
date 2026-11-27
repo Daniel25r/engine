@@ -143,3 +143,18 @@ TEST("red: NetSync (replicación automática) se guarda con la escena") {
     const NetSync* r = b.world().get<NetSync>(b.findByName("Jugador 3"));
     CHECK(r && r->owner == 3 && std::abs(r->rate - 30.0f) < 1e-5f && !r->hasTarget);
 }
+
+TEST("calidad: el agua del material se guarda; los materiales antiguos no son agua") {
+    const ComponentRegistry reg = ComponentRegistry::createDefault();
+    Scene a("a");
+    MeshRenderer mr;
+    mr.water = true;
+    mr.waveScale = 2.5f;
+    mr.waveSpeed = 0.5f;
+    a.world().add<MeshRenderer>(a.createEntity("Mar"), mr);
+    Scene b("b");
+    CHECK(deserializeScene(serializeScene(a, reg), b, reg).ok());
+    const MeshRenderer* r = b.world().get<MeshRenderer>(b.findByName("Mar"));
+    CHECK(r && r->water && std::abs(r->waveScale - 2.5f) < 1e-5f && std::abs(r->waveSpeed - 0.5f) < 1e-5f);
+    CHECK(!MeshRenderer{}.water);
+}

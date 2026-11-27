@@ -95,7 +95,8 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 | Sistema | Estado | Evidencia |
 |---|---|---|
 | Terreno por mapa de alturas: esculpir (subir, bajar, aplanar, suavizar), 4 capas de pintura, colisión | ✅ | Pruebas `terreno:` (4); captura `terreno-personaje.png` |
-| Vegetación, agua, ríos, caminos/splines, texturas por pendiente/altura | ❌ | |
+| Agua: opción del material con olas animadas en el sombreador (5 ondas, normales de sus derivadas, más planas a lo lejos); refleja el cielo, la sonda y la escena (SSR) | ✅ | Prueba de guardado; captura de un mar al atardecer con reflejos; activada en el mar de Isla Estelar (proyectos nuevos) |
+| Vegetación, ríos, caminos/splines, texturas por pendiente/altura, desplazamiento real de la superficie del agua | ❌ | |
 | **Mundo de bloques (voxel)**: chunks 16×64×16, 14 tipos de bloque, biomas (océano, playa, llanura, bosque, desierto, montaña, nieve, volcánico), cuevas, árboles, generación reproducible por semilla | ✅ | Pruebas `voxel:` (6): determinismo, ≥5 biomas, caras ocultas y fusión (greedy), rayo/colocar/romper, guardado RLE, una parte por chunk |
 | Streaming de chunks del mundo de bloques alrededor de la cámara (generar/leer y mallar en los hilos del JobSystem, como mucho 4 subidas a la GPU por fotograma, descarga de lo lejano) | ✅ | Reproductor: 149 chunks, 73 llamadas de dibujo, el personaje anda sobre los bloques (colisión de malla estática de Jolt) |
 | Guardado incremental del mundo (solo chunks modificados, RLE, escritura atómica) y recarga | ✅ | Reproductor: romper/colocar → `mundos/mundo/chunks/0_-1.chunk`; segunda ejecución lo carga |

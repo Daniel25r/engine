@@ -53,7 +53,8 @@ bool sameMaterial(const MeshRenderer& a, const MeshRenderer& b) {
            a.color.a == b.color.a && a.metallic == b.metallic && a.roughness == b.roughness && a.emission.r == b.emission.r &&
            a.emission.g == b.emission.g && a.emission.b == b.emission.b && a.prototypeGrid == b.prototypeGrid &&
            a.unlit == b.unlit && a.doubleSided == b.doubleSided && a.clearcoat == b.clearcoat &&
-           a.clearcoatRoughness == b.clearcoatRoughness && a.graph == b.graph;
+           a.clearcoatRoughness == b.clearcoatRoughness && a.graph == b.graph &&
+           a.water == b.water && a.waveScale == b.waveScale && a.waveSpeed == b.waveSpeed;
 }
 } // namespace
 

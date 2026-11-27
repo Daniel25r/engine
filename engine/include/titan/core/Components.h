@@ -118,6 +118,11 @@ struct MeshRenderer {
     // Barniz (clear coat): capa transparente y brillante encima (pintura de coche, madera barnizada, fibra de carbono).
     float clearcoat = 0.0f;           // 0 = sin barniz, 1 = barniz completo
     float clearcoatRoughness = 0.05f; // rugosidad del barniz
+    // Agua: olas animadas en el sombreador (normales de varias ondas que viajan), muy lisa: refleja el cielo, la
+    // sonda y lo que hay en pantalla. Para planos de mar, lagos y charcos.
+    bool water = false;
+    float waveScale = 1.0f;  // tamaño de las olas (>1 más grandes)
+    float waveSpeed = 1.0f;
     // Material por nodos (opcional): si compila, calcula el color base, metal, rugosidad y emisión.
     std::shared_ptr<MaterialGraph> graph;
     AssetRef metallicRoughnessMap; // convención glTF: G = rugosidad, B = metálico (multiplican a los valores)

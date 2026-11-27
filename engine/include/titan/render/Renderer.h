@@ -292,6 +292,8 @@ private:
         float clearcoat = 0, clearcoatRoughness = 0.05f;
         const MatGraphProgram* graph = nullptr; // material por nodos (compilado)
         int firstIndex = 0;                     // primer índice (niveles de detalle)
+        bool water = false;
+        float waveScale = 1, waveSpeed = 1;
     };
     struct AnimNode {
         std::string name; // para pasar animaciones entre modelos con el mismo esqueleto (Mixamo)
@@ -362,7 +364,7 @@ private:
         uEmissiveTex_ = -1, uOcclusionTex_ = -1, uHasNormal_ = -1, uHasMR_ = -1, uHasOcclusion_ = -1,
         uNormalStrength_ = -1, uClearcoat_ = -1, uCascades_ = -1, uCascadeVP_ = -1, uCascadeSplit_ = -1,
         uCascadeTexel_ = -1, uGraphCount_ = -1, uGraph_ = -1, uGraphOut_ = -1, uGraphTex0_ = -1, uGraphTex1_ = -1,
-        uTime_ = -1, uProbe_ = -1, uProbeOn_ = -1, uProbeMips_ = -1, uProbeIntensity_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
+        uTime_ = -1, uWater_ = -1, uProbe_ = -1, uProbeOn_ = -1, uProbeMips_ = -1, uProbeIntensity_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
         uLayerTiling_ = -1;
     int uLayers_[4] = {-1, -1, -1, -1};
     int uInstanced_ = -1, uShadowInstanced_ = -1;

@@ -1050,6 +1050,13 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         dragF("Rugosidad", mat.roughness, 0.01f, 0, 1, "%.2f");
         map("Mapa normal", mat.normalMap);
         if (!mat.normalMap.isNull()) dragF("Relieve", mat.normalStrength, 0.01f, 0, 4, "%.2f");
+        check("Agua (olas)", mat.water);
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("Olas animadas; con rugosidad baja refleja el cielo, la sonda y la escena (mar, lagos, charcos)");
+        if (mat.water) {
+            dragF("Tamaño olas", mat.waveScale, 0.01f, 0.05f, 20, "%.2f");
+            dragF("Velocidad olas", mat.waveSpeed, 0.01f, 0, 10, "%.2f");
+        }
         dragF("Barniz", mat.clearcoat, 0.01f, 0, 1, "%.2f");
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
             ImGui::SetTooltip("Capa transparente brillante encima del material: pintura de coche, madera barnizada");
