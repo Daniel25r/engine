@@ -69,3 +69,9 @@ El plan por impacto está en [docs/TITAN_RUMBO_AAA.md](docs/TITAN_RUMBO_AAA.md):
 
 Android: el código se conserva y compila, pero no es la plataforma principal y no se ha probado en un teléfono real
 ([docs/ANDROID_PLATFORM.md](docs/ANDROID_PLATFORM.md)).
+
+## Licencia
+
+Titán es software libre bajo la [licencia MIT](LICENSE): puedes usarlo gratis, también en juegos comerciales,
+manteniendo el aviso de copyright. Las bibliotecas de terceros conservan sus licencias
+([docs/TITAN_ENGINE_DEPENDENCIES.md](docs/TITAN_ENGINE_DEPENDENCIES.md)).
