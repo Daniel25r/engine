@@ -118,11 +118,20 @@ bool writeGlb(const MeshBuild& mesh, std::vector<uint8_t>& out, std::string* err
         Json jointList = Json::array();
         for (size_t b = 0; b < mesh.bones.size(); ++b) {
             const MeshBuildBone& bone = mesh.bones[b];
-            nodes.push_back(Json{{"name", bone.name}, {"translation", {bone.restLocal.x, bone.restLocal.y, bone.restLocal.z}}});
+            Json node{{"name", bone.name}, {"translation", {bone.restLocal.x, bone.restLocal.y, bone.restLocal.z}}};
+            const Quat& q = bone.restRotation;
+            if (q.x != 0 || q.y != 0 || q.z != 0 || q.w != 1) node["rotation"] = {q.x, q.y, q.z, q.w};
+            const Vec3& sc = bone.restScale;
+            if (sc.x != 1 || sc.y != 1 || sc.z != 1) node["scale"] = {sc.x, sc.y, sc.z};
+            nodes.push_back(node);
             jointList.push_back(int(b + 1));
             if (bone.parent < 0) sceneNodes.push_back(int(b + 1));
-            const float m[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -bone.restWorld.x, -bone.restWorld.y, -bone.restWorld.z, 1};
-            ibm.insert(ibm.end(), m, m + 16);
+            if (bone.hasInverseBind) {
+                ibm.insert(ibm.end(), bone.inverseBind, bone.inverseBind + 16);
+            } else {
+                const float m[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -bone.restWorld.x, -bone.restWorld.y, -bone.restWorld.z, 1};
+                ibm.insert(ibm.end(), m, m + 16);
+            }
         }
         for (size_t b = 0; b < mesh.bones.size(); ++b)
             if (mesh.bones[b].parent >= 0) {
@@ -145,7 +154,8 @@ bool writeGlb(const MeshBuild& mesh, std::vector<uint8_t>& out, std::string* err
                                           ch.times.size(), ch.path == 1 ? "VEC4" : "VEC3");
                 samplers.push_back(Json{{"input", aIn}, {"output", aOut}, {"interpolation", "LINEAR"}});
                 channels.push_back(Json{{"sampler", samplers.size() - 1},
-                                        {"target", {{"node", ch.bone + 1}, {"path", ch.path == 1 ? "rotation" : "translation"}}}});
+                                        {"target", {{"node", ch.bone + 1},
+                                                    {"path", ch.path == 1 ? "rotation" : ch.path == 2 ? "scale" : "translation"}}}});
             }
             if (!channels.empty()) animations.push_back(Json{{"name", clip.name}, {"samplers", samplers}, {"channels", channels}});
         }

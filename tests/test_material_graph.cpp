@@ -1,4 +1,5 @@
 // Materiales por nodos: el compilador produce el programa correcto y se ejecuta igual que en el sombreador.
+#include <algorithm>
 #include <cmath>
 
 #include "Test.h"
