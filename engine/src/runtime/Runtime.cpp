@@ -280,6 +280,17 @@ void Runtime::frame(const Viewport& viewport) {
         TransformSystem::update(*scene_); // los emisores necesitan su posición actual
         updateParticles(*scene_, dt);
         cameras_.update(*scene_, input_, &actions_, &physics_, dt); // cámaras que siguen al jugador
+        // Sombras de gota: un rayo hacia abajo desde cada una (sin chocar con su propia entidad).
+        scene_->world().each<BlobShadow>([&](Entity e, BlobShadow& b) {
+            const Vec3 from = scene_->computeWorldMatrix(e).translation() + Vec3{0, 0.1f, 0};
+            RaycastHit hit;
+            b.visible = scene_->isActiveInHierarchy(e) && physics_.raycast(from, {0, -1, 0}, b.maxHeight, hit, e);
+            if (b.visible) {
+                b.point = hit.point;
+                b.normal = hit.normal.length() > 0.1f ? hit.normal.normalized() : Vec3{0, 1, 0};
+                b.height = hit.distance;
+            }
+        });
     }
 
     // Audio: el oyente es la cámara activa; las voces 3D siguen a su entidad.

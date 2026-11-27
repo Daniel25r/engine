@@ -339,3 +339,21 @@ TEST("personaje avanzado: aceleración, doble salto, salto variable, giro y pare
     const float high = peak(false), low = peak(true);
     CHECK(low < high * 0.5f);
 }
+
+TEST("personaje: un rayo que ignora al personaje no se choca con su cuerpo interior") {
+    Scene s;
+    floorOf(s);
+    Entity hero = s.createEntity("Héroe");
+    s.transform(hero).setPosition({0, 3, 0});
+    s.world().add<CharacterController>(hero, {});
+    PhysicsWorld w;
+    w.build(s);
+    w.step(s, 1.0f / 60);
+    RaycastHit hit;
+    const Vec3 from = s.transform(hero).position() + Vec3{0, 0.1f, 0};
+    CHECK(w.raycast(from, {0, -1, 0}, 20, hit, hero));
+    CHECK(hit.entity != hero);                  // llega al suelo
+    CHECK_NEAR(hit.point.y, 0, 0.02);
+    CHECK(w.raycast({0, 10, 0}, {0, -1, 0}, 20, hit)); // sin ignorar: los rayos sí ven al personaje
+    CHECK(hit.entity == hero);
+}

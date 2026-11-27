@@ -653,7 +653,12 @@ bool PhysicsWorld::raycastMasked(const Vec3& origin, const Vec3& direction, floa
     JPH::RRayCast ray(JPH::RVec3(origin.x, origin.y, origin.z), toJ(dir));
     JPH::RayCastResult result;
     JPH::BodyID ignoreId;
-    const bool hasIgnore = !ignore.isNull() && impl_->find(ignore, ignoreId);
+    bool hasIgnore = !ignore.isNull() && impl_->find(ignore, ignoreId);
+    if (!hasIgnore && !ignore.isNull()) // un personaje: se ignora su cuerpo interior
+        if (auto it = impl_->characters.find(pack(ignore)); it != impl_->characters.end()) {
+            ignoreId = it->second.character->GetInnerBodyID();
+            hasIgnore = !ignoreId.IsInvalid();
+        }
     JPH::IgnoreSingleBodyFilter filter(ignoreId);
     const JPH::BodyFilter defaultFilter;
     const MaskFilter mask(layerMask);
@@ -698,7 +703,12 @@ bool PhysicsWorld::sphereCast(const Vec3& origin, float radius, const Vec3& dire
     JPH::ShapeCastSettings settings;
     JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
     JPH::BodyID ignoreId;
-    const bool hasIgnore = !ignore.isNull() && impl_->find(ignore, ignoreId);
+    bool hasIgnore = !ignore.isNull() && impl_->find(ignore, ignoreId);
+    if (!hasIgnore && !ignore.isNull())
+        if (auto it = impl_->characters.find(pack(ignore)); it != impl_->characters.end()) {
+            ignoreId = it->second.character->GetInnerBodyID();
+            hasIgnore = !ignoreId.IsInvalid();
+        }
     JPH::IgnoreSingleBodyFilter filter(ignoreId);
     const JPH::BodyFilter defaultFilter;
     const MaskFilter mask(layerMask);

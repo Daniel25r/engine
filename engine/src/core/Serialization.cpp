@@ -486,6 +486,17 @@ ComponentRegistry ComponentRegistry::createDefault() {
             ++t.revision;
         });
 
+    r.addSimple<BlobShadow>(
+        "BlobShadow",
+        [](const BlobShadow& b) {
+            return Json{{"radius", toJson(b.radius)}, {"opacity", toJson(b.opacity)}, {"maxHeight", toJson(b.maxHeight)}};
+        },
+        [](BlobShadow& b, FieldReader& rd) {
+            rd.read("radius", b.radius);
+            rd.read("opacity", b.opacity);
+            rd.read("maxHeight", b.maxHeight);
+        });
+
     r.addSimple<CameraFollow>(
         "CameraFollow",
         [](const CameraFollow& c) {

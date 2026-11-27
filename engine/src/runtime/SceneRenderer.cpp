@@ -256,6 +256,24 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     for (const SpriteItem& s : sprites_)
         renderer.drawSprite(s.texture, *s.world, s.sprite->size, s.sprite->pivot, s.sprite->uv, s.sprite->color);
 
+    // ---- Sombras de gota: un disco suave sobre el suelo, más pequeño y claro cuanto más alto está el objeto.
+    scene.world().each<BlobShadow>([&](Entity, BlobShadow& b) {
+        if (!b.visible) return;
+        const float k = std::clamp(1.0f - b.height / std::max(b.maxHeight, 0.01f), 0.0f, 1.0f);
+        const float size = b.radius * 2 * (0.5f + 0.5f * k);
+        const Vec3 n = b.normal;
+        const Vec3 t = (std::fabs(n.y) < 0.99f ? cross(n, {0, 1, 0}) : cross(n, {1, 0, 0})).normalized();
+        const Vec3 bt = cross(n, t);
+        Mat4 m;
+        m.m[0] = t.x; m.m[1] = t.y; m.m[2] = t.z;
+        m.m[4] = bt.x; m.m[5] = bt.y; m.m[6] = bt.z;
+        m.m[8] = n.x; m.m[9] = n.y; m.m[10] = n.z;
+        const Vec3 p = b.point + n * 0.02f; // un poco por encima para no parpadear con el suelo
+        m.m[12] = p.x; m.m[13] = p.y; m.m[14] = p.z;
+        renderer.drawSprite(renderer.softParticleTexture(), m, {size, size}, {0.5f, 0.5f}, {0, 0, 1, 1},
+                            Color{0, 0, 0, b.opacity * (0.4f + 0.6f * k)});
+    });
+
     // ---- Partículas: cuadrados hacia la cámara; las de mezcla alfa, de lejos a cerca.
     scene.world().each<ParticleSystem, Transform>([&](Entity e, ParticleSystem& ps, Transform& t) {
         if (!ps.state || ps.state->particles.empty() || !scene.isActiveInHierarchy(e)) return;

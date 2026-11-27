@@ -469,4 +469,15 @@ struct CameraFollow {
     float shake = 0, shakeTime = 0;
 };
 
+// Sombra de gota: un círculo oscuro en el suelo, justo debajo, que ayuda a calcular dónde se aterriza al saltar.
+struct BlobShadow {
+    float radius = 0.5f;
+    float opacity = 0.55f;
+    float maxHeight = 12.0f;     // más alto que esto, no se dibuja
+    // En ejecución (no se guarda): dónde cae (lo calcula la física cada fotograma).
+    bool visible = false;
+    Vec3 point, normal{0, 1, 0};
+    float height = 0;
+};
+
 } // namespace titan

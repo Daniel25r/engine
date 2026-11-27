@@ -614,6 +614,7 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
         // Controlador de personaje con una cápsula visible de hijo (el origen de la entidad son los pies).
         scene.transform(e).setPosition({spawnPoint().x, 0, spawnPoint().z});
         scene.world().add<CharacterController>(e);
+        scene.world().add<BlobShadow>(e);
         Entity body = scene.createEntity("Cuerpo", e);
         scene.transform(body).setPosition({0, 0.9f, 0});
         scene.transform(body).setScale({0.7f, 1.8f, 0.7f});

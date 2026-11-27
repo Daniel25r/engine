@@ -1413,6 +1413,13 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         propLabel("Capa");
         ImGui::SliderInt("##collayer", &c.layer, 0, 15);
         track();
+    } else if (name == "BlobShadow") {
+        BlobShadow& b = *w.get<BlobShadow>(e);
+        dragF("Radio", b.radius, 0.01f, 0.05f, 20, "%.2f m");
+        dragF("Opacidad", b.opacity, 0.01f, 0, 1, "%.2f");
+        dragF("Altura máx.", b.maxHeight, 0.1f, 0.5f, 200, "%.1f m");
+        propLabel("");
+        ImGui::TextDisabled("Se ve al jugar (usa la física para encontrar el suelo)");
     } else if (name == "CameraFollow") {
         CameraFollow& c = *w.get<CameraFollow>(e);
         propLabel("Sigue a");
