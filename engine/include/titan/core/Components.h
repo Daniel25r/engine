@@ -114,6 +114,9 @@ struct MeshRenderer {
     AssetRef material;           // material compartido (.mat): si no es nulo, sus valores sustituyen a los de aquí
     AssetRef normalMap;          // relieve (mapa normal en convención OpenGL/glTF: verde = arriba)
     float normalStrength = 1.0f;
+    // Barniz (clear coat): capa transparente y brillante encima (pintura de coche, madera barnizada, fibra de carbono).
+    float clearcoat = 0.0f;           // 0 = sin barniz, 1 = barniz completo
+    float clearcoatRoughness = 0.05f; // rugosidad del barniz
     AssetRef metallicRoughnessMap; // convención glTF: G = rugosidad, B = metálico (multiplican a los valores)
     AssetRef emissionMap;        // multiplica al color de emisión (si este es negro, se usa blanco)
     AssetRef occlusionMap;       // R = oclusión ambiental
@@ -151,6 +154,9 @@ struct Environment {
     bool ssao = false;
     float ssaoIntensity = 1.0f;
     float ssaoRadius = 0.6f;      // metros
+    // Reflejos en pantalla (agua, suelos pulidos, metal, barniz). Desactivados por defecto como el SSAO.
+    bool ssr = false;
+    float ssrIntensity = 1.0f;
 };
 
 struct Light {

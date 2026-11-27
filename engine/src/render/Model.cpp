@@ -369,6 +369,8 @@ void Renderer::drawModel(int model, const Mat4& world, const MeshRenderer& mat, 
         s.offset = mat.offset;
         s.alphaCutoff = mat.alphaClip ? mat.alphaCutoff : p.alphaCutoff;
         s.normalStrength = mat.normalStrength;
+        s.clearcoat = mat.clearcoat;
+        s.clearcoatRoughness = mat.clearcoatRoughness;
         drawSurface(p.mesh.vao, p.mesh.indexCount, true, world, s);
     }
     currentJoints_ = nullptr;

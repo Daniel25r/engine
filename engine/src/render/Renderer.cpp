@@ -128,6 +128,7 @@ uniform int uHasNormal;
 uniform int uHasMR;
 uniform int uHasOcclusion;
 uniform float uNormalStrength;
+uniform vec2 uClearcoat; // cantidad, rugosidad
 uniform float uAlphaCutoff; // < 0: sin recorte
 uniform sampler2DShadow uShadowMap;
 uniform vec4 uColor;
@@ -152,7 +153,8 @@ uniform vec3 uFogColor;
 uniform float uFogDensity;
 uniform float uExposure;
 uniform int uShadowsOn;
-out vec4 outColor;
+layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outSpec; // reflectancia (rgb) y lisura (a) para los reflejos en pantalla
 
 const float PI = 3.14159265;
 vec3 toLinear(vec3 c) { return pow(c, vec3(2.2)); }
@@ -210,7 +212,20 @@ mat3 cotangentFrame(vec3 n, vec3 p, vec2 uv) {
     return mat3(t * invmax, b * invmax, n);
 }
 
+// Especular GGX de la capa de barniz (F0 = 0.04, el de un barniz o laca).
+float coatSpec(vec3 n, vec3 v, vec3 l, float rough, out float Fc) {
+    vec3 h = normalize(l + v);
+    float ndl = max(dot(n, l), 0.0), ndv = max(dot(n, v), 1e-4), ndh = max(dot(n, h), 0.0), vdh = max(dot(v, h), 0.0);
+    float a = max(rough * rough, 0.002), a2 = a * a;
+    float d = ndh * ndh * (a2 - 1.0) + 1.0;
+    float k = a * 0.5;
+    float V = 0.25 / ((ndv * (1.0 - k) + k) * (ndl * (1.0 - k) + k));
+    Fc = 0.04 + 0.96 * pow(1.0 - vdh, 5.0);
+    return a2 / (PI * d * d) * V * Fc * ndl;
+}
+
 void main() {
+    outSpec = vec4(0.0);
     vec4 tex = texture(uTex, vUV);
     vec3 albedo = toLinear(tex.rgb * uColor.rgb);
     float alpha = tex.a * uColor.a;
@@ -286,6 +301,23 @@ void main() {
     float specAo = clamp(pow(ndv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
     vec3 kd = (1.0 - specWeight) * (1.0 - metal);
     color += (hemi * albedo * kd * 0.45 * ao + env * specWeight * specAo * horizonOcc * horizonOcc) * uAmbientI;
+    vec3 specTint = specWeight * specAo * horizonOcc * horizonOcc; // para los reflejos en pantalla
+    float smoothness = 1.0 - rough;
+    // Barniz: capa lisa encima, con la normal geométrica (el barniz tapa el relieve del mapa normal).
+    if (uClearcoat.x > 0.0) {
+        vec3 cn = normalize(gl_FrontFacing ? vNormal : -vNormal);
+        float cr = uClearcoat.y, Fsun;
+        vec3 coatDirect = vec3(coatSpec(cn, v, normalize(-uDirDir), cr, Fsun)) * uDirColor * 2.4 * shadowFactor();
+        float cndv = max(dot(cn, v), 1e-4);
+        float Fv = 0.04 + 0.96 * pow(1.0 - cndv, 5.0);
+        vec3 cr3 = reflect(-v, cn);
+        vec3 coatEnv = cr3.y > 0.0 ? mix(horizon, sky, pow(cr3.y, 0.55)) : mix(horizon, ground, pow(-cr3.y, 0.35));
+        // La capa de abajo recibe menos luz (la que refleja el barniz) y se le suma el brillo del barniz.
+        color = color * (1.0 - Fv * uClearcoat.x) + (coatDirect + coatEnv * Fv * specAo * uAmbientI) * uClearcoat.x;
+        specTint = specTint * (1.0 - Fv * uClearcoat.x) + vec3(Fv * uClearcoat.x * specAo);
+        smoothness = max(smoothness, (1.0 - cr) * step(0.5, uClearcoat.x));
+    }
+    outSpec = vec4(clamp(specTint, 0.0, 1.0), smoothness);
     color += toLinear(uEmission * texture(uEmissiveTex, vUV).rgb) * 2.0;
 
     color = pow(aces(color * uExposure), vec3(1.0 / 2.2));
@@ -522,7 +554,7 @@ bool Renderer::createGpuObjects() {
     uSkinned_ = u("uSkinned"); uJoints_ = u("uJointTex");
     uUVTransform_ = u("uUVTransform"); uNormalTex_ = u("uNormalTex"); uMRTex_ = u("uMRTex");
     uEmissiveTex_ = u("uEmissiveTex"); uOcclusionTex_ = u("uOcclusionTex"); uHasNormal_ = u("uHasNormal");
-    uHasMR_ = u("uHasMR"); uHasOcclusion_ = u("uHasOcclusion"); uNormalStrength_ = u("uNormalStrength");
+    uHasMR_ = u("uHasMR"); uHasOcclusion_ = u("uHasOcclusion"); uNormalStrength_ = u("uNormalStrength"); uClearcoat_ = u("uClearcoat");
     uAlphaCutoff_ = u("uAlphaCutoff"); uSpot_ = u("uSpot"); uSpotInner_ = u("uSpotInner");
     uInstanced_ = u("uInstanced");
     uShadowInstanced_ = glGetUniformLocation(shadowProgram_, "uInstanced");
@@ -821,6 +853,8 @@ void Renderer::resolveScene() {
     s.ssao = quality_.ssao && e.ssao && projection_.m[15] == 0.0f;
     s.ssaoIntensity = e.ssaoIntensity;
     s.ssaoRadius = e.ssaoRadius;
+    s.ssr = quality_.ssr && e.ssr && projection_.m[15] == 0.0f;
+    s.ssrIntensity = e.ssrIntensity;
     s.proj[0] = projection_.m[0];
     s.proj[1] = projection_.m[5];
     s.proj[2] = projection_.m[10];
@@ -1234,6 +1268,8 @@ void Renderer::drawMesh(MeshPrimitive type, const Mat4& world, const MeshRendere
     s.offset = mat.offset;
     s.alphaCutoff = mat.alphaClip ? mat.alphaCutoff : -1.0f;
     s.normalStrength = mat.normalStrength;
+    s.clearcoat = mat.clearcoat;
+    s.clearcoatRoughness = mat.clearcoatRoughness;
     drawSurface(mesh.vao, mesh.indexCount, false, world, s);
 }
 
@@ -1272,6 +1308,14 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
     glUniform1i(uTerrain_, terrainDraw_ ? 1 : 0);
     glUniform1f(uAlphaCutoff_, s.alphaCutoff);
     glUniform1f(uNormalStrength_, s.normalStrength);
+    glUniform2f(uClearcoat_, std::clamp(s.clearcoat, 0.0f, 1.0f), std::clamp(s.clearcoatRoughness, 0.02f, 1.0f));
+    // Reflejos en pantalla: los opacos escriben además su reflectancia en el segundo destino del render target.
+    const bool opaque = s.color.a >= 0.999f || s.alphaCutoff >= 0.0f;
+    if (sceneInTarget_ && post_->hasSpecTarget()) {
+        static const GLenum both[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1}, colorOnly[1] = {GL_COLOR_ATTACHMENT0};
+        glDrawBuffers(opaque ? 2 : 1, opaque ? both : colorOnly);
+        specBuffersOn_ = opaque;
+    }
     glUniform1i(uNormalTex_, 3);
     glUniform1i(uMRTex_, 4);
     glUniform1i(uEmissiveTex_, 5);
@@ -1302,6 +1346,11 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
         glDrawElements(GL_TRIANGLES, count, wideIndices ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, nullptr);
     }
     glBindVertexArray(0);
+    if (specBuffersOn_) { // el cielo, los sprites y las partículas solo escriben color
+        static const GLenum colorOnly[1] = {GL_COLOR_ATTACHMENT0};
+        glDrawBuffers(1, colorOnly);
+        specBuffersOn_ = false;
+    }
     if (transparent) {
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);

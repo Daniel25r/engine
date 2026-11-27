@@ -13,7 +13,10 @@ struct PostSettings {
     bool ssao = false;
     float ssaoIntensity = 1.0f;
     float ssaoRadius = 0.6f;   // metros
-    float proj[4] = {1, 1, -1, -0.2f}; // P00, P11, P22, P23 de la proyección en perspectiva
+    float proj[4] = {1, 1, -1, -0.2f};
+    // Reflejos en pantalla (SSR): lo que se ve en el agua, el suelo pulido, el metal y el barniz.
+    bool ssr = false;
+    float ssrIntensity = 1.0f; // P00, P11, P22, P23 de la proyección en perspectiva
     bool bloom = false;
     float bloomIntensity = 0.5f;
     float bloomThreshold = 0.8f;
@@ -35,6 +38,7 @@ public:
     // Compone en el framebuffer "target", dentro del rectángulo (x, y, w, h) en píxeles de OpenGL.
     void resolve(uint32_t target, int x, int y, int w, int h, const PostSettings& s);
     int lastPasses() const { return passes_; }
+    bool hasSpecTarget() const { return sceneSpec_ != 0; }
 
 private:
     static constexpr int kBloomLevels = 5;
@@ -48,6 +52,9 @@ private:
     int aoW_ = 0, aoH_ = 0;
     int depthBits_ = 0;
     uint32_t sceneFbo_ = 0, sceneColor_ = 0, sceneDepth_ = 0;
+    uint32_t sceneSpec_ = 0;          // reflectancia y lisura por píxel (la escriben los opacos)
+    uint32_t ssr_ = 0, ssrFbo_ = 0, ssrTex_ = 0; // reflejos a media resolución
+    uint32_t ssrBlur_ = 0, ssrFbo2_ = 0, ssrTex2_ = 0; // y suavizados
     uint32_t bloomFbo_[kBloomLevels] = {}, bloomTex_[kBloomLevels] = {};
     int bloomW_[kBloomLevels] = {}, bloomH_[kBloomLevels] = {};
     int bloomLevels_ = 0;

@@ -14,6 +14,7 @@ struct QualitySettings {
     bool fxaa = true;
     bool bloom = true;          // permitido; cada escena decide si lo usa (Environment.bloom)
     bool ssao = true;           // permitido; cada escena decide si lo usa (Environment.ssao)
+    bool ssr = true;            // reflejos en pantalla, permitidos (Environment.ssr)
     bool shadows = true;
     int shadowMapSize = 2048;
     int maxPointLights = 4;     // luces locales (puntuales y focos) por fotograma

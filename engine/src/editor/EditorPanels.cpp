@@ -1031,6 +1031,10 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         dragF("Rugosidad", mat.roughness, 0.01f, 0, 1, "%.2f");
         map("Mapa normal", mat.normalMap);
         if (!mat.normalMap.isNull()) dragF("Relieve", mat.normalStrength, 0.01f, 0, 4, "%.2f");
+        dragF("Barniz", mat.clearcoat, 0.01f, 0, 1, "%.2f");
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("Capa transparente brillante encima del material: pintura de coche, madera barnizada");
+        if (mat.clearcoat > 0) dragF("Rugosidad barniz", mat.clearcoatRoughness, 0.005f, 0, 1, "%.2f");
         map("Metal/rugosidad", mat.metallicRoughnessMap);
         map("Oclusión", mat.occlusionMap);
         color("Emisión", mat.emission, false);
@@ -1101,6 +1105,10 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
             dragF("Intens. SSAO", v.ssaoIntensity, 0.01f, 0, 4, "%.2f");
             dragF("Radio SSAO", v.ssaoRadius, 0.01f, 0.05f, 5, "%.2f m");
         }
+        check("Reflejos (SSR)", v.ssr);
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("La escena se refleja en el agua, los suelos pulidos, el metal y el barniz (perfiles alto y muy alto)");
+        if (v.ssr) dragF("Intens. reflejos", v.ssrIntensity, 0.01f, 0, 2, "%.2f");
         dragF("Viñeta", v.vignette, 0.005f, 0, 1, "%.2f");
         dragF("Contraste", v.contrast, 0.005f, 0.5f, 1.5f, "%.2f");
         dragF("Saturación", v.saturation, 0.005f, 0, 2, "%.2f");

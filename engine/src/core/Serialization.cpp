@@ -224,6 +224,8 @@ void writeMaterialFields(const MeshRenderer& m, Json& j) {
     j["unlit"] = m.unlit;
     j["normalMap"] = assetToJson(m.normalMap);
     j["normalStrength"] = toJson(m.normalStrength);
+    j["clearcoat"] = toJson(m.clearcoat);
+    j["clearcoatRoughness"] = toJson(m.clearcoatRoughness);
     j["metallicRoughnessMap"] = assetToJson(m.metallicRoughnessMap);
     j["emissionMap"] = assetToJson(m.emissionMap);
     j["occlusionMap"] = assetToJson(m.occlusionMap);
@@ -244,6 +246,8 @@ void readMaterialFields(MeshRenderer& m, FieldReader& rd) {
     rd.read("unlit", m.unlit);
     rd.readAsset("normalMap", m.normalMap);
     rd.read("normalStrength", m.normalStrength);
+    rd.read("clearcoat", m.clearcoat);
+    rd.read("clearcoatRoughness", m.clearcoatRoughness);
     rd.readAsset("metallicRoughnessMap", m.metallicRoughnessMap);
     rd.readAsset("emissionMap", m.emissionMap);
     rd.readAsset("occlusionMap", m.occlusionMap);
@@ -364,7 +368,8 @@ ComponentRegistry ComponentRegistry::createDefault() {
                         {"bloomThreshold", toJson(e.bloomThreshold)}, {"vignette", toJson(e.vignette)},
                         {"contrast", toJson(e.contrast)}, {"saturation", toJson(e.saturation)},
                         {"temperature", toJson(e.temperature)}, {"ssao", e.ssao},
-                        {"ssaoIntensity", toJson(e.ssaoIntensity)}, {"ssaoRadius", toJson(e.ssaoRadius)}};
+                        {"ssaoIntensity", toJson(e.ssaoIntensity)}, {"ssaoRadius", toJson(e.ssaoRadius)},
+                        {"ssr", e.ssr}, {"ssrIntensity", toJson(e.ssrIntensity)}};
         },
         [](Environment& e, FieldReader& rd) {
             rd.read("sky", e.sky);
@@ -387,6 +392,8 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("ssao", e.ssao);
             rd.read("ssaoIntensity", e.ssaoIntensity);
             rd.read("ssaoRadius", e.ssaoRadius);
+            rd.read("ssr", e.ssr);
+            rd.read("ssrIntensity", e.ssrIntensity);
         });
 
     r.addSimple<Light>(

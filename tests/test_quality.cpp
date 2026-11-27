@@ -17,6 +17,7 @@ TEST("calidad: cada perfil cambia opciones reales y en orden creciente") {
     CHECK(!lo.fxaa && me.fxaa && !me.bloom && hi.bloom);
     CHECK(vl.maxPointLights < hi.maxPointLights && hi.maxPointLights < vh.maxPointLights);
     CHECK(!vl.ssao && !lo.ssao && !me.ssao && hi.ssao && vh.ssao); // la oclusión en pantalla solo en alto y muy alto
+    CHECK(!vl.ssr && !lo.ssr && !me.ssr && hi.ssr && vh.ssr);       // y los reflejos en pantalla
 }
 
 TEST("calidad: el SSAO de la escena se guarda y los proyectos antiguos siguen sin él") {
@@ -73,4 +74,29 @@ TEST("calidad: nombres y recomendación según capacidades medibles") {
     CHECK(recommendedQuality(c) == QualityLevel::High);
     c.softwareRenderer = true; // llvmpipe, WARP...
     CHECK(recommendedQuality(c) == QualityLevel::Medium);
+}
+
+TEST("calidad: barniz y reflejos en pantalla se guardan; los proyectos antiguos no cambian") {
+    const ComponentRegistry reg = ComponentRegistry::createDefault();
+    Scene a("a");
+    Entity coche = a.createEntity("Coche");
+    MeshRenderer mr;
+    mr.clearcoat = 0.8f;
+    mr.clearcoatRoughness = 0.1f;
+    a.world().add<MeshRenderer>(coche, mr);
+    Environment en;
+    en.ssr = true;
+    en.ssrIntensity = 0.7f;
+    a.world().add<Environment>(a.createEntity("Entorno"), en);
+    const std::string text = serializeScene(a, reg);
+    Scene b("b");
+    CHECK(deserializeScene(text, b, reg).ok());
+    const MeshRenderer* m = b.world().get<MeshRenderer>(b.findByName("Coche"));
+    CHECK(m && std::abs(m->clearcoat - 0.8f) < 1e-5f && std::abs(m->clearcoatRoughness - 0.1f) < 1e-5f);
+    const Environment* e = b.world().get<Environment>(b.findByName("Entorno"));
+    CHECK(e && e->ssr && std::abs(e->ssrIntensity - 0.7f) < 1e-5f);
+    // Sin los campos (escena de una versión anterior): sin barniz y sin reflejos en pantalla.
+    MeshRenderer def;
+    Environment edef;
+    CHECK(def.clearcoat == 0.0f && !edef.ssr);
 }

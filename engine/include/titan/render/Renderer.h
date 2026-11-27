@@ -257,6 +257,7 @@ private:
         Vec2 tiling{1, 1}, offset;
         float alphaCutoff = -1;
         float normalStrength = 1;
+        float clearcoat = 0, clearcoatRoughness = 0.05f;
     };
     struct AnimNode {
         int parent = -1;
@@ -324,7 +325,7 @@ private:
         uAmbientI_ = -1, uFogColor_ = -1, uFogDensity_ = -1, uExposure_ = -1, uLightVP_ = -1, uShadowMap_ = -1,
         uShadowsOn_ = -1, uSkinned_ = -1, uJoints_ = -1, uUVTransform_ = -1, uNormalTex_ = -1, uMRTex_ = -1,
         uEmissiveTex_ = -1, uOcclusionTex_ = -1, uHasNormal_ = -1, uHasMR_ = -1, uHasOcclusion_ = -1,
-        uNormalStrength_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
+        uNormalStrength_ = -1, uClearcoat_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
         uLayerTiling_ = -1;
     int uLayers_[4] = {-1, -1, -1, -1};
     int uInstanced_ = -1, uShadowInstanced_ = -1;
@@ -362,7 +363,8 @@ private:
     int quadCount_ = 0;
     Viewport viewport_;
     Mat4 viewProj_;
-    Mat4 projection_; // de la cámara actual (el SSAO reconstruye posiciones desde la profundidad)
+    Mat4 projection_;
+    bool specBuffersOn_ = false; // se dibuja también en el destino de reflectancia (SSR) // de la cámara actual (el SSAO reconstruye posiciones desde la profundidad)
     Vec3 cameraPos_;
     Vec3 camRight_{1, 0, 0}, camUp_{0, 1, 0};
     std::vector<LoadedFont> fonts_;

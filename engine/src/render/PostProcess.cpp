@@ -76,6 +76,9 @@ uniform float uSaturation;
 uniform float uTemperature;
 uniform sampler2D uAO;
 uniform int uAOOn;
+uniform sampler2D uSSR;
+uniform sampler2D uSpec;
+uniform int uSSROn;
 out vec4 outColor;
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 vec3 fxaa(vec2 uv) {
@@ -100,6 +103,12 @@ vec3 fxaa(vec2 uv) {
 void main() {
     vec3 c = uFxaa == 1 ? fxaa(vUV) : texture(uScene, vUV).rgb;
     if (uAOOn == 1) c *= texture(uAO, vUV).r; // antes del bloom: la oclusión no apaga los brillos
+    if (uSSROn == 1) {
+        // El sombreador ya puso el reflejo del cielo: donde el rayo encontró escena, se sustituye por ella.
+        vec4 r = texture(uSSR, vUV);
+        vec3 tint = texture(uSpec, vUV).rgb;
+        c = c * (1.0 - luma(tint) * r.a) + r.rgb * tint * r.a;
+    }
     if (uBloomOn == 1) c += texture(uBloom, vUV).rgb * uBloomIntensity;
     c = (c - 0.5) * uContrast + 0.5;
     c = mix(vec3(luma(c)), c, uSaturation);
@@ -184,6 +193,104 @@ void main() {
 }
 )";
 
+// Reflejos en pantalla: rayo en el espacio de la cámara desde cada píxel liso, avance creciente con ruido y
+// refinado binario al cruzar la profundidad. Se desvanece en los bordes de la pantalla, con la distancia y cuando
+// el rayo vuelve hacia la cámara (ahí la pantalla no tiene la información).
+const char* kSsrFS = R"(#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform highp sampler2D uDepth;
+uniform sampler2D uScene;
+uniform sampler2D uSpec;
+uniform vec4 uProj;
+uniform vec2 uTexel;
+uniform float uIntensity;
+out vec4 outColor;
+vec3 viewPos(vec2 uv) {
+    uv = (floor(uv / uTexel) + 0.5) * uTexel;
+    float zn = texture(uDepth, uv).r * 2.0 - 1.0;
+    float z = -uProj.w / (zn + uProj.z);
+    return vec3((uv * 2.0 - 1.0) * (-z) / uProj.xy, z);
+}
+vec2 project(vec3 p) { return p.xy * uProj.xy / (-p.z) * 0.5 + 0.5; }
+void main() {
+    vec4 sp = texture(uSpec, vUV);
+    float w = smoothstep(0.35, 0.85, sp.a) * max(sp.r, max(sp.g, sp.b));
+    float d = texture(uDepth, vUV).r;
+    if (w < 0.005 || d >= 1.0) { outColor = vec4(0.0); return; }
+    vec3 P = viewPos(vUV);
+    vec3 l = viewPos(vUV - vec2(uTexel.x, 0.0)), r = viewPos(vUV + vec2(uTexel.x, 0.0));
+    vec3 b = viewPos(vUV - vec2(0.0, uTexel.y)), t = viewPos(vUV + vec2(0.0, uTexel.y));
+    vec3 dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l;
+    vec3 dy = abs(t.z - P.z) < abs(P.z - b.z) ? t - P : P - b;
+    vec3 N = normalize(cross(dx, dy));
+    vec3 R = reflect(normalize(P), N);
+    float towardCam = clamp(1.0 - R.z * 2.0, 0.0, 1.0);
+    if (towardCam <= 0.0) { outColor = vec4(0.0); return; }
+    float noise = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    float stepLen = max(0.03, -P.z * 0.008);
+    vec3 ray = P + N * (0.01 * -P.z) + R * stepLen * noise;
+    vec3 prev = ray;
+    bool hit = false;
+    vec2 uv = vUV;
+    float travelled = 0.0;
+    const int STEPS = 48;
+    int i = 0;
+    for (; i < STEPS; ++i) {
+        prev = ray;
+        ray += R * stepLen;
+        travelled += stepLen;
+        stepLen *= 1.08;
+        if (ray.z > -0.05) break; // detrás de la cámara
+        uv = project(ray);
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) break;
+        float sceneZ = viewPos(uv).z;
+        float diff = sceneZ - ray.z; // > 0: el rayo pasó por detrás de la superficie
+        if (diff > 0.0 && diff < max(stepLen * 1.5, 0.12)) {
+            vec3 a = prev, c = ray; // refinado binario
+            for (int k = 0; k < 6; ++k) {
+                vec3 m = (a + c) * 0.5;
+                uv = project(m);
+                if (viewPos(uv).z - m.z > 0.0) c = m; else a = m;
+            }
+            uv = project(c);
+            // Comprobación: el punto refinado tiene que estar sobre la superficie. Si no, el rayo pasó por detrás de
+            // un objeto (no lo tocó) y se sigue avanzando: así no salen "rayas" en los reflejos.
+            if (abs(viewPos(uv).z - c.z) < 0.05 + 0.01 * -c.z) {
+                hit = true;
+                break;
+            }
+        }
+    }
+    if (!hit) { outColor = vec4(0.0); return; }
+    vec2 edge = min(uv, 1.0 - uv);
+    float fade = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * (1.0 - float(i) / float(STEPS)) * towardCam;
+    if (texture(uDepth, uv).r >= 1.0) fade = 0.0; // el cielo ya está en el reflejo del sombreador
+    outColor = vec4(texture(uScene, uv).rgb, clamp(fade * uIntensity * smoothstep(0.35, 0.85, sp.a), 0.0, 1.0));
+}
+)";
+
+// Suavizado del reflejo: 4×4 muestras pesadas por su confianza (alfa); quita el ruido del avance del rayo.
+const char* kSsrBlurFS = R"(#version 300 es
+precision mediump float;
+in vec2 vUV;
+uniform sampler2D uSrc;
+uniform vec2 uTexel;
+out vec4 outColor;
+void main() {
+    vec3 col = vec3(0.0);
+    float wsum = 0.0, asum = 0.0;
+    for (int y = -2; y < 2; ++y)
+        for (int x = -2; x < 2; ++x) {
+            vec4 s = texture(uSrc, vUV + (vec2(x, y) + 0.5) * uTexel);
+            col += s.rgb * s.a;
+            wsum += s.a;
+            asum += s.a;
+        }
+    outColor = vec4(wsum > 1e-4 ? col / wsum : vec3(0.0), asum / 16.0);
+}
+)";
+
 GLuint compile(GLenum type, const char* src) {
     GLuint s = glCreateShader(type);
     glShaderSource(s, 1, &src, nullptr);
@@ -238,6 +345,9 @@ bool PostProcessor::init() {
     up_ = link(kUpFS);
     ssao_ = link(kSsaoFS);
     ssaoBlur_ = link(kSsaoBlurFS);
+    ssr_ = link(kSsrFS);
+    ssrBlur_ = link(kSsrBlurFS);
+    if (!ssr_) TITAN_WARN("render", "SSR no disponible en esta GPU (no compiló); se dibuja sin él");
     if (!ssao_ || !ssaoBlur_) TITAN_WARN("render", "SSAO no disponible en esta GPU (no compiló); se dibuja sin él");
     glGenVertexArrays(1, &vao_);
     return composite_ && down_ && up_;
@@ -247,7 +357,12 @@ void PostProcessor::destroyTargets() {
     if (sceneFbo_) glDeleteFramebuffers(1, &sceneFbo_);
     if (sceneColor_) glDeleteTextures(1, &sceneColor_);
     if (sceneDepth_) glDeleteTextures(1, &sceneDepth_);
-    sceneFbo_ = sceneColor_ = sceneDepth_ = 0;
+    if (sceneSpec_) glDeleteTextures(1, &sceneSpec_);
+    if (ssrFbo_) glDeleteFramebuffers(1, &ssrFbo_);
+    if (ssrTex_) glDeleteTextures(1, &ssrTex_);
+    if (ssrFbo2_) glDeleteFramebuffers(1, &ssrFbo2_);
+    if (ssrTex2_) glDeleteTextures(1, &ssrTex2_);
+    sceneFbo_ = sceneColor_ = sceneDepth_ = sceneSpec_ = ssrFbo_ = ssrTex_ = ssrFbo2_ = ssrTex2_ = 0;
     for (int i = 0; i < 2; ++i) {
         if (aoFbo_[i]) glDeleteFramebuffers(1, &aoFbo_[i]);
         if (aoTex_[i]) glDeleteTextures(1, &aoTex_[i]);
@@ -264,14 +379,15 @@ void PostProcessor::destroyTargets() {
 
 void PostProcessor::shutdown() {
     destroyTargets();
-    for (uint32_t* p : {&composite_, &down_, &up_, &ssao_, &ssaoBlur_})
+    for (uint32_t* p : {&composite_, &down_, &up_, &ssao_, &ssaoBlur_, &ssr_, &ssrBlur_})
         if (*p) glDeleteProgram(*p), *p = 0;
     if (vao_) glDeleteVertexArrays(1, &vao_);
     vao_ = 0;
 }
 
 void PostProcessor::onContextLost() {
-    composite_ = down_ = up_ = ssao_ = ssaoBlur_ = vao_ = sceneFbo_ = sceneColor_ = sceneDepth_ = 0;
+    composite_ = down_ = up_ = ssao_ = ssaoBlur_ = ssr_ = vao_ = sceneFbo_ = sceneColor_ = sceneDepth_ = 0;
+    sceneSpec_ = ssrFbo_ = ssrTex_ = ssrBlur_ = ssrFbo2_ = ssrTex2_ = 0;
     for (int i = 0; i < 2; ++i) aoFbo_[i] = aoTex_[i] = 0;
     aoW_ = aoH_ = 0;
     for (int i = 0; i < kBloomLevels; ++i) bloomFbo_[i] = bloomTex_[i] = 0;
@@ -293,6 +409,12 @@ bool PostProcessor::createTargets(int w, int h) {
     glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo_);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sceneColor_, 0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sceneDepth_, 0);
+    sceneSpec_ = makeColorTexture(w, h);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, sceneSpec_, 0);
+    {
+        static const GLenum colorOnly[1] = {GL_COLOR_ATTACHMENT0};
+        glDrawBuffers(1, colorOnly); // por defecto solo color: los opacos activan el segundo destino al dibujarse
+    }
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         TITAN_ERROR("render", "Posprocesado: no se pudo crear el render target de %dx%d", w, h);
         destroyTargets();
@@ -335,6 +457,14 @@ bool PostProcessor::createTargets(int w, int h) {
             aoFbo_[i] = aoTex_[i] = 0;
         }
     }
+    ssrTex_ = makeColorTexture(aoW_, aoH_);
+    glGenFramebuffers(1, &ssrFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssrTex_, 0);
+    ssrTex2_ = makeColorTexture(aoW_, aoH_);
+    glGenFramebuffers(1, &ssrFbo2_);
+    glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo2_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssrTex2_, 0);
     if (!aoFbo_[0] || !aoFbo_[1]) TITAN_WARN("render", "SSAO desactivado: la GPU no puede dibujar en texturas RG16F");
     width_ = w;
     height_ = h;
@@ -347,6 +477,14 @@ bool PostProcessor::begin(int w, int h) {
     if ((w != width_ || h != height_ || !sceneFbo_) && !createTargets(w, h)) return false;
     glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo_);
     glViewport(0, 0, w, h);
+    if (sceneSpec_) { // reflectancia a cero: lo que no sea un opaco (cielo, sprites) no refleja nada
+        static const GLenum both[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1}, colorOnly[1] = {GL_COLOR_ATTACHMENT0};
+        const GLfloat zero[4] = {0, 0, 0, 0};
+        glDrawBuffers(2, both);
+        glDisable(GL_SCISSOR_TEST);
+        glClearBufferfv(GL_COLOR, 1, zero);
+        glDrawBuffers(1, colorOnly);
+    }
     passes_ = 0;
     return true;
 }
@@ -414,6 +552,32 @@ void PostProcessor::resolve(uint32_t target, int x, int y, int w, int h, const P
         drawFullscreen();
     }
 
+    const bool ssr = s.ssr && ssr_ && ssrBlur_ && ssrFbo_ && ssrFbo2_ && sceneSpec_ && s.ssrIntensity > 0;
+    if (ssr) {
+        glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo_);
+        glViewport(0, 0, aoW_, aoH_);
+        glUseProgram(ssr_);
+        glUniform1i(glGetUniformLocation(ssr_, "uDepth"), 0);
+        glUniform1i(glGetUniformLocation(ssr_, "uScene"), 1);
+        glUniform1i(glGetUniformLocation(ssr_, "uSpec"), 2);
+        glUniform4f(glGetUniformLocation(ssr_, "uProj"), s.proj[0], s.proj[1], s.proj[2], s.proj[3]);
+        glUniform2f(glGetUniformLocation(ssr_, "uTexel"), 1.0f / width_, 1.0f / height_);
+        glUniform1f(glGetUniformLocation(ssr_, "uIntensity"), s.ssrIntensity);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, sceneColor_);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, sceneSpec_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sceneDepth_);
+        drawFullscreen();
+        glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo2_);
+        glUseProgram(ssrBlur_);
+        glUniform1i(glGetUniformLocation(ssrBlur_, "uSrc"), 0);
+        glUniform2f(glGetUniformLocation(ssrBlur_, "uTexel"), 1.0f / aoW_, 1.0f / aoH_);
+        glBindTexture(GL_TEXTURE_2D, ssrTex_);
+        drawFullscreen();
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glViewport(x, y, w, h);
     glEnable(GL_SCISSOR_TEST);
@@ -432,6 +596,13 @@ void PostProcessor::resolve(uint32_t target, int x, int y, int w, int h, const P
     glUniform1f(glGetUniformLocation(composite_, "uTemperature"), s.temperature);
     glUniform1i(glGetUniformLocation(composite_, "uAO"), 2);
     glUniform1i(glGetUniformLocation(composite_, "uAOOn"), ao ? 1 : 0);
+    glUniform1i(glGetUniformLocation(composite_, "uSSR"), 3);
+    glUniform1i(glGetUniformLocation(composite_, "uSpec"), 4);
+    glUniform1i(glGetUniformLocation(composite_, "uSSROn"), ssr ? 1 : 0);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, ssr ? ssrTex2_ : sceneColor_);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, ssr ? sceneSpec_ : sceneColor_);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, ao ? aoTex_[1] : sceneColor_);
     glActiveTexture(GL_TEXTURE1);

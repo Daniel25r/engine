@@ -52,7 +52,8 @@ bool sameMaterial(const MeshRenderer& a, const MeshRenderer& b) {
     return a.mesh == b.mesh && a.color.r == b.color.r && a.color.g == b.color.g && a.color.b == b.color.b &&
            a.color.a == b.color.a && a.metallic == b.metallic && a.roughness == b.roughness && a.emission.r == b.emission.r &&
            a.emission.g == b.emission.g && a.emission.b == b.emission.b && a.prototypeGrid == b.prototypeGrid &&
-           a.unlit == b.unlit && a.doubleSided == b.doubleSided;
+           a.unlit == b.unlit && a.doubleSided == b.doubleSided && a.clearcoat == b.clearcoat &&
+           a.clearcoatRoughness == b.clearcoatRoughness;
 }
 } // namespace
 
