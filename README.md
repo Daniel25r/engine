@@ -1,56 +1,71 @@
-# Titán
+# Titán Engine
 
-Motor de videojuegos propio para Android, en C++17 sobre OpenGL ES 3.0, con scripts en Lua.
-"Titán" es un nombre provisional; se cambia en `engine/include/titan/core/Version.h` y en `android/app/build.gradle.kts`.
+**Motor de videojuegos 3D para PC (Windows y Linux)**, escrito en C++17. Tiene editor visual, scripts en Lua, física
+Jolt, render PBR moderno y herramientas de modelado, escultura y animación integradas.
 
-**Estado: versión 0.3.0.** Titán tiene un **editor de juegos dentro de la app**: creas un proyecto 2D o 3D,
-construyes la escena con el dedo, programas el comportamiento en Lua y pulsas **Jugar** para probarlo ahí mismo.
-El mismo editor funciona en Android (`android/editor`) y en escritorio (`titan_editor`).
-Probado de forma automática en escritorio; **todavía no se ha probado en un teléfono real**.
-Detalle función por función en [docs/TITAN_ENGINE_STATUS.md](docs/TITAN_ENGINE_STATUS.md).
+![Render de Titán: reflejos en pantalla, barniz, metales y sombras en cascada](docs/img/render-materiales.png)
 
-![Editor](docs/editor-3d.png)
+**Versión 0.14.** Lo que se lista aquí existe en el código y tiene pruebas automáticas (131) o se ha comprobado
+con capturas. Detalle función por función, con lo que falta, en
+[docs/TITAN_ENGINE_STATUS.md](docs/TITAN_ENGINE_STATUS.md).
 
-## En 1 minuto
+## Descargar
+
+**Windows (x64):** [Titan-Windows-x86_64.zip](https://github.com/Daniel25r/engine/releases/download/windows-ultima/Titan-Windows-x86_64.zip).
+Descomprime el zip y abre `titan_editor.exe`.
+
+## Qué trae
+
+| Área | Lo que hay |
+|---|---|
+| **Render** | PBR, luz ambiental del cielo con el modelo *split-sum* (el de UE4/UE5), oclusión ambiental (SSAO), reflejos en pantalla (SSR), barniz para pintura de coche, sombras del sol en 4 cascadas, bloom, FXAA, gradación de color, perfiles de calidad |
+| **Mundos** | Mundo de bloques infinito (biomas, cuevas, árboles) que se carga en varios hilos y se guarda solo; terreno por mapa de alturas con esculpido y 4 capas de pintura |
+| **Física** | Jolt Physics: cuerpos rígidos, uniones, controlador de personaje, colisión de malla |
+| **Juego** | Scripts en Lua (con entorno aislado), acciones de entrada (teclado, mando, táctil), cámara en tercera persona, navegación e IA, partículas, animación esquelética con máquina de estados, interfaz de juego, partidas guardadas |
+| **Audio** | miniaudio con mezclador de buses y efectos (reverberación, eco, filtros, limitador...) |
+| **Editor** | Escena, jerarquía, inspector, gizmos, contenido, consola, botón Jugar. Modelado (extruir, inset, subdividir, simetría), escultura (6 pinceles), esqueleto automático y animación por claves |
+| **Importar** | glTF/GLB, OBJ, STL, PLY y .blend |
+
+| Mundo de bloques | Editor |
+|---|---|
+| ![Mundo de bloques](docs/img/mundo-bloques.png) | ![Editor con el mundo de bloques](docs/img/editor-mundo-bloques.png) |
+
+![Isla Estelar, juego de ejemplo incluido](docs/img/isla-estelar.png)
+
+## Ejemplos incluidos
+
+- **Isla Estelar**: plataformas 3D completo (menú, nivel, enemigos con IA, monedas, victoria, música).
+- **Mundo de bloques**: sandbox para explorar, romper y colocar bloques.
+
+Se crean desde la pantalla de proyectos del editor.
+
+## Compilar desde el código
 
 ```bash
-cmake -S . -B build/desktop -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build/desktop
+cmake -S . -B build/desktop -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build/desktop
 ./build/desktop/titan_tests
-./build/desktop/titan_editor --projects mis_proyectos
-./build/desktop/titan demo mi_demo
-./build/desktop/titan tree mi_demo
-./build/desktop/titan set mi_demo Nave Transform.scale 2 2 1
-./build/desktop/titan package mi_demo mi_paquete
-./build/desktop/titan_player mi_paquete
+./build/desktop/titan_editor
 ```
+
+Windows: ver [docs/BUILD_INSTRUCTIONS.md](docs/BUILD_INSTRUCTIONS.md) (la compilación oficial la hace GitHub Actions).
+
+## Hacia dónde va
+
+El plan por impacto está en [docs/TITAN_RUMBO_AAA.md](docs/TITAN_RUMBO_AAA.md): editor de materiales por nodos, FBX
+(Mixamo), render HDR con TAA, sondas de reflexión, LOD automático, navmesh, Vulkan, multijugador y GI.
 
 ## Documentación
 
 | | |
 |---|---|
 | [TITAN_ENGINE_STATUS](docs/TITAN_ENGINE_STATUS.md) | Qué funciona y qué no, función por función |
-| [TITAN_ENGINE_ARCHITECTURE](docs/TITAN_ENGINE_ARCHITECTURE.md) | Módulos, flujo del fotograma, decisiones |
-| [TITAN_ENGINE_ROADMAP](docs/TITAN_ENGINE_ROADMAP.md) | Generaciones siguientes |
 | [TITAN_ENGINE_API](docs/TITAN_ENGINE_API.md) | API de Lua, C++ y la herramienta `titan` |
-| [FILE_FORMATS](docs/FILE_FORMATS.md) | Proyecto, escenas, .meta y paquetes |
-| [ANDROID_PLATFORM](docs/ANDROID_PLATFORM.md) | Ciclo de vida, exportación, análisis de exportar desde el teléfono |
-| [BUILD_INSTRUCTIONS](docs/BUILD_INSTRUCTIONS.md) | Compilar en escritorio y para Android |
-| [TITAN_ENGINE_TESTS](docs/TITAN_ENGINE_TESTS.md) | Pruebas y resultados |
-| [TITAN_ENGINE_DEPENDENCIES](docs/TITAN_ENGINE_DEPENDENCIES.md) | Bibliotecas, licencias y alternativas |
-| [CHANGELOG](docs/CHANGELOG.md) | Cambios |
+| [TITAN_STUDIO](docs/TITAN_STUDIO.md) | Modelado, escultura, rigging y animación |
+| [TITAN_ENGINE_ARCHITECTURE](docs/TITAN_ENGINE_ARCHITECTURE.md) | Módulos, flujo del fotograma, decisiones |
+| [FILE_FORMATS](docs/FILE_FORMATS.md) | Proyecto, escenas, mundos y paquetes |
+| [TITAN_ENGINE_DEPENDENCIES](docs/TITAN_ENGINE_DEPENDENCIES.md) | Bibliotecas y sus licencias |
+| [TITAN_ENGINE_TESTS](docs/TITAN_ENGINE_TESTS.md) | Pruebas |
 
-## Estructura
-
-```
-engine/include/titan/{core,render,scripting,runtime,editor}   API pública
-engine/src/{core,render,scripting,runtime,editor}             implementación
-engine/platform/{android,desktop}                      capa de plataforma
-engine/assets/                                         recursos del motor (fuente de depuración)
-third_party/{lua,nlohmann,stb}                         dependencias fijadas
-tools/titan/                                           herramienta de línea de comandos
-tests/                                                 pruebas
-android/editor/                                        app del editor (Kotlin + JNI)
-android/app/                                           plantilla de exportación de juegos (Gradle)
-samples/demo/project/                                  proyecto de demostración
-docs/                                                  documentación técnica
-```
+Android: el código se conserva y compila, pero no es la plataforma principal y no se ha probado en un teléfono real
+([docs/ANDROID_PLATFORM.md](docs/ANDROID_PLATFORM.md)).
