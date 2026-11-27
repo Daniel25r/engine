@@ -470,8 +470,14 @@ MeshBuild EditMesh::build() const {
     const bool skinned = !rig.empty();
     if (skinned) {
         if (rig.joints.size() != verts.size()) rig.autoWeights(verts);
-        for (const RigBone& b : rig.bones)
-            out.bones.push_back({b.name, b.parent, b.parent >= 0 ? b.head - rig.bones[size_t(b.parent)].head : b.head, b.head});
+        for (const RigBone& b : rig.bones) {
+            MeshBuildBone mb;
+            mb.name = b.name;
+            mb.parent = b.parent;
+            mb.restLocal = b.parent >= 0 ? b.head - rig.bones[size_t(b.parent)].head : b.head;
+            mb.restWorld = b.head;
+            out.bones.push_back(mb);
+        }
         for (const RigClip& clip : rig.clips) {
             MeshBuildClip mc;
             mc.name = clip.name;

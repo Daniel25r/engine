@@ -1,7 +1,7 @@
 // Editor de Titán para escritorio (GLFW). El mismo editor que en Android.
 //
 // Uso normal:  titan_editor [--projects carpeta]
-// Automatización (pruebas): --open ruta | --new nombre --template 0..4 (4 = mundo de bloques), --panel nombre, --select entidad, --create "Botón;Joystick",
+// Automatización (pruebas): --open ruta | --new nombre --template 0..4 (4 = mundo de bloques), --panel nombre, --select entidad, --import archivo, --create "Botón;Joystick",
 //   --script ruta.lua, --play-at N, --stop-at N, --taps "x,y@N;...", --drag "x1,y1,x2,y2@N",
 //   --frames N, --screenshot archivo.png, --size 1280x800, --scale 1.0, --touch
 #define GLFW_INCLUDE_ES3
@@ -147,6 +147,7 @@ int main(int argc, char** argv) {
     platform.projects = (std::filesystem::current_path() / "TitanProyectos").generic_string();
     platform.engine.root = titan::desktop::engineAssetsDir(argv[0], TITAN_ENGINE_ASSETS);
     std::string openPath, newName, panel, selectName, createKinds, scriptPath, screenshot;
+    std::vector<std::string> importPaths; // --import: como arrastrar archivos al editor
     int templ = 2;
     long frames = 0;
     std::vector<long> playAt, stopAt; // admiten varias: --play-at 10,80
@@ -172,6 +173,7 @@ int main(int argc, char** argv) {
         else if (a == "--template") templ = std::atoi(next().c_str());
         else if (a == "--panel") panel = next();
         else if (a == "--select") selectName = next();
+        else if (a == "--import") importPaths.push_back(next());
         else if (a == "--create") createKinds = next();
         else if (a == "--script") scriptPath = next();
         else if (a == "--play-at") playAt = frameList(next());
@@ -224,6 +226,11 @@ int main(int argc, char** argv) {
     {
         titan::Editor editor(platform);
         gEditor = &editor;
+        // Arrastrar archivos desde el explorador al editor: se importan al proyecto (FBX, OBJ, GLB, PNG, WAV...).
+        glfwSetDropCallback(window, [](GLFWwindow*, int count, const char** files) {
+            std::vector<std::string> list(files, files + count);
+            if (gEditor) gEditor->importFiles(list);
+        });
         if (!editor.init()) return 1;
         glfwSetMouseButtonCallback(window, [](GLFWwindow* w, int button, int action, int) {
             if (button != GLFW_MOUSE_BUTTON_LEFT) return;
@@ -269,6 +276,7 @@ int main(int argc, char** argv) {
             editor.createEntity(createKinds.substr(s, e - s));
             s = e + 1;
         }
+        if (!importPaths.empty()) editor.importFiles(importPaths);
         if (!selectName.empty()) editor.selectEntity(selectName);
         if (!scriptPath.empty()) editor.openScript(scriptPath);
         if (!panel.empty()) editor.showPanel(panel);

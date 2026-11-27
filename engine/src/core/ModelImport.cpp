@@ -365,7 +365,7 @@ bool loadPly(const std::string& path, MeshBuild& out, ImportReport* report, std:
 // ---------------------------------------------------------------- conversión
 bool isConvertibleModel(const std::string& path) {
     const std::string e = lowerExt(path);
-    return e == ".obj" || e == ".stl" || e == ".ply" || e == ".blend";
+    return e == ".obj" || e == ".stl" || e == ".ply" || e == ".fbx" || e == ".blend";
 }
 
 std::string findBlender() {
@@ -448,6 +448,7 @@ bool convertModelToGlb(const std::string& src, const std::string& dst, ImportRep
     if (e == ".obj") ok = loadObj(src, mesh, report, error);
     else if (e == ".stl") ok = loadStl(src, mesh, report, error);
     else if (e == ".ply") ok = loadPly(src, mesh, report, error);
+    else if (e == ".fbx") ok = loadFbx(src, mesh, report, error);
     else return fail(error, "formato no admitido: " + e);
     if (!ok) return false;
     std::vector<uint8_t> glb;

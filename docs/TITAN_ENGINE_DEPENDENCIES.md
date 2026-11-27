@@ -5,6 +5,17 @@ en `third_party/` con su versión fijada, así la compilación no depende de la 
 
 ## En uso
 
+### ufbx 0.20.0
+
+| | |
+|---|---|
+| Función | Leer FBX (Mixamo, Maya, 3ds Max, Prisma 3D) al importar; se convierte a GLB |
+| Licencia | MIT o dominio público, a elegir (`third_party/ufbx/LICENSE`) |
+| Origen | `github.com/ufbx/ufbx`, etiqueta `v0.20.0` (`ufbx.c`, `ufbx.h`) |
+| Coste | ~1,2 MB de código fuente C; solo se usa al importar (no en los juegos exportados) |
+| Alternativas | Autodesk FBX SDK (propietario, no redistribuible libremente), Assimp (más grande, BSD) |
+
+
 ### Lua 5.4.7
 | | |
 |---|---|

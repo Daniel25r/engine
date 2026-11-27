@@ -16,7 +16,7 @@ Solo se apuntan bibliotecas con licencia compatible (MIT, BSD, Apache 2.0, zlib)
 | # | Bloque | Cómo | Licencia |
 |---|---|---|---|
 | 1 | ~~Editor de materiales por nodos~~ ✅ hecho (2026-11-27). Siguiente: salida de normal, grafos en .mat compartidos | — | propio |
-| 2 | Importar FBX (Mixamo, Prisma 3D) | ufbx → GLB con esqueleto y animaciones | MIT |
+| 2 | ~~Importar FBX~~ ✅ hecho (2026-11-27). Siguiente: retarget de animaciones entre modelos | — | MIT |
 | 3 | Render HDR + TAA | Búfer intermedio RGBA16F, exposición automática, antialiasing temporal (también limpia SSR/SSAO) | propio |
 | 4 | Sondas de reflexión y luz | Cubemaps capturados en el editor, prefiltrado por rugosidad | propio |
 | 5 | LOD automático y simplificación | meshoptimizer | MIT |

@@ -78,6 +78,9 @@ public:
     bool openProject(const std::string& path);
     bool createProject(const std::string& name, bool threeD, bool playableTemplate);
     bool createSandboxProject(const std::string& name); // ejemplo "Mundo de bloques"
+    // Importa archivos al proyecto abierto (arrastrar y soltar desde el explorador): modelos (FBX, OBJ, GLB...),
+    // texturas, sonidos y scripts. Devuelve cuántos se importaron.
+    int importFiles(const std::vector<std::string>& paths);
     void play();
     void stop();
     bool isPlaying() const;

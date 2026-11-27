@@ -36,7 +36,7 @@ ya trabajan con glTF, así que cada formato nuevo funciona en todo el motor sin 
 | STL | Impresión 3D, Prisma 3D, CAD | Lector propio (ASCII y binario) → GLB, de Z arriba a Y arriba | ✅ probado |
 | PLY | Escáneres 3D, fotogrametría | Lector propio (ASCII y binario, little y big endian) → GLB. Colores por vértice: todavía no | ✅ probado (sin colores) |
 | .blend | Blender | Se usa el Blender instalado (`blender --background`) para exportar a GLB, como hace Godot. Blender se ejecuta como programa aparte: no hay problema de licencia | 🔨 escrito, **sin probar** (aquí no hay Blender instalado) |
-| FBX | Maya, 3ds Max, Prisma 3D, Mixamo | Biblioteca ufbx (MIT) → GLB con esqueletos y animaciones | Fase 2 |
+| FBX | Maya, 3ds Max, Prisma 3D, Mixamo | Biblioteca ufbx (MIT) → GLB con esqueletos y animaciones | ✅ hecho |
 | SMD / DMX | Source Filmmaker, Source Engine | Lector propio de SMD (texto: malla, esqueleto, animación) → GLB; DMX después | Fase 3 |
 | DAE (Collada) | Herramientas antiguas | Pendiente de valorar | — |
 
@@ -54,4 +54,6 @@ ya trabajan con glTF, así que cada formato nuevo funciona en todo el motor sin 
 | **Modo Esqueleto** (rigging): esqueleto humano automático (19 huesos ajustados a la caja de la malla) o un hueso raíz; añadir hijo, renombrar, mover cabeza/cola, borrar hueso (sus hijos pasan al padre), pesos automáticos por distancia a los huesos (4 por vértice) | ✅ probado en el editor (19 huesos, todos los vértices con peso) y con prueba de pesos y deformación |
 | **Modo Animar**: clips con nombre, duración y bucle; línea de tiempo con marcas de claves; rotación (y traslación del hueso raíz) con clave automática; insertar/borrar clave; reproducir; vista previa deformada en el visor | ✅ probado en el editor (clip nuevo, hueso elegido con clic) |
 | Exportación del rig: el GLB lleva JOINTS_0/WEIGHTS_0, nodos de huesos, skin con matrices inversas y animaciones; el motor lo reproduce con `Animator` | ✅ prueba de ida y vuelta con cgltf |
-| FBX (Mixamo, Prisma 3D), SMD/DMX (Source Filmmaker), retopología, IK | ▶ siguientes bloques, en este orden: FBX (ufbx, MIT), SMD, retopología |
+| **Importar FBX** (Contenido › Importar, arrastrar el archivo al editor, o `titan import`): mallas trianguladas con normales y UV, una parte por material, texturas PNG/JPEG (incrustadas o junto al archivo), esqueleto con su pose de reposo y matrices de enlace, 4 pesos por vértice, animaciones muestreadas a 30 fps; objetos animados sin esqueleto (puertas, hélices) como huesos rígidos; ejes Y arriba y metros | ✅ 3 pruebas `fbx:` con archivos reales de Maya y 3ds Max; personaje Kenney de 46 huesos importado y animado en el reproductor |
+| Límites del FBX | Animación del nodo de una malla con piel (se ignora); texturas TGA/PSD (aviso); formas de mezcla (blend shapes); un FBX solo de animación (sin malla) no se puede aplicar a otro modelo todavía (retarget) |
+| SMD/DMX (Source Filmmaker), retopología, IK, retarget de animaciones | ▶ siguientes bloques |

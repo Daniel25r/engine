@@ -71,6 +71,8 @@ add_library(titan_core STATIC
     engine/src/core/Rig.cpp
     engine/src/core/Voxel.cpp
     engine/src/core/MaterialGraph.cpp
+    engine/src/core/FbxImport.cpp
+    third_party/ufbx/ufbx.c
     engine/src/core/Log.cpp
     engine/src/core/Uuid.cpp
     engine/src/core/FileIO.cpp
@@ -81,6 +83,13 @@ add_library(titan_core STATIC
     engine/src/core/Templates.cpp
 )
 target_include_directories(titan_core PUBLIC engine/include third_party)
+target_include_directories(titan_core PRIVATE third_party/ufbx)
+# ufbx es código de terceros: sin los avisos del proyecto.
+if(MSVC)
+    set_source_files_properties(third_party/ufbx/ufbx.c PROPERTIES COMPILE_OPTIONS "/w")
+else()
+    set_source_files_properties(third_party/ufbx/ufbx.c PROPERTIES COMPILE_OPTIONS "-w")
+endif()
 target_compile_options(titan_core PRIVATE ${TITAN_WARNINGS})
 if(ANDROID)
     target_link_libraries(titan_core PUBLIC log)
@@ -277,7 +286,7 @@ else()
             tests/test_audio_mixer.cpp
             tests/test_jobs.cpp
             tests/test_modeling.cpp
-            tests/test_voxel.cpp tests/test_material_graph.cpp
+            tests/test_voxel.cpp tests/test_material_graph.cpp tests/test_fbx.cpp
             tests/test_ui.cpp
             tests/test_bounds.cpp
             tests/test_quality.cpp

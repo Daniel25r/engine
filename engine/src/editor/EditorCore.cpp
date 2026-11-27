@@ -874,7 +874,7 @@ void Editor::Impl::importFile(const std::string& path, const std::string& name) 
     std::string base = name.empty() ? fs::path(path).filename().string() : name;
     for (char& c : base)
         if (c == '/' || c == '\\' || c == ':') c = '_';
-    // OBJ, STL, PLY y .blend se convierten a GLB (lo que carga el motor); se importa el GLB.
+    // OBJ, STL, PLY, FBX y .blend se convierten a GLB (lo que carga el motor); se importa el GLB.
     const bool convert = isConvertibleModel(base);
     if (convert) base = fs::path(base).stem().string() + ".glb";
     std::string rel = "imported/" + base;
@@ -1147,6 +1147,18 @@ bool Editor::onBack() {
 }
 
 bool Editor::openProject(const std::string& path) { return impl_->openProject(path); }
+
+int Editor::importFiles(const std::vector<std::string>& paths) {
+    if (!impl_->project) return 0;
+    int n = 0;
+    for (const std::string& p : paths) {
+        std::error_code ec;
+        if (!fs::is_regular_file(p, ec)) continue;
+        impl_->importFile(p, "");
+        ++n;
+    }
+    return n;
+}
 
 bool Editor::createSandboxProject(const std::string& name) {
     std::string err;

@@ -18,13 +18,13 @@ Descomprime el zip y abre `titan_editor.exe`.
 
 | Área | Lo que hay |
 |---|---|
-| **Render** | PBR, luz ambiental del cielo con el modelo *split-sum* (el de UE4/UE5), oclusión ambiental (SSAO), reflejos en pantalla (SSR), barniz para pintura de coche, sombras del sol en 4 cascadas, bloom, FXAA, gradación de color, perfiles de calidad |
+| **Render** | PBR, materiales por nodos, luz ambiental del cielo con el modelo *split-sum* (el de UE4/UE5), oclusión ambiental (SSAO), reflejos en pantalla (SSR), barniz para pintura de coche, sombras del sol en 4 cascadas, bloom, FXAA, gradación de color, perfiles de calidad |
 | **Mundos** | Mundo de bloques infinito (biomas, cuevas, árboles) que se carga en varios hilos y se guarda solo; terreno por mapa de alturas con esculpido y 4 capas de pintura |
 | **Física** | Jolt Physics: cuerpos rígidos, uniones, controlador de personaje, colisión de malla |
 | **Juego** | Scripts en Lua (con entorno aislado), acciones de entrada (teclado, mando, táctil), cámara en tercera persona, navegación e IA, partículas, animación esquelética con máquina de estados, interfaz de juego, partidas guardadas |
 | **Audio** | miniaudio con mezclador de buses y efectos (reverberación, eco, filtros, limitador...) |
 | **Editor** | Escena, jerarquía, inspector, gizmos, contenido, consola, botón Jugar. Modelado (extruir, inset, subdividir, simetría), escultura (6 pinceles), esqueleto automático y animación por claves |
-| **Importar** | glTF/GLB, OBJ, STL, PLY y .blend |
+| **Importar** | FBX con esqueleto y animaciones (Mixamo, Maya, 3ds Max, Prisma 3D), glTF/GLB, OBJ, STL, PLY y .blend. Arrastra el archivo a la ventana del editor |
 
 | Mundo de bloques | Editor |
 |---|---|
@@ -52,8 +52,7 @@ Windows: ver [docs/BUILD_INSTRUCTIONS.md](docs/BUILD_INSTRUCTIONS.md) (la compil
 
 ## Hacia dónde va
 
-El plan por impacto está en [docs/TITAN_RUMBO_AAA.md](docs/TITAN_RUMBO_AAA.md): editor de materiales por nodos, FBX
-(Mixamo), render HDR con TAA, sondas de reflexión, LOD automático, navmesh, Vulkan, multijugador y GI.
+El plan por impacto está en [docs/TITAN_RUMBO_AAA.md](docs/TITAN_RUMBO_AAA.md): render HDR con TAA, sondas de reflexión, LOD automático, navmesh, Vulkan, multijugador y GI.
 
 ## Documentación
 
