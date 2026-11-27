@@ -269,7 +269,17 @@ struct Editor::Impl {
         SculptStroke stroke;
         ImVec2 brushAt;
         Vec3 grabNormal, grabStart;
+        // Esqueleto y animación (modos 3 y 4)
+        int selBone = -1, clip = 0, lastMode = 0;
+        float time = 0;
+        bool playing = false, posePreview = false;
     } medit;
+    void meshEditPosePreview();
+    void drawRigPanel();
+    void drawAnimPanel();
+    void meshEditRigTick(float dt);
+    void meshEditBones(ImDrawList* dl, const Mat4& world);
+    int meshEditPickBone(ImVec2 p);
     bool enterMeshEdit(Entity e);
     void exitMeshEdit();
     void createEditableModel(const char* shape);

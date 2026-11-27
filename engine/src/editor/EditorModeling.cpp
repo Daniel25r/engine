@@ -7,6 +7,7 @@
 
 #include "EditorImpl.h"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 #include "titan/core/FileIO.h"
 
 namespace fs = std::filesystem;
@@ -192,6 +193,11 @@ bool Editor::Impl::meshEditPointerDown(ImVec2 p) {
     const bool add = ImGui::GetIO().KeyShift;
     EditMesh& m = medit.mesh;
 
+    if (medit.mode >= 3) { // esqueleto y animar: clic sobre un hueso lo selecciona
+        const int bone = meshEditPickBone(p);
+        if (bone >= 0) medit.selBone = bone;
+        return bone >= 0;
+    }
     if (medit.mode == 2) { // esculpir
         MeshRayHit hit;
         if (!raycastEditMesh(m, lo, ld, hit)) return false;
@@ -285,6 +291,7 @@ void Editor::Impl::meshEditPointerUp() {
 }
 
 void Editor::Impl::meshEditTick(float dt) {
+    meshEditRigTick(dt);
     if (!medit.active || !medit.sculpting) return;
     Entity e = scene.findById(medit.entity);
     if (e.isNull()) return;
@@ -426,7 +433,7 @@ void Editor::Impl::meshEditLines() {
     if (e.isNull()) return;
     const Mat4 w = scene.computeWorldMatrix(e);
     const EditMesh& m = medit.mesh;
-    if (medit.mode == 2) return; // al esculpir, la superficie limpia (como en Blender): solo el círculo del pincel
+    if (medit.mode >= 2) return; // al esculpir y animar, la superficie limpia: solo el pincel o los huesos
     size_t lines = 0;
     for (size_t f = 0; f < m.faces.size() && lines < 7000; ++f) {
         const bool sel = medit.mode == 1 && medit.selFaces.count(int(f));
@@ -446,6 +453,7 @@ void Editor::Impl::meshEditOverlay(ImDrawList* dl) {
     const Mat4 w = scene.computeWorldMatrix(e);
     const EditMesh& m = medit.mesh;
     dl->PushClipRect(vpMin, vpMax, true);
+    meshEditBones(dl, w);
     if (medit.mode == 0 && m.verts.size() < 20000) {
         // Solo los vértices de caras que miran a la cámara (los de detrás no se pueden seleccionar a ciegas).
         const Vec3 eye = editorView.inverted().translation();
@@ -485,25 +493,31 @@ void Editor::Impl::meshEditOverlay(ImDrawList* dl) {
 }
 
 void Editor::Impl::drawMeshEditPanel() {
-    header(medit.mode == 2 ? "ESCULPIR" : "MODELAR", scale);
+    static const char* titles[] = {"MODELAR", "MODELAR", "ESCULPIR", "ESQUELETO", "ANIMAR"};
+    header(titles[std::clamp(medit.mode, 0, 4)], scale);
     Entity e = scene.findById(medit.entity);
     EditMesh& m = medit.mesh;
     ImGui::TextUnformatted(e.isNull() ? "?" : scene.info(e).name.c_str());
     ImGui::TextDisabled("%zu vértices · %zu caras · %s", m.verts.size(), m.faces.size(), medit.tmeshRel.c_str());
     ImGui::Spacing();
     const float bw = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2) / 3;
-    const char* modes[] = {"Vértices (1)", "Caras (3)", "Esculpir"};
-    for (int i = 0; i < 3; ++i) {
-        if (i) ImGui::SameLine();
+    const char* modes[] = {"Vértices (1)", "Caras (3)", "Esculpir", "Esqueleto", "Animar"};
+    const float bw2 = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
+    for (int i = 0; i < 5; ++i) { // dos filas: modelar/esculpir y esqueleto/animar
+        if (i != 0 && i != 3) ImGui::SameLine();
         ImGui::PushStyleColor(ImGuiCol_Button, medit.mode == i ? ImVec4(0.0f, 0.44f, 0.88f, 1) : ImGui::GetStyleColorVec4(ImGuiCol_Button));
-        if (ImGui::Button(modes[i], ImVec2(bw, 0))) medit.mode = i;
+        if (ImGui::Button(modes[i], ImVec2(i < 3 ? bw : bw2, 0))) medit.mode = i;
         ImGui::PopStyleColor();
     }
     ImGui::Spacing();
     auto op = [&](const char* label, const char* id, float w = -1) {
         if (ImGui::Button(label, ImVec2(w, 0))) meshEditOp(id);
     };
-    if (medit.mode < 2) {
+    if (medit.mode == 3) {
+        drawRigPanel();
+    } else if (medit.mode == 4) {
+        drawAnimPanel();
+    } else if (medit.mode < 2) {
         ImGui::TextDisabled("Seleccionados: %zu", medit.mode == 0 ? medit.selVerts.size() : medit.selFaces.size());
         ImGui::SeparatorText("Caras");
         ImGui::SetNextItemWidth(-1);
@@ -573,6 +587,285 @@ void Editor::Impl::drawMeshEditPanel() {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.44f, 0.88f, 1));
     if (ImGui::Button("Terminar (Tab)", ImVec2(-1, 0))) exitMeshEdit();
     ImGui::PopStyleColor();
+}
+
+} // namespace titan
+
+// ---------------------------------------------------------------- esqueleto y animación (modos 3 y 4)
+namespace titan {
+
+namespace {
+// Pose actual: matrices de cada hueso (clip y tiempo del editor en Animar; reposo en Esqueleto).
+std::vector<Mat4> currentSkin(const Editor::Impl::MeshEditState& s) {
+    return s.mesh.rig.skinMatrices(s.mode == 4 ? s.clip : -1, s.time);
+}
+} // namespace
+
+// Vista previa de la pose: la malla deformada en la CPU, sin esqueleto (solo para ver; el GLB guardado lleva la piel).
+void Editor::Impl::meshEditPosePreview() {
+    EditMesh posed = medit.mesh;
+    Rig& rig = posed.rig;
+    if (rig.joints.size() != posed.verts.size()) rig.autoWeights(posed.verts);
+    posed.verts = rig.deform(posed.verts, currentSkin(medit));
+    posed.rig = Rig{};
+    std::vector<uint8_t> glb;
+    std::string err;
+    if (!posed.faces.empty() && writeGlb(posed.build(), glb, &err)) renderer.setModelData("assets/" + medit.glbRel, std::move(glb));
+}
+
+void Editor::Impl::drawRigPanel() {
+    Rig& rig = medit.mesh.rig;
+    if (rig.empty()) {
+        ImGui::TextWrapped("El modelo no tiene esqueleto. El automático crea 19 huesos (cadera, columna, cabeza, brazos, "
+                           "piernas) ajustados al tamaño del modelo, de pie y mirando a +Z, y calcula los pesos.");
+        if (ImGui::Button("Esqueleto humano automático", ImVec2(-1, 0))) {
+            meshEditSnapshot();
+            Vec3 mn{1e30f, 1e30f, 1e30f}, mx{-1e30f, -1e30f, -1e30f};
+            for (const Vec3& v : medit.mesh.verts) {
+                mn = {std::min(mn.x, v.x), std::min(mn.y, v.y), std::min(mn.z, v.z)};
+                mx = {std::max(mx.x, v.x), std::max(mx.y, v.y), std::max(mx.z, v.z)};
+            }
+            rig = Rig::humanoid(mn, mx);
+            rig.autoWeights(medit.mesh.verts);
+            meshEditChanged();
+        }
+        if (ImGui::Button("Un solo hueso (raíz)", ImVec2(-1, 0))) {
+            meshEditSnapshot();
+            rig.bones.push_back({"Raíz", -1, {0, 0, 0}, {0, 0.5f, 0}});
+            rig.autoWeights(medit.mesh.verts);
+            meshEditChanged();
+        }
+        return;
+    }
+    ImGui::TextDisabled("%zu huesos. Clic en un hueso de la vista para seleccionarlo.", rig.bones.size());
+    ImGui::BeginChild("##huesos", ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 8), ImGuiChildFlags_Borders);
+    for (size_t i = 0; i < rig.bones.size(); ++i) {
+        int depth = 0;
+        for (int p = rig.bones[i].parent; p >= 0; p = rig.bones[size_t(p)].parent) ++depth;
+        ImGui::Indent(float(depth) * 8 * scale);
+        if (ImGui::Selectable((rig.bones[i].name + "##b" + std::to_string(i)).c_str(), medit.selBone == int(i))) medit.selBone = int(i);
+        ImGui::Unindent(float(depth) * 8 * scale);
+    }
+    ImGui::EndChild();
+    if (medit.selBone >= 0 && size_t(medit.selBone) < rig.bones.size()) {
+        RigBone& b = rig.bones[size_t(medit.selBone)];
+        ImGui::InputText("Nombre", &b.name);
+        if (ImGui::IsItemDeactivatedAfterEdit()) meshEditSave();
+        bool moved = ImGui::DragFloat3("Cabeza", &b.head.x, 0.005f);
+        const bool done1 = ImGui::IsItemDeactivatedAfterEdit();
+        moved |= ImGui::DragFloat3("Cola", &b.tail.x, 0.005f);
+        if (moved) rig.joints.clear(); // los pesos se recalculan al construir
+        if (done1 || ImGui::IsItemDeactivatedAfterEdit()) meshEditChanged();
+        const float hw = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
+        if (ImGui::Button("Añadir hijo", ImVec2(hw, 0))) {
+            meshEditSnapshot();
+            const Vec3 dir = b.tail - b.head;
+            rig.bones.push_back({b.name + ".hijo", medit.selBone, b.tail, b.tail + dir * 0.6f});
+            medit.selBone = int(rig.bones.size() - 1);
+            rig.joints.clear();
+            meshEditChanged();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Borrar hueso", ImVec2(hw, 0)) && rig.bones.size() > 1) {
+            // Se borra con sus descendientes; los índices de padres y pistas se reajustan.
+            meshEditSnapshot();
+            std::vector<char> gone(rig.bones.size(), 0);
+            gone[size_t(medit.selBone)] = 1;
+            for (size_t i = 0; i < rig.bones.size(); ++i)
+                if (rig.bones[i].parent >= 0 && gone[size_t(rig.bones[i].parent)]) gone[i] = 1;
+            std::vector<int> remap(rig.bones.size(), -1);
+            std::vector<RigBone> kept;
+            for (size_t i = 0; i < rig.bones.size(); ++i)
+                if (!gone[i]) {
+                    remap[i] = int(kept.size());
+                    kept.push_back(rig.bones[i]);
+                }
+            for (RigBone& k : kept) k.parent = k.parent >= 0 ? remap[size_t(k.parent)] : -1;
+            for (RigClip& c : rig.clips) {
+                std::vector<RigTrack> tracks;
+                for (RigTrack t : c.tracks)
+                    if (t.bone >= 0 && remap[size_t(t.bone)] >= 0) {
+                        t.bone = remap[size_t(t.bone)];
+                        tracks.push_back(t);
+                    }
+                c.tracks = tracks;
+            }
+            rig.bones = kept;
+            rig.joints.clear();
+            medit.selBone = -1;
+            meshEditChanged();
+        }
+    }
+    if (ImGui::Button("Recalcular pesos automáticos", ImVec2(-1, 0))) {
+        meshEditSnapshot();
+        rig.autoWeights(medit.mesh.verts);
+        meshEditChanged();
+    }
+    if (ImGui::Button("Quitar esqueleto", ImVec2(-1, 0))) {
+        meshEditSnapshot();
+        rig = Rig{};
+        medit.selBone = -1;
+        meshEditChanged();
+    }
+}
+
+void Editor::Impl::drawAnimPanel() {
+    Rig& rig = medit.mesh.rig;
+    if (rig.empty()) {
+        ImGui::TextWrapped("Para animar, primero crea el esqueleto (botón Esqueleto).");
+        return;
+    }
+    if (ImGui::Button("+ Nuevo clip", ImVec2(-1, 0))) {
+        meshEditSnapshot();
+        RigClip c;
+        c.name = "Animación " + std::to_string(rig.clips.size() + 1);
+        rig.clips.push_back(c);
+        medit.clip = int(rig.clips.size() - 1);
+        medit.time = 0;
+        meshEditSave();
+    }
+    if (rig.clips.empty()) {
+        ImGui::TextDisabled("Crea un clip para empezar (Idle, Caminar, Saludar...).");
+        return;
+    }
+    medit.clip = std::clamp(medit.clip, 0, int(rig.clips.size()) - 1);
+    if (ImGui::BeginCombo("Clip", rig.clips[size_t(medit.clip)].name.c_str())) {
+        for (size_t i = 0; i < rig.clips.size(); ++i)
+            if (ImGui::Selectable(rig.clips[i].name.c_str(), medit.clip == int(i))) {
+                medit.clip = int(i);
+                medit.time = 0;
+            }
+        ImGui::EndCombo();
+    }
+    RigClip& clip = rig.clips[size_t(medit.clip)];
+    ImGui::InputText("Nombre del clip", &clip.name);
+    if (ImGui::IsItemDeactivatedAfterEdit()) meshEditSave();
+    ImGui::DragFloat("Duración (s)", &clip.duration, 0.05f, 0.1f, 60);
+    if (ImGui::IsItemDeactivatedAfterEdit()) meshEditSave();
+    if (ImGui::Checkbox("Repetir", &clip.loop)) meshEditSave();
+
+    // Línea de tiempo con las claves marcadas.
+    ImGui::SeparatorText("Línea de tiempo");
+    if (ImGui::Button(medit.playing ? "Pausa" : "Reproducir")) medit.playing = !medit.playing;
+    ImGui::SameLine();
+    if (ImGui::Button("|<")) medit.time = 0;
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderFloat("##t", &medit.time, 0, clip.duration, "%.2f s");
+    {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        for (float k : clip.keyTimes()) {
+            const float x = a.x + (b.x - a.x) * std::clamp(k / std::max(0.01f, clip.duration), 0.0f, 1.0f);
+            dl->AddTriangleFilled(ImVec2(x, b.y - 2), ImVec2(x - 4 * scale, b.y + 5 * scale), ImVec2(x + 4 * scale, b.y + 5 * scale),
+                                  IM_COL32(255, 190, 60, 255));
+        }
+        ImGui::Dummy(ImVec2(0, 6 * scale));
+    }
+    // Hueso seleccionado: girarlo crea o cambia la clave en el tiempo actual (clave automática).
+    ImGui::SeparatorText("Pose");
+    if (medit.selBone < 0 || size_t(medit.selBone) >= rig.bones.size()) {
+        ImGui::TextDisabled("Selecciona un hueso (clic en la vista o en la lista de Esqueleto).");
+    } else {
+        ImGui::TextUnformatted(rig.bones[size_t(medit.selBone)].name.c_str());
+        Quat q;
+        Vec3 tr;
+        clip.sample(medit.selBone, medit.time, q, tr);
+        Vec3 e = q.toEuler() * (180.0f / kPi);
+        bool changed = ImGui::DragFloat3("Giro (grados)", &e.x, 0.5f, -180, 180);
+        const bool done = ImGui::IsItemDeactivatedAfterEdit();
+        bool moved = false, movedDone = false;
+        if (rig.bones[size_t(medit.selBone)].parent < 0) { // la raíz también se desplaza (saltos, caminar)
+            moved = ImGui::DragFloat3("Desplazamiento", &tr.x, 0.005f);
+            movedDone = ImGui::IsItemDeactivatedAfterEdit();
+        }
+        if (changed || moved) {
+            RigKey k;
+            k.time = medit.time;
+            k.rotation = Quat::fromEuler(e * (kPi / 180.0f));
+            k.translation = tr;
+            clip.setKey(medit.selBone, k);
+            medit.posePreview = true;
+        }
+        if (done || movedDone) meshEditSave();
+        const float hw = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
+        if (ImGui::Button("Insertar clave", ImVec2(hw, 0))) {
+            RigKey k;
+            k.time = medit.time;
+            k.rotation = q;
+            k.translation = tr;
+            clip.setKey(medit.selBone, k);
+            meshEditSave();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Borrar clave", ImVec2(hw, 0)) && clip.removeKey(medit.selBone, medit.time)) {
+            medit.posePreview = true;
+            meshEditSave();
+        }
+    }
+    ImGui::TextDisabled("En el juego: Animator › clip \"%s\"", clip.name.c_str());
+}
+
+void Editor::Impl::meshEditRigTick(float dt) {
+    if (!medit.active) return;
+    // Al salir de Animar se vuelve a la malla con piel; al entrar o cambiar la pose, se previsualiza.
+    if (medit.lastMode != medit.mode) {
+        if (medit.lastMode == 4) meshEditRebuild();
+        if (medit.mode == 4) medit.posePreview = true;
+        medit.lastMode = medit.mode;
+    }
+    if (medit.mode != 4 || medit.mesh.rig.empty() || medit.mesh.rig.clips.empty()) return;
+    static float lastTime = -1;
+    if (medit.playing) {
+        const RigClip& c = medit.mesh.rig.clips[size_t(std::clamp(medit.clip, 0, int(medit.mesh.rig.clips.size()) - 1))];
+        medit.time += dt;
+        if (medit.time > c.duration) medit.time = c.loop ? std::fmod(medit.time, std::max(0.01f, c.duration)) : c.duration;
+    }
+    if (medit.posePreview || medit.time != lastTime) {
+        meshEditPosePreview();
+        medit.posePreview = false;
+        lastTime = medit.time;
+    }
+}
+
+void Editor::Impl::meshEditBones(ImDrawList* dl, const Mat4& w) {
+    const Rig& rig = medit.mesh.rig;
+    if (rig.empty() || (medit.mode != 3 && medit.mode != 4)) return;
+    const std::vector<Mat4> skin = currentSkin(medit);
+    for (size_t i = 0; i < rig.bones.size(); ++i) {
+        const Vec3 h = w.transformPoint(skin[i].transformPoint(rig.bones[i].head));
+        const Vec3 t = w.transformPoint(skin[i].transformPoint(rig.bones[i].tail));
+        ImVec2 a, b;
+        if (!worldToScreen(h, a) || !worldToScreen(t, b)) continue;
+        const bool sel = medit.selBone == int(i);
+        const ImU32 col = sel ? IM_COL32(255, 170, 40, 255) : IM_COL32(120, 200, 255, 230);
+        dl->AddLine(a, b, col, (sel ? 4.0f : 2.5f) * scale);
+        dl->AddCircleFilled(a, 4 * scale, col);
+    }
+}
+
+int Editor::Impl::meshEditPickBone(ImVec2 p) {
+    Entity e = scene.findById(medit.entity);
+    const Rig& rig = medit.mesh.rig;
+    if (e.isNull() || rig.empty()) return -1;
+    const Mat4 w = scene.computeWorldMatrix(e);
+    const std::vector<Mat4> skin = currentSkin(medit);
+    int best = -1;
+    float bestD = 12 * scale;
+    for (size_t i = 0; i < rig.bones.size(); ++i) {
+        ImVec2 a, b;
+        if (!worldToScreen(w.transformPoint(skin[i].transformPoint(rig.bones[i].head)), a) ||
+            !worldToScreen(w.transformPoint(skin[i].transformPoint(rig.bones[i].tail)), b))
+            continue;
+        const float vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy;
+        const float t = l2 > 0 ? std::clamp(((p.x - a.x) * vx + (p.y - a.y) * vy) / l2, 0.0f, 1.0f) : 0.0f;
+        const float d = std::hypot(p.x - (a.x + vx * t), p.y - (a.y + vy * t));
+        if (d < bestD) {
+            bestD = d;
+            best = int(i);
+        }
+    }
+    return best;
 }
 
 } // namespace titan
