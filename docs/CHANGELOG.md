@@ -18,6 +18,7 @@ Materiales
 - Editor de materiales por nodos (20 tipos de nodo), compilado a instrucciones que ejecuta la GPU; se ve al momento.
 
 Mundos
+- Hierba en el terreno: briznas instanciadas en la GPU que se mecen con el viento.
 - Mundo de bloques infinito: chunks con biomas, cuevas y árboles; generación y mallas en varios hilos; colisión;
   guardado incremental; API `Voxel.*`.
 
@@ -34,7 +35,7 @@ Multijugador
 
 Plantillas nuevas: Mundo de bloques, Ciudad de neón (escaparate del render), Plaza multijugador.
 Proyectos anteriores: se cargan igual y se ven igual (las opciones nuevas están desactivadas en sus escenas).
-Licencia MIT. 148 pruebas automáticas.
+Licencia MIT. 149 pruebas automáticas.
 
 ## 0.13.0 — 2026-11-22 · Gran actualización: render, materiales, partículas, controles, física, animación y terreno
 

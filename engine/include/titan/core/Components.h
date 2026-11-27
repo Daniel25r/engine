@@ -512,6 +512,13 @@ struct Terrain {
     AssetRef layerTextures[4];
     Color layerColors[4] = {Color::hex(0x5E8C3A), Color::hex(0x8A7350), Color::hex(0x8C8C8C), Color::hex(0xE8EEF2)};
     float layerTiling = 6.0f;    // metros que ocupa cada repetición de las texturas de capa
+    // Hierba: briznas generadas en la GPU donde se pintó la capa 0 y la pendiente es suave; se mecen con el viento.
+    bool grass = false;
+    float grassDensity = 8.0f;   // briznas por m²
+    float grassHeight = 0.45f;   // metros
+    Color grassBase = Color::hex(0x2E5A1C), grassTip = Color::hex(0x9CC452);
+    float grassWind = 1.0f;
+    float grassDistance = 45.0f; // a partir de aquí se desvanece
     uint32_t revision = 1;       // cambia al editar (el render y la física se rehacen)
 };
 

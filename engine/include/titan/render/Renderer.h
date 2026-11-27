@@ -166,6 +166,8 @@ public:
     int terrainMesh(uint64_t key, uint32_t revision, const std::function<TerrainMesh()>& build);
     void drawTerrain(int handle, const Mat4& world, const Terrain& t, const TextureHandle layers[4]);
     void drawTerrainShadow(int handle, const Mat4& world);
+    // Hierba del terreno (si Terrain.grass): briznas instanciadas que se mecen con el viento.
+    void drawGrass(int handle, const Mat4& world, const Terrain& t);
 
     // ---- Modelos importados (glTF 2.0 / GLB) ----
     // Devuelve -1 si el archivo no existe o no se puede interpretar (el motivo va al registro).
@@ -376,12 +378,16 @@ private:
         uint64_t key = 0;
         uint32_t revision = 0;
         GpuMesh mesh;
+        uint32_t grassVao = 0, grassVbo = 0;
+        int grassCount = 0;
+        uint64_t grassHash = 0; // revisión del terreno + ajustes de la hierba con los que se generó
         uint64_t lastUsed = 0; // fotograma; los que nadie dibuja en un rato se liberan
     };
     uint64_t frameCounter_ = 0;
     std::vector<TerrainGpu> terrains_;
     // Sombras y cielo
     uint32_t shadowProgram_ = 0, shadowFbo_ = 0, shadowTex_ = 0;
+    uint32_t grassProgram_ = 0;
     int uShadowLVP_ = -1, uShadowModel_ = -1, uShadowSkinned_ = -1, uShadowJoints_ = -1;
     const std::vector<Mat4>* currentJoints_ = nullptr;
     uint32_t jointTex_ = 0;

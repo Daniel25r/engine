@@ -40,6 +40,35 @@ void Editor::Impl::drawTerrainPanel(Entity e, Terrain& t) {
         propLabel("");
         ImGui::TextDisabled("Arrastra un dedo sobre el terreno; con dos, mueves la cámara");
     }
+    // Hierba
+    label("Hierba");
+    bool grass = t.grass;
+    if (ImGui::Checkbox("##tgrass", &grass)) {
+        pushUndo();
+        t.grass = grass;
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Briznas que se mecen con el viento donde está pintada la capa 1 (y no en pendientes fuertes)");
+    if (t.grass) {
+        label("Densidad");
+        if (ImGui::SliderFloat("##tgd", &t.grassDensity, 0.5f, 60, "%.1f /m²")) ++t.revision;
+        track();
+        label("Altura hierba");
+        ImGui::SliderFloat("##tgh", &t.grassHeight, 0.05f, 2.0f, "%.2f m");
+        track();
+        label("Viento");
+        ImGui::SliderFloat("##tgw", &t.grassWind, 0, 4, "%.2f");
+        track();
+        label("Distancia");
+        ImGui::SliderFloat("##tgf", &t.grassDistance, 5, 200, "%.0f m");
+        track();
+        label("Color base");
+        ImGui::ColorEdit3("##tgb", &t.grassBase.r);
+        track();
+        label("Color punta");
+        ImGui::ColorEdit3("##tgt", &t.grassTip.r);
+        track();
+    }
     float size = t.size, maxH = t.maxHeight;
     label("Tamaño");
     if (ImGui::DragFloat("##tsize", &size, 0.5f, 4, 4096, "%.0f m")) { t.size = std::max(4.0f, size); ++t.revision; }

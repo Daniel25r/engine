@@ -488,6 +488,74 @@ precision mediump float;
 void main() {}
 )";
 
+// Hierba: cada instancia es una brizna de 5 triángulos (más ancha abajo) construida con gl_VertexID; se dobla con
+// el viento (más arriba, más) y se encoge hasta desaparecer a lo lejos.
+const char* kGrassVS = R"(#version 300 es
+layout(location = 0) in vec4 aBlade; // x, y, z (locales), giro
+layout(location = 1) in vec2 aExtra; // escala, fase
+uniform mat4 uViewProj;
+uniform mat4 uModel;
+uniform float uTime;
+uniform float uHeight;
+uniform float uWind;
+uniform vec3 uCam;
+uniform float uFade;
+out float vH;
+out vec3 vWorld;
+const vec2 P[15] = vec2[15](vec2(-1.0, 0.0), vec2(1.0, 0.0), vec2(1.0, 0.4), vec2(-1.0, 0.0), vec2(1.0, 0.4), vec2(-1.0, 0.4),
+                            vec2(-1.0, 0.4), vec2(1.0, 0.4), vec2(1.0, 0.75), vec2(-1.0, 0.4), vec2(1.0, 0.75), vec2(-1.0, 0.75),
+                            vec2(-1.0, 0.75), vec2(1.0, 0.75), vec2(0.0, 1.0));
+void main() {
+    vec2 v = P[gl_VertexID];
+    float h = v.y;
+    vec3 base = (uModel * vec4(aBlade.xyz, 1.0)).xyz;
+    float dist = length(base - uCam);
+    float fade = clamp((uFade - dist) / (uFade * 0.25), 0.0, 1.0);
+    float width = mix(0.035, 0.006, h) * fade;
+    vec2 dir = vec2(cos(aBlade.w), sin(aBlade.w));
+    float sway = uWind * h * h * (0.22 * sin(uTime * 1.7 + aExtra.y + base.x * 0.35) + 0.08 * sin(uTime * 3.3 + base.z * 0.5));
+    vec3 p = base + vec3(dir.x, 0.0, dir.y) * v.x * width + vec3(sway, h * uHeight * aExtra.x * fade, sway * 0.6);
+    vH = h;
+    vWorld = p;
+    gl_Position = uViewProj * vec4(p, 1.0);
+}
+)";
+
+const char* kGrassFS = R"(#version 300 es
+precision highp float;
+in float vH;
+in vec3 vWorld;
+uniform vec3 uBase;
+uniform vec3 uTip;
+uniform vec3 uSunDir;
+uniform vec3 uSunColor;
+uniform vec3 uSky;
+uniform vec3 uFogColor;
+uniform float uFogDensity;
+uniform float uExposure;
+uniform vec3 uCam;
+uniform int uHdr;
+layout(location = 0) out vec4 outColor;
+vec3 toLinear(vec3 c) { return pow(c, vec3(2.2)); }
+vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+vec3 invAces(vec3 y) {
+    y = clamp(y, 0.0, 0.99);
+    vec3 a = 2.43 * y - 2.51, b = 0.59 * y - 0.03, c = 0.14 * y;
+    return (-b - sqrt(max(b * b - 4.0 * a * c, 0.0))) / (2.0 * a);
+}
+void main() {
+    vec3 albedo = toLinear(mix(uBase, uTip, vH));
+    float sun = max(-uSunDir.y, 0.0) * 0.6 + 0.4 * vH; // la punta recibe más luz
+    vec3 color = albedo * (uSunColor * 2.4 * sun * 0.55 + toLinear(uSky) * 0.45) * mix(0.55, 1.0, vH); // abajo, sombra
+    float fog = clamp(1.0 - exp(-uFogDensity * length(uCam - vWorld)), 0.0, 1.0);
+    if (uHdr == 1) {
+        outColor = vec4(mix(color * uExposure, invAces(toLinear(uFogColor)), fog), 1.0);
+        return;
+    }
+    outColor = vec4(mix(pow(aces(color * uExposure), vec3(1.0 / 2.2)), uFogColor, fog), 1.0);
+}
+)";
+
 // Cielo: triángulo a pantalla completa; el color depende de la dirección de la vista.
 const char* kSkyVS = R"(#version 300 es
 out vec2 vNdc;
@@ -685,6 +753,8 @@ bool Renderer::createGpuObjects() {
     uSpriteTex_ = glGetUniformLocation(spriteProgram_, "uTex");
     uSpriteSdf_ = glGetUniformLocation(spriteProgram_, "uSdf");
     shadowProgram_ = linkProgram(kShadowVS, kShadowFS);
+    grassProgram_ = linkProgram(kGrassVS, kGrassFS);
+    if (!grassProgram_) TITAN_WARN("render", "Hierba no disponible (el sombreador no compiló)");
     skyProgram_ = linkProgram(kSkyVS, kSkyFS);
     if (!shadowProgram_ || !skyProgram_) return false;
     auto u = [this](const char* n) { return glGetUniformLocation(meshProgram_, n); };
@@ -1133,7 +1203,7 @@ void Renderer::onContextLost() {
     for (uint32_t& v : instancedVao_) v = 0;
     for (TerrainGpu& t : terrains_) t = {t.key, 0, {}, t.lastUsed}; // se vuelve a subir en el siguiente dibujo
     spriteProgram_ = meshProgram_ = spriteVao_ = spriteVbo_ = spriteIbo_ = lineVao_ = lineVbo_ = 0;
-    shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = jointTex_ = 0;
+    shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = jointTex_ = grassProgram_ = 0;
     for (auto& m : meshes_) m = {};
     for (auto& t : textures_) t.gl = 0;
     for (auto& m : models_) m.parts.clear();
@@ -1158,6 +1228,8 @@ void Renderer::shutdown() {
         if (t.mesh.vbo) glDeleteBuffers(1, &t.mesh.vbo);
         if (t.mesh.ibo) glDeleteBuffers(1, &t.mesh.ibo);
         if (t.mesh.vao) glDeleteVertexArrays(1, &t.mesh.vao);
+        if (t.grassVao) glDeleteVertexArrays(1, &t.grassVao);
+        if (t.grassVbo) glDeleteBuffers(1, &t.grassVbo);
     }
     terrains_.clear();
     post_->shutdown();
@@ -1185,13 +1257,14 @@ void Renderer::shutdown() {
     if (spriteProgram_) glDeleteProgram(spriteProgram_);
     if (meshProgram_) glDeleteProgram(meshProgram_);
     if (shadowProgram_) glDeleteProgram(shadowProgram_);
+    if (grassProgram_) glDeleteProgram(grassProgram_);
     if (skyProgram_) glDeleteProgram(skyProgram_);
     if (shadowFbo_) glDeleteFramebuffers(1, &shadowFbo_);
     if (shadowTex_) glDeleteTextures(1, &shadowTex_);
     if (skyVao_) glDeleteVertexArrays(1, &skyVao_);
     if (jointTex_) glDeleteTextures(1, &jointTex_);
     spriteProgram_ = meshProgram_ = spriteVao_ = spriteVbo_ = spriteIbo_ = lineVao_ = lineVbo_ = 0;
-    shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = 0;
+    shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = grassProgram_ = 0;
 }
 
 // ---------------------------------------------------------------- Fotograma
@@ -1499,6 +1572,64 @@ int Renderer::terrainMesh(uint64_t key, uint32_t revision, const std::function<T
     return slot;
 }
 
+void Renderer::drawGrass(int handle, const Mat4& world, const Terrain& t) {
+    if (!t.grass || !grassProgram_ || handle < 0 || handle >= int(terrains_.size())) return;
+    TerrainGpu& g = terrains_[size_t(handle)];
+    // Se regenera solo si cambió el terreno (revisión) o la densidad.
+    const uint64_t hash = (uint64_t(t.revision) << 32) ^ uint64_t(t.grassDensity * 1000.0f) ^ (uint64_t(t.resolution) << 20);
+    if (g.grassHash != hash || !g.grassVao) {
+        const std::vector<GrassBlade> blades = scatterGrass(t);
+        std::vector<float> data;
+        data.reserve(blades.size() * 6);
+        for (const GrassBlade& b : blades) data.insert(data.end(), {b.x, b.y, b.z, b.yaw, b.scale, b.phase});
+        if (!g.grassVao) {
+            glGenVertexArrays(1, &g.grassVao);
+            glGenBuffers(1, &g.grassVbo);
+        }
+        glBindVertexArray(g.grassVao);
+        glBindBuffer(GL_ARRAY_BUFFER, g.grassVbo);
+        glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(data.size() * sizeof(float)), data.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+        glVertexAttribDivisor(0, 1);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(4 * sizeof(float)));
+        glVertexAttribDivisor(1, 1);
+        glBindVertexArray(0);
+        g.grassCount = int(blades.size());
+        g.grassHash = hash;
+    }
+    if (g.grassCount == 0) return;
+    const Environment& e = lighting_.env;
+    glUseProgram(grassProgram_);
+    auto u = [&](const char* n) { return glGetUniformLocation(grassProgram_, n); };
+    glUniformMatrix4fv(u("uViewProj"), 1, GL_FALSE, viewProj_.m);
+    glUniformMatrix4fv(u("uModel"), 1, GL_FALSE, world.m);
+    glUniform1f(u("uTime"), std::chrono::duration<float>(std::chrono::steady_clock::now() - startTime_).count());
+    glUniform1f(u("uHeight"), std::max(0.02f, t.grassHeight));
+    glUniform1f(u("uWind"), t.grassWind);
+    glUniform3f(u("uCam"), cameraPos_.x, cameraPos_.y, cameraPos_.z);
+    glUniform1f(u("uFade"), std::max(5.0f, t.grassDistance));
+    glUniform3f(u("uBase"), t.grassBase.r, t.grassBase.g, t.grassBase.b);
+    glUniform3f(u("uTip"), t.grassTip.r, t.grassTip.g, t.grassTip.b);
+    const Vec3 d = lighting_.sunDirection.normalized();
+    glUniform3f(u("uSunDir"), d.x, d.y, d.z);
+    glUniform3f(u("uSunColor"), lighting_.sunColor.r, lighting_.sunColor.g, lighting_.sunColor.b);
+    glUniform3f(u("uSky"), (e.skyZenith.r + e.skyHorizon.r) * 0.5f, (e.skyZenith.g + e.skyHorizon.g) * 0.5f,
+                (e.skyZenith.b + e.skyHorizon.b) * 0.5f);
+    glUniform3f(u("uFogColor"), e.fogColor.r, e.fogColor.g, e.fogColor.b);
+    glUniform1f(u("uFogDensity"), std::max(e.fogDensity, 0.0f));
+    glUniform1f(u("uExposure"), std::max(e.exposure, 0.01f));
+    glUniform1i(u("uHdr"), hdrActive_ ? 1 : 0);
+    glDisable(GL_CULL_FACE); // las briznas se ven por las dos caras
+    glBindVertexArray(g.grassVao);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 15, g.grassCount);
+    glBindVertexArray(0);
+    glEnable(GL_CULL_FACE);
+    stats_.drawCalls++;
+    stats_.triangles += g.grassCount * 5;
+}
+
 void Renderer::drawTerrain(int handle, const Mat4& world, const Terrain& t, const TextureHandle layers[4]) {
     if (handle < 0 || handle >= static_cast<int>(terrains_.size()) || !terrains_[handle].mesh.vao) return;
     glUseProgram(meshProgram_);
@@ -1788,6 +1919,8 @@ void Renderer::endFrame() {
                 if (t.mesh.vbo) glDeleteBuffers(1, &t.mesh.vbo);
                 if (t.mesh.ibo) glDeleteBuffers(1, &t.mesh.ibo);
                 if (t.mesh.vao) glDeleteVertexArrays(1, &t.mesh.vao);
+                if (t.grassVao) glDeleteVertexArrays(1, &t.grassVao);
+                if (t.grassVbo) glDeleteBuffers(1, &t.grassVbo);
                 terrains_.erase(terrains_.begin() + static_cast<long>(i));
             } else {
                 ++i;

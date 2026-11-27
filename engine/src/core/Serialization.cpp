@@ -544,7 +544,10 @@ ComponentRegistry ComponentRegistry::createDefault() {
             }
             return Json{{"size", toJson(t.size)}, {"maxHeight", toJson(t.maxHeight)}, {"resolution", t.resolution},
                         {"layerTiling", toJson(t.layerTiling)}, {"layers", layers},
-                        {"heights", base64Encode(h.data(), h.size())}, {"splat", base64Encode(t.splat.data(), t.splat.size())}};
+                        {"heights", base64Encode(h.data(), h.size())}, {"splat", base64Encode(t.splat.data(), t.splat.size())},
+                        {"grass", t.grass}, {"grassDensity", toJson(t.grassDensity)}, {"grassHeight", toJson(t.grassHeight)},
+                        {"grassBase", toJson(t.grassBase)}, {"grassTip", toJson(t.grassTip)}, {"grassWind", toJson(t.grassWind)},
+                        {"grassDistance", toJson(t.grassDistance)}};
         },
         [](Terrain& t, FieldReader& rd) {
             rd.read("size", t.size);
@@ -552,6 +555,13 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("resolution", t.resolution);
             t.resolution = std::clamp(t.resolution, 17, 257);
             rd.read("layerTiling", t.layerTiling);
+            rd.read("grass", t.grass);
+            rd.read("grassDensity", t.grassDensity);
+            rd.read("grassHeight", t.grassHeight);
+            rd.read("grassBase", t.grassBase);
+            rd.read("grassTip", t.grassTip);
+            rd.read("grassWind", t.grassWind);
+            rd.read("grassDistance", t.grassDistance);
             std::string raw;
             rd.readRaw("layers", raw);
             const Json layers = Json::parse(raw.empty() ? "[]" : raw, nullptr, false);

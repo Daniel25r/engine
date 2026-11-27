@@ -108,3 +108,33 @@ TEST("terreno: se guarda con la escena y tiene colisión") {
     for (int i = 0; i < 180; ++i) w.step(b, 1.0f / 60);
     CHECK_NEAR(b.transform(box).position().y, terrainHeightAt(*tb, 0, 0) + 0.5f, 0.15);
 }
+
+TEST("terreno: la hierba crece donde se pintó la capa 0 y no en pendientes fuertes") {
+    Terrain t;
+    t.size = 20;
+    t.resolution = 33;
+    t.grassDensity = 10;
+    terrainEnsureData(t);
+    // Todo llano y todo capa 0: ~ tamaño² × densidad briznas, siempre las mismas.
+    const auto a = scatterGrass(t), b = scatterGrass(t);
+    CHECK(a.size() > 3500 && a.size() <= 4000);
+    CHECK(a.size() == b.size() && a[10].x == b[10].x && a[10].z == b[10].z);
+    // Mitad izquierda pintada con roca (capa 2): ahí no crece.
+    for (int j = 0; j < t.resolution; ++j)
+        for (int i = 0; i < t.resolution / 2; ++i) {
+            uint8_t* w = &t.splat[(size_t(j) * t.resolution + i) * 4];
+            w[0] = 0; w[1] = 0; w[2] = 255; w[3] = 0;
+        }
+    size_t left = 0, right = 0;
+    for (const GrassBlade& g : scatterGrass(t)) (g.x < -1 ? left : right) += g.x < -1 || g.x > 1 ? 1 : 0;
+    CHECK(left == 0 && right > 1000);
+    // Una pared muy empinada: sin hierba.
+    Terrain steep;
+    steep.size = 10;
+    steep.resolution = 17;
+    steep.maxHeight = 40;
+    terrainEnsureData(steep);
+    for (int j = 0; j < steep.resolution; ++j)
+        for (int i = 0; i < steep.resolution; ++i) steep.heights[size_t(j) * 17 + i] = uint16_t(i * 4000);
+    CHECK(scatterGrass(steep).empty());
+}

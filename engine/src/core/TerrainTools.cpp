@@ -59,6 +59,40 @@ Vec3 terrainNormalAt(const Terrain& t, float x, float z) {
     return Vec3{-dx, 2 * e, -dz}.normalized();
 }
 
+std::vector<GrassBlade> scatterGrass(const Terrain& t, size_t maxBlades) {
+    std::vector<GrassBlade> out;
+    if (t.size <= 0 || t.grassDensity <= 0) return out;
+    const float area = t.size * t.size;
+    const size_t want = std::min(maxBlades, size_t(area * std::min(t.grassDensity, 200.0f)));
+    out.reserve(want);
+    const int res = std::max(t.resolution, 2);
+    const bool hasSplat = t.splat.size() == size_t(res) * size_t(res) * 4;
+    uint32_t s = 0x9E3779B9u;
+    auto rnd = [&]() { // xorshift: reproducible
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        return (s & 0xFFFFFF) / float(0x1000000);
+    };
+    for (size_t i = 0; i < want; ++i) {
+        const float x = (rnd() - 0.5f) * t.size, z = (rnd() - 0.5f) * t.size;
+        const float pick = rnd(), yaw = rnd() * 6.2831853f, scl = 0.6f + rnd() * 0.7f, phase = rnd() * 6.2831853f;
+        float weight = 1.0f; // capa 0 (hierba) en el vértice más cercano
+        if (hasSplat) {
+            const int gi = std::clamp(int((x / t.size + 0.5f) * float(res - 1) + 0.5f), 0, res - 1);
+            const int gj = std::clamp(int((z / t.size + 0.5f) * float(res - 1) + 0.5f), 0, res - 1);
+            const uint8_t* w = &t.splat[(size_t(gj) * size_t(res) + size_t(gi)) * 4];
+            const int sum = w[0] + w[1] + w[2] + w[3];
+            weight = sum > 0 ? w[0] / float(sum) : 1.0f;
+        }
+        const float up = t.heights.empty() ? 1.0f : terrainNormalAt(t, x, z).y; // cos(pendiente)
+        const float slopeOk = std::clamp((up - 0.80f) / 0.1f, 0.0f, 1.0f);   // 35° ... 25°
+        if (pick >= weight * slopeOk) continue;
+        out.push_back({x, terrainHeightAt(t, x, z), z, yaw, scl, phase});
+    }
+    return out;
+}
+
 AABB terrainBounds(const Terrain& t) {
     float top = 0;
     for (uint16_t h : t.heights) top = std::max(top, h / 65535.0f * t.maxHeight);

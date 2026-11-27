@@ -78,6 +78,7 @@ Reglas comunes:
 | `CharacterController` | `height`, `radius`, `maxSlope`, `stepHeight`, `gravityScale`, `layer` |
 | `Joint` | `type` ("fixed"/"hinge"/"distance"), `connected` (id de entidad o null), `anchor`, `axis`, `limitAngle`, `minAngle`, `maxAngle`, `minDistance`, `maxDistance`, `springFrequency`, `springDamping` |
 | `ParticleSystem` | emisión, vida, velocidad, forma, aceleración, tamaño y color inicial/final, textura con hoja de cuadros, `additive`, `worldSpace` |
+| `Terrain` (además) | `grass`, `grassDensity`, `grassHeight`, `grassBase`, `grassTip`, `grassWind`, `grassDistance` |
 | `Terrain` | `size`, `maxHeight`, `resolution`, `layerTiling`, `layers` [4 × {texture, color}], `heights` (base64 de uint16 little endian, resolution²), `splat` (base64, resolution² × 4 pesos) |
 | `UIRect`, `UIImage`, `UIText`, `UIButton`, `UIJoystick` | ver ENGINE_API |
 

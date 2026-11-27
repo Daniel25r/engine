@@ -357,6 +357,7 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
         if (culling && !camFrustum.intersects(t.bounds)) continue;
         stats_.meshesVisible++;
         renderer.drawTerrain(t.handle, *t.world, *t.terrain, t.layers);
+        renderer.drawGrass(t.handle, *t.world, *t.terrain);
     }
     for (const InstanceBatch& b : batches_) {
         renderer.drawMeshInstanced(b.material->mesh, b.worlds, *b.material);

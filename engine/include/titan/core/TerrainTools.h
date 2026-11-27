@@ -37,6 +37,16 @@ void importHeightmap(Terrain& t, const std::vector<float>& gray, int width, int 
 // Cambia la resolución conservando la forma.
 void resizeTerrain(Terrain& t, int resolution);
 
+// Briznas de hierba (coordenadas locales del terreno): donde la capa 0 pesa y la pendiente es suave (< ~35°).
+// Deterministas (misma posición siempre) y como mucho maxBlades.
+struct GrassBlade {
+    float x, y, z;   // base
+    float yaw;       // radianes
+    float scale;     // 0,6..1,3 de la altura
+    float phase;     // desfase del viento
+};
+std::vector<GrassBlade> scatterGrass(const Terrain& t, size_t maxBlades = 250000);
+
 // Texto base64 (para guardar alturas y capas dentro del JSON de la escena).
 std::string base64Encode(const uint8_t* data, size_t size);
 bool base64Decode(const std::string& text, std::vector<uint8_t>& out);
