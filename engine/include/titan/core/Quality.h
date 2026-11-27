@@ -13,6 +13,7 @@ struct QualitySettings {
     bool postProcess = true;    // render target + composición (necesario para escala, FXAA, bloom y color)
     bool fxaa = true;
     bool bloom = true;          // permitido; cada escena decide si lo usa (Environment.bloom)
+    bool ssao = true;           // permitido; cada escena decide si lo usa (Environment.ssao)
     bool shadows = true;
     int shadowMapSize = 2048;
     int maxPointLights = 4;     // luces locales (puntuales y focos) por fotograma

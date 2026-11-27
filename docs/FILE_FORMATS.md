@@ -67,7 +67,7 @@ Reglas comunes:
 | `Script` | `script` (recurso .lua), `enabled`, `props` (objeto) |
 | `MeshRenderer` | `mesh`, `model`, `material` (recurso .mat), `castShadows`, `visible` y los campos de material: `texture`, `color`, `metallic`, `roughness`, `emission`, `prototypeGrid`, `unlit`, `normalMap`, `normalStrength`, `metallicRoughnessMap`, `emissionMap`, `occlusionMap`, `tiling` [2], `offset` [2], `alphaClip`, `alphaCutoff`, `doubleSided` |
 | `Light` | `type` ("directional"/"point"/"spot"), `color`, `intensity`, `range`, `spotAngle`, `spotSoftness` |
-| `Environment` | cielo, niebla, sombras y posprocesado: `bloom`, `bloomIntensity`, `bloomThreshold`, `vignette`, `contrast`, `saturation`, `temperature` |
+| `Environment` | cielo, niebla, sombras y posprocesado: `bloom`, `bloomIntensity`, `bloomThreshold`, `vignette`, `contrast`, `saturation`, `temperature`, `ssao`, `ssaoIntensity`, `ssaoRadius` (oclusión en pantalla; si faltan, desactivada) |
 | `Animator` | `clip`, `playing`, `loop`, `speed`, `fadeDuration`, `machine` (opcional: `params`, `states` con `blend` y `events`, `transitions` con `conditions`) |
 | `AudioSource` | `clip`, `volume`, `pitch`, `loop`, `playOnStart`, `spatial`, `minDistance`, `maxDistance` |
 | `Rigidbody`, `Collider` | ver ENGINE_API; `Collider.layer` 0..15 |

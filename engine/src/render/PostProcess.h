@@ -9,6 +9,11 @@ namespace titan {
 
 struct PostSettings {
     bool fxaa = false;
+    // Oclusión ambiental en pantalla (SSAO): oscurece rincones, contactos y huecos a partir de la profundidad.
+    bool ssao = false;
+    float ssaoIntensity = 1.0f;
+    float ssaoRadius = 0.6f;   // metros
+    float proj[4] = {1, 1, -1, -0.2f}; // P00, P11, P22, P23 de la proyección en perspectiva
     bool bloom = false;
     float bloomIntensity = 0.5f;
     float bloomThreshold = 0.8f;
@@ -38,7 +43,10 @@ private:
     void drawFullscreen();
 
     uint32_t vao_ = 0;
-    uint32_t composite_ = 0, down_ = 0, up_ = 0;
+    uint32_t composite_ = 0, down_ = 0, up_ = 0, ssao_ = 0, ssaoBlur_ = 0;
+    uint32_t aoFbo_[2] = {}, aoTex_[2] = {}; // media resolución: oclusión y oclusión suavizada
+    int aoW_ = 0, aoH_ = 0;
+    int depthBits_ = 0;
     uint32_t sceneFbo_ = 0, sceneColor_ = 0, sceneDepth_ = 0;
     uint32_t bloomFbo_[kBloomLevels] = {}, bloomTex_[kBloomLevels] = {};
     int bloomW_[kBloomLevels] = {}, bloomH_[kBloomLevels] = {};

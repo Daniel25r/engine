@@ -65,7 +65,9 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 | Tonemapping ACES | 🟡 | En el sombreador, sobre color LDR (no hay búfer HDR intermedio) |
 | Perfiles de calidad según dispositivo | ✅ | Pruebas `calidad:` (2) |
 | Deferred, Forward+, clustered, indirect, occlusion/GPU culling, LOD, HLOD, streaming de mallas | ❌ | |
-| IBL, sondas de reflexión/luz, lightmaps, GI, SSR, SSAO, volumétricas, cascadas | ❌ | |
+| Luz ambiental basada en imagen (IBL) del cielo procedural: "split-sum" de UE4/UE5 con la aproximación analítica de Karis, cielo prefiltrado por rugosidad, compensación de energía de dispersión múltiple, oclusión especular (Lagarde) y de horizonte | ✅ | Captura comparada antes/después con esferas de metal, pintura y oro de rugosidad 0 a 1 |
+| SSAO (oclusión ambiental en pantalla, estilo Alchemy/SAO): media resolución, 12 muestras en espiral, suavizado que respeta bordes; perfiles alto y muy alto; activado en las plantillas nuevas (los proyectos anteriores no cambian) | ✅ | Prueba `calidad:` (perfiles y guardado); capturas de la escena de materiales, el mundo de bloques e Isla Estelar |
+| Sondas de reflexión/luz con cubemaps, lightmaps, GI, SSR, volumétricas, cascadas de sombras | ❌ | |
 | TAA, DoF, motion blur, aberración cromática, grano, auto exposición | ❌ | |
 
 ## 3. Materiales y shaders

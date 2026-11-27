@@ -146,6 +146,11 @@ struct Environment {
     float contrast = 1;
     float saturation = 1;
     float temperature = 0;        // -1 frío .. 1 cálido
+    // Oclusión ambiental en pantalla (perfiles alto y muy alto). Desactivada por defecto: los proyectos anteriores
+    // se ven igual; las plantillas nuevas la activan.
+    bool ssao = false;
+    float ssaoIntensity = 1.0f;
+    float ssaoRadius = 0.6f;      // metros
 };
 
 struct Light {

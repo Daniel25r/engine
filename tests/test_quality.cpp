@@ -1,5 +1,9 @@
+#include <cmath>
+
 #include "Test.h"
 #include "titan/core/Quality.h"
+#include "titan/core/Scene.h"
+#include "titan/core/Serialization.h"
 
 using namespace titan;
 
@@ -12,6 +16,35 @@ TEST("calidad: cada perfil cambia opciones reales y en orden creciente") {
     CHECK(lo.shadowMapSize < hi.shadowMapSize && hi.shadowMapSize < vh.shadowMapSize);
     CHECK(!lo.fxaa && me.fxaa && !me.bloom && hi.bloom);
     CHECK(vl.maxPointLights < hi.maxPointLights && hi.maxPointLights < vh.maxPointLights);
+    CHECK(!vl.ssao && !lo.ssao && !me.ssao && hi.ssao && vh.ssao); // la oclusión en pantalla solo en alto y muy alto
+}
+
+TEST("calidad: el SSAO de la escena se guarda y los proyectos antiguos siguen sin él") {
+    const ComponentRegistry reg = ComponentRegistry::createDefault();
+    Scene a("a");
+    Environment en;
+    en.ssao = true;
+    en.ssaoIntensity = 1.7f;
+    en.ssaoRadius = 1.25f;
+    a.world().add<Environment>(a.createEntity("Entorno"), en);
+    const std::string text = serializeScene(a, reg);
+    Scene b("b");
+    CHECK(deserializeScene(text, b, reg).ok());
+    const Environment* e = b.world().get<Environment>(b.findByName("Entorno"));
+    CHECK(e && e->ssao);
+    CHECK(e && std::abs(e->ssaoIntensity - 1.7f) < 1e-5f && std::abs(e->ssaoRadius - 1.25f) < 1e-5f);
+    // Una escena escrita antes de existir el SSAO (sin los campos) carga con él desactivado: se ve igual que antes.
+    std::string old = text;
+    for (const char* key : {"\"ssao\"", "\"ssaoIntensity\"", "\"ssaoRadius\""}) {
+        const size_t k = old.find(key);
+        CHECK(k != std::string::npos);
+        const size_t end = old.find_first_of(",}", k);
+        old.erase(k, end - k + (old[end] == ',' ? 1 : 0));
+    }
+    Scene c("c");
+    CHECK(deserializeScene(old, c, reg).ok());
+    const Environment* oe = c.world().get<Environment>(c.findByName("Entorno"));
+    CHECK(oe && !oe->ssao);
 }
 
 TEST("calidad: nombres y recomendación según capacidades medibles") {

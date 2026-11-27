@@ -162,6 +162,7 @@ void environment(Scene& s, bool shadows = true) {
     en.bloomThreshold = 0.8f;
     en.vignette = 0.2f;
     en.saturation = 1.1f;
+    en.ssao = true;
     s.world().add<Environment>(env, en);
     Entity sun = s.createEntity("Sol");
     s.transform(sun).setEulerDegrees({-55, 35, 0});

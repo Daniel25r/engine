@@ -362,6 +362,7 @@ private:
     int quadCount_ = 0;
     Viewport viewport_;
     Mat4 viewProj_;
+    Mat4 projection_; // de la cámara actual (el SSAO reconstruye posiciones desde la profundidad)
     Vec3 cameraPos_;
     Vec3 camRight_{1, 0, 0}, camUp_{0, 1, 0};
     std::vector<LoadedFont> fonts_;

@@ -257,16 +257,35 @@ void main() {
             att *= smoothstep(uSpot[i].w, uSpotInner[i], dot(-l, uSpot[i].xyz));
         color += brdf(n, v, l, albedo, metal, rough, uPointColor[i] * 3.0 * att);
     }
-    // Ambiente: cielo arriba, suelo abajo; reflejo especular aproximado del cielo.
+    // Ambiente basado en imagen (IBL) a partir del cielo procedural, con el modelo "split-sum" de UE4/UE5:
+    //   difuso   = irradiancia del cielo (hemisferio) · albedo
+    //   especular = cielo prefiltrado según la rugosidad (en la dirección reflejada) · (F0·A + B)
+    // A y B salen de la aproximación analítica de Karis (la que usa Unreal en móvil) en vez de una tabla.
     vec3 sky = toLinear(uSkyZenith), horizon = toLinear(uSkyHorizon), ground = toLinear(uGround);
     vec3 hemi = mix(ground, mix(horizon, sky, max(n.y, 0.0)), n.y * 0.5 + 0.5);
     hemi = mix(vec3(dot(hemi, vec3(0.3, 0.59, 0.11))), hemi, 0.45); // luz ambiental menos saturada
     vec3 F0 = mix(vec3(0.04), albedo, metal);
-    float ndv = max(dot(n, v), 0.0);
-    vec3 F = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - ndv, 5.0);
+    float ndv = max(dot(n, v), 1e-4);
+    vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022), c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+    vec4 rr = rough * c0 + c1;
+    float a004 = min(rr.x * rr.x, exp2(-9.28 * ndv)) * rr.x + rr.y;
+    vec2 AB = vec2(-1.04, 1.04) * a004 + rr.zw;
+    vec3 specWeight = F0 * AB.x + AB.y;
+    // Compensación de energía (dispersión múltiple): los metales rugosos no se oscurecen de más.
+    specWeight *= 1.0 + F0 * (1.0 / max(AB.x + AB.y, 0.05) - 1.0);
+    // Reflejo: el vector se acerca a la normal al ser más rugoso (lóbulo GGX dominante) y el cielo se suaviza.
     vec3 r = reflect(-v, n);
-    vec3 env = mix(ground, mix(horizon, sky, max(r.y, 0.0)), r.y * 0.5 + 0.5);
-    color += (hemi * albedo * (1.0 - metal) * (1.0 - F) * 0.45 + env * F * (1.0 - rough * 0.7)) * uAmbientI * ao;
+    r = normalize(mix(r, n, rough * rough));
+    float ry = r.y;
+    vec3 sharpSky = ry > 0.0 ? mix(horizon, sky, pow(ry, 0.55)) : mix(horizon, ground, pow(-ry, 0.35));
+    vec3 blurSky = mix(ground, mix(horizon, sky, max(ry, 0.0)), ry * 0.5 + 0.5);
+    vec3 env = mix(sharpSky, blurSky, smoothstep(0.0, 0.8, rough));
+    // El reflejo que apunta "dentro" de la superficie (normal map) no ve el cielo: oclusión de horizonte.
+    float horizonOcc = clamp(1.0 + dot(reflect(-v, n), vNormal * (gl_FrontFacing ? 1.0 : -1.0)), 0.0, 1.0);
+    // Oclusión especular de Lagarde a partir de la oclusión ambiental.
+    float specAo = clamp(pow(ndv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
+    vec3 kd = (1.0 - specWeight) * (1.0 - metal);
+    color += (hemi * albedo * kd * 0.45 * ao + env * specWeight * specAo * horizonOcc * horizonOcc) * uAmbientI;
     color += toLinear(uEmission * texture(uEmissiveTex, vUV).rgb) * 2.0;
 
     color = pow(aces(color * uExposure), vec3(1.0 / 2.2));
@@ -798,6 +817,14 @@ void Renderer::resolveScene() {
     s.contrast = e.contrast;
     s.saturation = e.saturation;
     s.temperature = e.temperature;
+    // SSAO: solo en perspectiva (m[15] = 0) y si el perfil de calidad lo permite y la escena lo pide.
+    s.ssao = quality_.ssao && e.ssao && projection_.m[15] == 0.0f;
+    s.ssaoIntensity = e.ssaoIntensity;
+    s.ssaoRadius = e.ssaoRadius;
+    s.proj[0] = projection_.m[0];
+    s.proj[1] = projection_.m[5];
+    s.proj[2] = projection_.m[10];
+    s.proj[3] = projection_.m[14];
     post_->resolve(static_cast<uint32_t>(targetFbo_), viewport_.x, viewport_.y, viewport_.width, viewport_.height, s);
     stats_.postPasses = post_->lastPasses();
     glUseProgram(0);
@@ -1003,6 +1030,7 @@ void Renderer::setCamera(const Mat4& view, const Mat4& projection) {
     flushSprites();
     flushLines();
     viewProj_ = projection * view;
+    projection_ = projection;
     const Mat4 camWorld = view.inverted();
     cameraPos_ = camWorld.translation();
     camRight_ = camWorld.transformDirection({1, 0, 0}).normalized();

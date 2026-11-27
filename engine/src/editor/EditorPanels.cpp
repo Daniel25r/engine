@@ -1094,6 +1094,13 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
             dragF("Intens. bloom", v.bloomIntensity, 0.01f, 0, 4, "%.2f");
             dragF("Umbral bloom", v.bloomThreshold, 0.005f, 0, 1, "%.2f");
         }
+        check("Oclusión (SSAO)", v.ssao);
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("Sombras de contacto en rincones y bajo los objetos (perfiles de calidad alto y muy alto)");
+        if (v.ssao) {
+            dragF("Intens. SSAO", v.ssaoIntensity, 0.01f, 0, 4, "%.2f");
+            dragF("Radio SSAO", v.ssaoRadius, 0.01f, 0.05f, 5, "%.2f m");
+        }
         dragF("Viñeta", v.vignette, 0.005f, 0, 1, "%.2f");
         dragF("Contraste", v.contrast, 0.005f, 0.5f, 1.5f, "%.2f");
         dragF("Saturación", v.saturation, 0.005f, 0, 2, "%.2f");

@@ -59,6 +59,8 @@ bool buildWorld(Project& p, const std::map<std::string, UUID>& scripts, UUID& sc
     en.fogDensity = 0.012f; // la niebla esconde el borde de los chunks cargados
     en.shadows = true;
     en.shadowDistance = 40;
+    en.ssao = true;
+    en.ssaoRadius = 0.8f;
     s.world().add<Environment>(env, en);
     Entity sun = s.createEntity("Sol");
     s.transform(sun).setEulerDegrees({-50, 30, 0});

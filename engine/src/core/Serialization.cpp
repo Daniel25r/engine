@@ -363,7 +363,8 @@ ComponentRegistry ComponentRegistry::createDefault() {
                         {"bloom", e.bloom}, {"bloomIntensity", toJson(e.bloomIntensity)},
                         {"bloomThreshold", toJson(e.bloomThreshold)}, {"vignette", toJson(e.vignette)},
                         {"contrast", toJson(e.contrast)}, {"saturation", toJson(e.saturation)},
-                        {"temperature", toJson(e.temperature)}};
+                        {"temperature", toJson(e.temperature)}, {"ssao", e.ssao},
+                        {"ssaoIntensity", toJson(e.ssaoIntensity)}, {"ssaoRadius", toJson(e.ssaoRadius)}};
         },
         [](Environment& e, FieldReader& rd) {
             rd.read("sky", e.sky);
@@ -383,6 +384,9 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("contrast", e.contrast);
             rd.read("saturation", e.saturation);
             rd.read("temperature", e.temperature);
+            rd.read("ssao", e.ssao);
+            rd.read("ssaoIntensity", e.ssaoIntensity);
+            rd.read("ssaoRadius", e.ssaoRadius);
         });
 
     r.addSimple<Light>(
