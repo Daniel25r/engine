@@ -1157,6 +1157,8 @@ void Renderer::shutdown() {
 
 // ---------------------------------------------------------------- Fotograma
 
+void Renderer::setLodEnabled(bool on) { lodEnabled_ = on; }
+
 void Renderer::setHdrUniforms(bool on) {
     for (GLuint p : {meshProgram_, spriteProgram_, skyProgram_}) {
         if (!p) continue;
@@ -1547,7 +1549,8 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
         glDrawElementsInstanced(GL_TRIANGLES, count, wideIndices ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, nullptr, instanceCount_);
         stats_.instances += instanceCount_;
     } else {
-        glDrawElements(GL_TRIANGLES, count, wideIndices ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, nullptr);
+        glDrawElements(GL_TRIANGLES, count, wideIndices ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT,
+                       reinterpret_cast<const void*>(size_t(s.firstIndex) * (wideIndices ? 4 : 2)));
     }
     glBindVertexArray(0);
     if (specBuffersOn_) { // el cielo, los sprites y las partículas solo escriben color

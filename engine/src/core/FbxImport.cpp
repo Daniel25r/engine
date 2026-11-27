@@ -9,6 +9,7 @@
 #include <fstream>
 #include <map>
 #include <set>
+#include <unordered_map>
 
 #include "titan/core/ModelImport.h"
 #include "ufbx.h"
@@ -138,6 +139,7 @@ bool loadFbx(const std::string& path, MeshBuild& out, ImportReport* report, std:
 
     // 2. Mallas: cada instancia en el mundo (los vértices de las pieles en su pose de enlace).
     std::map<const ufbx_material*, int> partOf;
+    std::vector<std::unordered_map<std::string, uint32_t>> welds; // por parte: vértice -> índice
     std::vector<uint32_t> tri;
     for (size_t ni = 0; ni < scene->nodes.count; ++ni) {
         const ufbx_node* node = scene->nodes.data[ni];
@@ -174,6 +176,7 @@ bool loadFbx(const std::string& path, MeshBuild& out, ImportReport* report, std:
                 out.parts.push_back({});
                 out.parts.back().material = int(out.materials.size() - 1);
                 it = partOf.emplace(mat, int(out.parts.size() - 1)).first;
+                welds.emplace_back();
             }
             MeshBuildPart& part = out.parts[size_t(it->second)];
             const uint32_t nTri = ufbx_triangulate_face(tri.data(), tri.size(), mesh, face);
@@ -213,8 +216,12 @@ bool loadFbx(const std::string& path, MeshBuild& out, ImportReport* report, std:
                         v.weights[0] = 1;
                     }
                 }
-                part.indices.push_back(uint32_t(part.vertices.size()));
-                part.vertices.push_back(v);
+                // Vértices idénticos (misma posición, normal, UV y pesos) se comparten: malla conectada (la necesitan
+                // la simplificación de los niveles de detalle y la caché de vértices de la GPU).
+                std::string key(reinterpret_cast<const char*>(&v), sizeof(v));
+                auto [it2, inserted] = welds[size_t(it->second)].emplace(std::move(key), uint32_t(part.vertices.size()));
+                if (inserted) part.vertices.push_back(v);
+                part.indices.push_back(it2->second);
             }
         }
     }

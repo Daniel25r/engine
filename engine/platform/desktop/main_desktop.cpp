@@ -138,6 +138,7 @@ int main(int argc, char** argv) {
         if (const char* c = std::getenv("TITAN_CULLING")) runtime.sceneRenderer().culling = std::atoi(c) != 0;
         if (const char* c = std::getenv("TITAN_INSTANCING")) runtime.sceneRenderer().instancing = std::atoi(c) != 0;
         if (const char* c = std::getenv("TITAN_PARALLEL")) runtime.parallel = std::atoi(c) != 0;
+        if (const char* c = std::getenv("TITAN_LOD")) runtime.renderer().setLodEnabled(std::atoi(c) != 0); // comparar sin niveles de detalle
         double sumFrame = 0, sumRender = 0, sumParticles = 0, sumPhysics = 0;
         // Carga: cuánto tarda en volver start() + el primer fotograma, el peor fotograma y cuándo quedan todas
         // las texturas en la GPU (mide la carga asíncrona).

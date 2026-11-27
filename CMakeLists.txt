@@ -135,13 +135,14 @@ target_include_directories(titan_ui PRIVATE third_party/stb)
 target_link_libraries(titan_ui PUBLIC titan_core)
 target_compile_options(titan_ui PRIVATE ${TITAN_WARNINGS})
 
-add_library(titan_render STATIC
+add_library(titan_render STATIC third_party/meshoptimizer/simplifier.cpp third_party/meshoptimizer/allocator.cpp
     engine/src/render/Renderer.cpp
     engine/src/render/stb_impl.cpp
     engine/src/render/Model.cpp
     engine/src/render/PostProcess.cpp
 )
-target_include_directories(titan_render PRIVATE third_party/stb)
+target_include_directories(titan_render PRIVATE third_party/stb third_party/meshoptimizer)
+set_source_files_properties(third_party/meshoptimizer/simplifier.cpp third_party/meshoptimizer/allocator.cpp PROPERTIES COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/w,-w>")
 target_link_libraries(titan_render PUBLIC titan_core titan_ui)
 target_compile_options(titan_render PRIVATE ${TITAN_WARNINGS})
 target_link_libraries(titan_render PUBLIC ${TITAN_GLES_LIBS})

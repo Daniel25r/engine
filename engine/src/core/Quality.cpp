@@ -12,10 +12,10 @@ QualitySettings QualitySettings::preset(QualityLevel level) {
     q.level = level;
     switch (level) {
     case QualityLevel::VeryLow:
-        q.renderScale = 0.6f; q.fxaa = false; q.bloom = false; q.ssao = false; q.ssr = false; q.taa = false; q.shadows = false; q.shadowMapSize = 512; q.maxPointLights = 1;
+        q.lodBias = 2.0f; q.renderScale = 0.6f; q.fxaa = false; q.bloom = false; q.ssao = false; q.ssr = false; q.taa = false; q.shadows = false; q.shadowMapSize = 512; q.maxPointLights = 1;
         break;
     case QualityLevel::Low:
-        q.renderScale = 0.75f; q.fxaa = false; q.bloom = false; q.ssao = false; q.ssr = false; q.taa = false; q.shadows = true; q.shadowMapSize = 1024; q.maxPointLights = 2;
+        q.lodBias = 1.5f; q.renderScale = 0.75f; q.fxaa = false; q.bloom = false; q.ssao = false; q.ssr = false; q.taa = false; q.shadows = true; q.shadowMapSize = 1024; q.maxPointLights = 2;
         break;
     case QualityLevel::Medium:
         q.renderScale = 0.9f; q.fxaa = true; q.bloom = false; q.ssao = false; q.ssr = false; q.taa = false; q.shadows = true; q.shadowMapSize = 1024; q.maxPointLights = 4;

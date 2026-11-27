@@ -13,6 +13,7 @@
 #define CGLTF_IMPLEMENTATION
 #include "cgltf/cgltf.h"
 #include "stb_image.h"
+#include "meshoptimizer.h"
 #include "titan/core/FileSource.h"
 #include "titan/core/Geometry.h"
 #include "titan/core/Log.h"
@@ -263,9 +264,28 @@ bool Renderer::buildModel(Model& m) {
             glGenBuffers(1, &part.mesh.vbo);
             glBindBuffer(GL_ARRAY_BUFFER, part.mesh.vbo);
             glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(MeshVertex), verts.data(), GL_STATIC_DRAW);
+            // Niveles de detalle (meshoptimizer): 50 % y 25 % de los triángulos, con los bordes fijos para que no se
+            // abran grietas entre partes. Solo en partes con bastantes triángulos y si la simplificación ahorra.
+            std::vector<uint32_t> allIdx = idx;
+            part.lodCount[0] = int(idx.size());
+            if (idx.size() >= 256 * 3) {
+                std::vector<uint32_t> prev = idx, lod(idx.size());
+                for (int level = 1; level < 3; ++level) {
+                    const size_t target = (idx.size() / 3 >> level) * 3;
+                    float err = 0;
+                    const size_t n = meshopt_simplify(lod.data(), idx.data(), idx.size(), &verts[0].position.x, verts.size(),
+                                                      sizeof(MeshVertex), target, 0.05f, meshopt_SimplifyLockBorder, &err);
+                    if (n == 0 || n > prev.size() * 9 / 10) break; // no ahorra lo suficiente
+                    part.lodFirst[level] = int(allIdx.size());
+                    part.lodCount[level] = int(n);
+                    allIdx.insert(allIdx.end(), lod.begin(), lod.begin() + long(n));
+                    prev.assign(lod.begin(), lod.begin() + long(n));
+                    part.lods = level + 1;
+                }
+            }
             glGenBuffers(1, &part.mesh.ibo);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, part.mesh.ibo);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(uint32_t), idx.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, allIdx.size() * sizeof(uint32_t), allIdx.data(), GL_STATIC_DRAW);
             glEnableVertexAttribArray(0);
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, position));
             glEnableVertexAttribArray(1);
@@ -348,6 +368,20 @@ int Renderer::modelTriangles(int model) const {
     return model < 0 || model >= static_cast<int>(models_.size()) ? 0 : models_[model].triangles;
 }
 
+// Nivel de detalle según lo que ocupa el modelo en pantalla: radio de su caja / distancia × escala de la proyección.
+int Renderer::chooseLod(const Model& m, const ModelPart& p, const Mat4& world) const {
+    if (p.lods <= 1 || !lodEnabled_) return 0;
+    const Vec3 c = world.transformPoint((m.min + m.max) * 0.5f);
+    const float scale = std::max({world.transformDirection({1, 0, 0}).length(), world.transformDirection({0, 1, 0}).length(),
+                                  world.transformDirection({0, 0, 1}).length()});
+    const float radius = (m.max - m.min).length() * 0.5f * scale;
+    const float dist = std::max((c - cameraPos_).length(), 1e-3f);
+    const float focal = projection_.m[15] == 0.0f ? std::fabs(projection_.m[5]) : 1.0f;
+    const float coverage = radius / dist * focal / std::max(quality_.lodBias, 0.1f); // ~fracción de media pantalla
+    const int lod = coverage < 0.08f ? 2 : coverage < 0.2f ? 1 : 0;
+    return std::min(lod, p.lods - 1);
+}
+
 void Renderer::drawModel(int model, const Mat4& world, const MeshRenderer& mat, const MaterialTextures& o,
                          const std::vector<Mat4>* joints) {
     if (model < 0 || model >= static_cast<int>(models_.size())) return;
@@ -374,7 +408,9 @@ void Renderer::drawModel(int model, const Mat4& world, const MeshRenderer& mat, 
         s.graph = mat.graph && mat.graph->program().ok() ? &mat.graph->program() : nullptr;
         s.maps.graph0 = o.graph0;
         s.maps.graph1 = o.graph1;
-        drawSurface(p.mesh.vao, p.mesh.indexCount, true, world, s);
+        const int lod = chooseLod(models_[model], p, world);
+        s.firstIndex = p.lodFirst[lod];
+        drawSurface(p.mesh.vao, p.lodCount[lod] > 0 ? p.lodCount[lod] : p.mesh.indexCount, true, world, s);
     }
     currentJoints_ = nullptr;
 }
@@ -388,7 +424,9 @@ void Renderer::drawModelShadow(int model, const Mat4& world, const std::vector<M
         glUniform1i(uShadowJoints_, 2);
         if (skin) uploadJoints(*joints);
         glBindVertexArray(p.mesh.vao);
-        glDrawElements(GL_TRIANGLES, p.mesh.indexCount, GL_UNSIGNED_INT, nullptr);
+        const int lod = chooseLod(models_[model], p, world);
+        glDrawElements(GL_TRIANGLES, p.lodCount[lod] > 0 ? p.lodCount[lod] : p.mesh.indexCount, GL_UNSIGNED_INT,
+                       reinterpret_cast<const void*>(size_t(p.lodFirst[lod]) * 4));
         stats_.drawCalls++;
     }
 }

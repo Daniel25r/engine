@@ -5,6 +5,15 @@ en `third_party/` con su versión fijada, así la compilación no depende de la 
 
 ## En uso
 
+### meshoptimizer 0.22
+
+| | |
+|---|---|
+| Función | Simplificar mallas al cargar modelos (niveles de detalle automáticos) |
+| Licencia | MIT (`third_party/meshoptimizer/LICENSE.md`) |
+| Origen | `github.com/zeux/meshoptimizer`, etiqueta `v0.22` (solo `simplifier.cpp`, `allocator.cpp` y `meshoptimizer.h`) |
+| Coste | ~80 KB de código; la simplificación se hace una vez al cargar cada modelo |
+
 ### ufbx 0.20.0
 
 | | |

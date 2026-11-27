@@ -133,6 +133,8 @@ public:
     void setTemporalAA(bool on) { taaRequested_ = on; }
     // HDR para el próximo beginFrame (la escena en coma flotante, tonemapping al final).
     void setHdr(bool on) { hdrRequested_ = on; }
+    // Niveles de detalle automáticos de los modelos (activados por defecto).
+    void setLodEnabled(bool on);
     bool hdrActive() const { return hdrActive_; }
     void drawShadowCaster(MeshPrimitive mesh, const Mat4& world);
     void endShadowPass();
@@ -255,6 +257,9 @@ private:
     };
     struct ModelPart {
         GpuMesh mesh;
+        // Niveles de detalle: en el mismo búfer de índices van el original y dos versiones simplificadas.
+        int lodFirst[3] = {0, 0, 0}, lodCount[3] = {0, 0, 0};
+        int lods = 1;
         bool skinned = false;
         uint32_t skinVbo = 0; // huesos y pesos por vértice
         Color color;
@@ -275,6 +280,7 @@ private:
         float normalStrength = 1;
         float clearcoat = 0, clearcoatRoughness = 0.05f;
         const MatGraphProgram* graph = nullptr; // material por nodos (compilado)
+        int firstIndex = 0;                     // primer índice (niveles de detalle)
     };
     struct AnimNode {
         int parent = -1;
@@ -384,6 +390,8 @@ private:
     Mat4 viewProj_;
     Mat4 projection_;
     bool specBuffersOn_ = false;
+    bool lodEnabled_ = true;
+    int chooseLod(const Model& m, const ModelPart& p, const Mat4& world) const;
     // TAA: proyección desplazada una fracción de píxel cada fotograma; la cámara del fotograma anterior reproyecta.
     bool taaRequested_ = false, taaActive_ = false, prevValid_ = false;
     bool hdrRequested_ = false, hdrActive_ = false;

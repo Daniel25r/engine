@@ -19,6 +19,7 @@ struct QualitySettings {
     bool shadows = true;
     int shadowMapSize = 2048;
     int maxPointLights = 4;     // luces locales (puntuales y focos) por fotograma
+    float lodBias = 1.0f;       // >1: se pasa antes a los modelos simplificados (menos triángulos de lejos)
 
     static QualitySettings preset(QualityLevel level);
 };

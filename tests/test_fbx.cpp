@@ -28,6 +28,13 @@ TEST("fbx: malla con piel de Maya: esqueleto, pesos, normales y GLB válido") {
         }
     CHECK(weightsOk);
     CHECK(normalsOk);
+    // Vértices compartidos entre triángulos (malla conectada): muchos menos vértices que esquinas.
+    size_t verts = 0, corners = 0;
+    for (const MeshBuildPart& p : m.parts) {
+        verts += p.vertices.size();
+        corners += p.indices.size();
+    }
+    CHECK(verts * 2 < corners);
     // Los padres van antes que los hijos.
     for (size_t b = 0; b < m.bones.size(); ++b) CHECK(m.bones[b].parent < int(b));
     // GLB: lo lee cgltf con piel y animación.

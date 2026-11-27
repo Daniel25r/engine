@@ -19,7 +19,7 @@ Solo se apuntan bibliotecas con licencia compatible (MIT, BSD, Apache 2.0, zlib)
 | 2 | ~~Importar FBX~~ ✅ hecho (2026-11-27). Siguiente: retarget de animaciones entre modelos | — | MIT |
 | 3 | ~~TAA~~ ✅ hecho (2026-11-27). HDR también ✅. Falta: exposición automática, vectores de movimiento por objeto | — | propio |
 | 4 | Sondas de reflexión y luz | Cubemaps capturados en el editor, prefiltrado por rugosidad | propio |
-| 5 | LOD automático y simplificación | meshoptimizer | MIT |
+| 5 | ~~LOD automático~~ ✅ hecho (2026-11-27) con meshoptimizer. Falta: LOD para las primitivas instanciadas y el mundo de bloques | — | MIT |
 | 6 | Navegación con navmesh real | Recast/Detour (sustituye la rejilla) | zlib |
 | 7 | Backend Vulkan / render moderno | Filament (render PBR de Google) o un backend propio sobre Vulkan | Apache 2.0 |
 | 8 | Red multijugador | Servidor autoritativo con ENet o GameNetworkingSockets | MIT / BSD |
