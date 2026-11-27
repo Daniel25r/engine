@@ -32,6 +32,15 @@ struct TextureOptions {
     bool mipmaps = true;
 };
 
+// Imagen decodificada en la CPU (RGBA de 8 bits). decodeImage no toca OpenGL: se puede llamar desde cualquier hilo
+// (lectura del FileSource + stb_image). Subirla a la GPU sí debe hacerse en el hilo del render (addDecodedTexture).
+struct DecodedImage {
+    int width = 0, height = 0;
+    std::vector<uint8_t> rgba;
+    std::string error;
+};
+bool decodeImage(FileSource& files, const std::string& path, DecodedImage& out);
+
 // Rectángulo de dibujo en píxeles, origen ABAJO a la izquierda (convención de OpenGL).
 struct Viewport {
     int x = 0, y = 0, width = 1, height = 1;
@@ -100,6 +109,10 @@ public:
     bool onContextRestored();
 
     TextureHandle loadTexture(const std::string& path, TextureOptions options = {});
+    // Ya cargada con esa ruta y opciones (kWhiteTexture si no).
+    TextureHandle findTexture(const std::string& path, TextureOptions options) const;
+    // Sube una imagen decodificada en otro hilo (carga asíncrona); si ya estaba, devuelve la existente.
+    TextureHandle addDecodedTexture(const std::string& path, TextureOptions options, const DecodedImage& image);
     Vec2 textureSize(TextureHandle t) const;
 
     // Mapa de sombras del sol: se rellena ANTES de beginFrame.
@@ -283,6 +296,7 @@ private:
     void resolveScene(); // compone la escena del render target en pantalla (una vez por fotograma)
     void createMeshes();
     bool uploadTexture(Texture& t);
+    bool uploadPixels(Texture& t, const DecodedImage& image);
     bool uploadMemoryTexture(Texture& t);
     void pushQuad(TextureHandle tex, const Vec3 corners[4], Rect uv, Color color);
     void flushSprites();

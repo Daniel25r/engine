@@ -13,7 +13,8 @@ Leyenda: ✅ hecho y probado · ▶ siguiente · ○ pendiente
 | Módulos, ECS, escenas, eventos, serialización, recursos con UUID | ✅ | Pruebas existentes |
 | Mezclador de audio con buses y efectos (portados de Godot) + editor + Lua | ✅ | 9 pruebas de señal |
 | Sistema de trabajos (Job System) usado por las partículas | ✅ | 6 pruebas + ThreadSanitizer; 2,9× en partículas |
-| **Carga asíncrona de recursos (texturas, modelos, sonidos) sobre el Job System** | ▶ | Escena grande carga sin bloquear el hilo principal; medido |
+| Carga asíncrona de texturas con precarga de escena | ✅ | Arranque 3,4 s → 0,22 s con 24 texturas 2048² |
+| **Carga asíncrona de modelos glTF y sonidos** | ▶ | Igual que las texturas: decodificar fuera del hilo principal; medido |
 | Asignadores (por fotograma, pools) donde el perfilado lo justifique | ○ | Menos asignaciones por fotograma, medido |
 | Informe de fallos nativos (señales en Android/Linux) al registro | ○ | Fallo provocado queda registrado |
 | Medir el coste de CPU de los efectos de audio | ○ | Tabla en TESTS |

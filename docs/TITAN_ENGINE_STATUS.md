@@ -41,7 +41,9 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 | Versionado | 🟡 | `core/Version.h`, versión de formato en cada archivo; sin gestor de versiones de proyecto |
 | Gestión de errores | 🟡 | Errores con mensaje en registro; scripts aislados (un error no tumba el juego); sin informe de fallos nativos (crash reporter) |
 | Sistema de trabajos (Job System): hilos de trabajo, 3 prioridades, contadores, `parallelFor`, espera que ayuda, tareas anidadas | ✅ | `core/JobSystem.*`; 6 pruebas (también con ThreadSanitizer, sin carreras); partículas en paralelo 2,9× más rápidas (medido) |
-| Uso del Job System en el motor | 🟡 | Hoy solo partículas. Pendiente: carga asíncrona, animación, culling, compartir hilos con Jolt (hoy Jolt tiene su propio grupo de hilos) |
+| Uso del Job System en el motor | 🟡 | Partículas y carga de texturas. Pendiente: modelos, sonidos, animación, culling, compartir hilos con Jolt |
+| Carga asíncrona de texturas (lectura + decodificación en otros hilos, subida a la GPU con presupuesto por fotograma, precarga de toda la escena al activarla) | ✅ | 24 texturas 2048²: el hilo principal pasa de 3,4 s bloqueado a 0,22–0,27 s; todas listas en 1,3–1,5 s (antes 3,4–3,6 s). Prueba de decodificación en paralelo |
+| Carga asíncrona de modelos glTF y sonidos | ❌ | Siguen siendo síncronos |
 | Gestión de memoria (pools, asignadores por fotograma) | ❌ | Se usa el asignador estándar; el ECS reutiliza índices |
 | Plugins / registro de módulos dinámico | ❌ | |
 | Arranque/cierre ordenado de módulos | 🟡 | `Runtime::start/shutdown` en orden fijo; no hay registro genérico de módulos |
@@ -247,6 +249,7 @@ Multihilo propio, pools, streaming, carga asíncrona, LOD, oclusión: ❌.
 
 | Fecha | Bloque | Resultado |
 |---|---|---|
+| 2026-11-27 | Carga asíncrona de texturas con precarga de escena | 111/111 pruebas; arranque 3,4 s → 0,22 s (medido) |
 | 2026-11-27 | Job System + partículas en paralelo + tiempos de física y partículas en el perfilador | 110/110 pruebas; TSan limpio; 1,10 → 0,38 ms en partículas |
 | 2026-11-27 | Mezclador de audio (efectos de Godot), editor del mezclador, API Lua, demo de plataformas 3D | 104/104 pruebas; demo ejecutada; commit `37d14ca` |
 | 2026-11-26 | Instancing GPU, navegación, cámara 3.ª persona, personaje v2, colisión de malla, sombra de gota, benchmark | Ver `docs/CHANGELOG.md` |

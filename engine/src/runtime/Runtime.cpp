@@ -45,6 +45,7 @@ bool Runtime::initSystems(FileSource& files) {
         renderer_->setQuality(QualitySettings::preset(recommendedQuality(c)));
     }
     if (cache_ == &ownCache_) cache_->bind(renderer_, &assets_, &files); // la del editor ya apunta a su proyecto
+    cache_->setJobs(parallel ? &jobs_ : nullptr); // texturas leídas y decodificadas en otros hilos
     audio_.init(files, true); // sin tarjeta de sonido el juego sigue funcionando en silencio
     loadBusLayout(files);
     scripts_ = std::make_unique<ScriptSystem>(*this, registry_, [this](AssetRef id, std::string& name, std::string& src) {
@@ -56,6 +57,24 @@ bool Runtime::initSystems(FileSource& files) {
     started_ = true;
     last_ = Clock::now();
     return true;
+}
+
+void Runtime::preloadTextures() {
+    World& w = scene_->world();
+    auto req = [this](AssetRef r) { cache_->requestTexture(r); };
+    w.each<MeshRenderer>([&](Entity, MeshRenderer& m) {
+        const MeshRenderer* mat = cache_->material(m.material);
+        for (const MeshRenderer* src : {static_cast<const MeshRenderer*>(&m), mat}) {
+            if (!src) continue;
+            for (AssetRef r : {src->texture, src->normalMap, src->metallicRoughnessMap, src->emissionMap, src->occlusionMap}) req(r);
+        }
+    });
+    w.each<SpriteRenderer>([&](Entity, SpriteRenderer& s) { req(s.texture); });
+    w.each<UIImage>([&](Entity, UIImage& i) { req(i.texture); });
+    w.each<ParticleSystem>([&](Entity, ParticleSystem& p) { req(p.texture); });
+    w.each<Terrain>([&](Entity, Terrain& t) {
+        for (AssetRef r : t.layerTextures) req(r);
+    });
 }
 
 // Mezclador del proyecto: assets/audio_buses.json (opcional; sin él solo existe Master).
@@ -141,6 +160,7 @@ bool Runtime::activateScene(const std::string& text, const std::string& name) {
         physics_.removeEntity(ev.entity);
         audio_.stopOwner(ev.entity);
     });
+    preloadTextures(); // todas las texturas de la escena se piden ya, en paralelo (no al dibujarse por primera vez)
     audio_.stopAll();
     audio_.resetBusEffects(); // sin colas de reverberación o eco de la escena anterior
     scene_->world().each<AudioSource>([&](Entity e, AudioSource& a) {
@@ -372,6 +392,7 @@ void Runtime::render(const Viewport& viewport) {
     }
     viewProj_ = view.projection * view.view;
     perspective_ = view.perspective;
+    cache_->pump(4.0); // texturas ya decodificadas en otros hilos: a la GPU, como mucho ~4 ms por fotograma
     sceneRenderer_.render(*scene_, *renderer_, viewport, view, [this](AssetRef r) { return cache_->texture(r); },
                           [this](AssetRef r) { return cache_->model(r); },
                           [this](AssetRef r) { return cache_->material(r); });
@@ -387,12 +408,12 @@ void Runtime::render(const Viewport& viewport) {
         const CullStats& cs = sceneRenderer_.cullStats();
         char text[640];
         std::snprintf(text, sizeof(text),
-                      "%.0f FPS  %.2f ms (scripts %.2f, fisica %.2f, particulas %.2f, transform %.2f, render %.2f)\n"
+                      "%.0f FPS  %.2f ms (scripts %.2f, fisica %.2f, particulas %.2f, transform %.2f, render %.2f)  texturas en carga %zu\n"
                       "%zu entidades  %d draw calls  %d mallas  %d sprites  %d triangulos\n"
                       "%zu scripts  Lua %.0f KB  %zu errores  %zu cuerpos\n"
                       "visibles: %d/%d mallas  %d/%d sombras  %d/%d sprites  %d esqueletos",
                       fps_, profile_.frameMs, profile_.scriptMs, profile_.physicsMs, profile_.particlesMs,
-                      profile_.transformMs, profile_.renderMs,
+                      profile_.transformMs, profile_.renderMs, cache_->pendingTextures(),
                       scene_->entityCount(), rs.drawCalls, rs.meshes, rs.sprites, rs.triangles,
                       scripts_->instanceCount(), scripts_->memoryUsed() / 1024.0, scripts_->errors().size(), physics_.bodyCount(),
                       cs.meshesVisible, cs.meshes, cs.shadowCastersVisible, cs.shadowCasters, cs.spritesVisible, cs.sprites,
@@ -524,6 +545,7 @@ void Runtime::shutdown() {
         scene_.reset();
     }
     scripts_.reset();
+    cache_->setJobs(nullptr); // espera las lecturas en curso: el JobSystem y el FileSource pueden desaparecer
     cache_->clear();
     if (!usesSharedRenderer()) renderer_->shutdown(); // el del editor lo cierra el editor
     renderer_ = &ownRenderer_;

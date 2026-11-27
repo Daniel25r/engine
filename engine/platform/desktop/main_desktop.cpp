@@ -17,6 +17,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -138,6 +139,11 @@ int main(int argc, char** argv) {
         if (const char* c = std::getenv("TITAN_INSTANCING")) runtime.sceneRenderer().instancing = std::atoi(c) != 0;
         if (const char* c = std::getenv("TITAN_PARALLEL")) runtime.parallel = std::atoi(c) != 0;
         double sumFrame = 0, sumRender = 0, sumParticles = 0, sumPhysics = 0;
+        // Carga: cuánto tarda en volver start() + el primer fotograma, el peor fotograma y cuándo quedan todas
+        // las texturas en la GPU (mide la carga asíncrona).
+        const auto benchStart = std::chrono::steady_clock::now();
+        double startMs = 0, worstMs = 0, readyMs = -1;
+        long worstFrame = 0, readyFrame = -1;
         long measured = 0;
         runtime.setSavePath(std::getenv("TITAN_SAVE") ? std::getenv("TITAN_SAVE") : std::string(argv[1]) + "/partida.json");
         if (!runtime.start(files)) {
@@ -158,7 +164,15 @@ int main(int argc, char** argv) {
                 }
                 int fw, fh;
                 glfwGetFramebufferSize(window, &fw, &fh);
+                const auto f0 = std::chrono::steady_clock::now();
                 runtime.frame(fw, fh);
+                const double fMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - f0).count();
+                if (frames == 0) startMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - benchStart).count();
+                if (fMs > worstMs) { worstMs = fMs; worstFrame = frames; }
+                if (readyFrame < 0 && runtime.pendingTextures() == 0) {
+                    readyFrame = frames;
+                    readyMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - benchStart).count();
+                }
                 if (bench && frames >= 30) { // se descartan los primeros fotogramas (carga)
                     sumFrame += runtime.profile().frameMs;
                     sumRender += runtime.profile().renderMs;
@@ -185,6 +199,8 @@ int main(int argc, char** argv) {
                             cs.instanceBatches);
                 std::printf("BENCH paralelo=%d hilos=%d particulas=%.3f ms fisica=%.3f ms\n", runtime.parallel ? 1 : 0,
                             runtime.jobs().workerCount(), sumParticles / measured, sumPhysics / measured);
+                std::printf("BENCH carga: arranque+1er fotograma=%.0f ms peor fotograma=%.0f ms (n.%ld) texturas listas en "
+                            "el fotograma %ld (%.0f ms)\n", startMs, worstMs, worstFrame, readyFrame, readyMs);
             }
         }
         runtime.shutdown();

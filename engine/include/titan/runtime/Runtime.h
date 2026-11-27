@@ -72,6 +72,7 @@ public:
     ScriptSystem& scripts() { return *scripts_; }
     const FrameProfile& profile() const { return profile_; }
     JobSystem& jobs() { return jobs_; }
+    size_t pendingTextures() const { return cache_ ? cache_->pendingTextures() : 0; }
     bool parallel = true; // false: todo en el hilo principal (para comparar y depurar)
 
     bool showStats = true;
@@ -95,6 +96,7 @@ public:
     AudioEngine* scriptAudio() override { return &audio_; }
     // Mezclador del proyecto (assets/audio_buses.json); el editor lo vuelve a leer al pulsar Jugar.
     void loadBusLayout(FileSource& files);
+    void preloadTextures();
     void scriptPlayEntitySound(Entity e) override;
     void scriptStopSound(Entity e) override { audio_.stopOwner(e); }
     void scriptSetVolume(float v) override { audio_.setMasterVolume(v); }

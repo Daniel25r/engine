@@ -209,6 +209,20 @@ emisores de 1500 partículas/s y máximo 3000, ~48 000 vivas, creada con la herr
 La simulación es 2,9× más rápida. El fotograma apenas cambia porque aquí lo domina el dibujo por software
 (llvmpipe, ~68 ms); en un teléfono con GPU la proporción será otra (sin medir).
 
+## Carga asíncrona de texturas (2026-11-27, mismo PC)
+
+Proyecto creado con la herramienta `titan`: 24 cubos, cada uno con su textura PNG de 2048×2048 (260 MB en total,
+contenido con ruido: caso desfavorable para la compresión). Reproductor de escritorio, `TITAN_BENCH=1`, 150 fotogramas.
+
+| Modo | Hasta el primer fotograma (hilo principal bloqueado) | Peor fotograma después | Todas las texturas en la GPU |
+|---|---|---|---|
+| Síncrono (`TITAN_PARALLEL=0`) | 3627 · 3363 ms | 178 · 24 ms | 3627 · 3363 ms |
+| Asíncrono (3 hilos + principal) | 266 · 216 ms | 79 · 57 ms | 1489 · 1330 ms (fotograma 28–29) |
+
+El peor fotograma asíncrono es la subida de una textura de 2048² con mipmaps, lenta con el render por software
+(llvmpipe). Prueba automática: 32 PNG decodificados en paralelo dan los mismos píxeles que en serie, y el motivo de
+un fallo llega al hilo que lo pidió. En el editor, Jugar → Detener dos veces seguidas con este proyecto: sin errores.
+
 ## Mezclador de audio (2026-11-27, Linux x86_64, GCC, sin dispositivo de audio: mezcla en memoria a 48 kHz)
 
 `tests/test_audio_mixer.cpp`, 9 pruebas, todas pasan. Lo que miden:

@@ -155,6 +155,14 @@ el cálculo; cada trabajo toca datos que no comparte con otros. Así lo hacen la
 (`updateParticles(scene, dt, jobs)`): cada emisor tiene su estado y su generador aleatorio, por lo que el resultado
 es idéntico en serie y en paralelo (lo comprueba una prueba).
 
+Carga asíncrona de texturas (`ResourceCache` + `Runtime::preloadTextures`): al activar una escena se piden todas
+sus texturas (MeshRenderer y su material, sprites, UI, partículas, capas del terreno). Cada una es un trabajo de
+prioridad baja que solo lee el archivo y decodifica (`decodeImage`: FileSource + stb_image, sin OpenGL). En el hilo
+del render, `ResourceCache::pump(4 ms)` sube a la GPU las que ya están listas; mientras tanto se dibuja la blanca.
+Sin JobSystem (`Runtime::parallel = false`, o el editor fuera de Jugar) todo sigue siendo síncrono. Al parar el
+runtime la caché espera las lecturas en curso antes de que desaparezcan el JobSystem o el FileSource. Las texturas
+cargadas así guardan su ruta, así que tras perder el contexto de OpenGL se recargan como las demás.
+
 Jolt mantiene su propio grupo de hilos durante el paso de física; no coincide en el tiempo con los trabajos de
 partículas, pero integrar Jolt en este Job System (su interfaz `JobSystemWithBarrier`) queda pendiente.
 

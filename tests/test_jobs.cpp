@@ -132,3 +132,42 @@ TEST("trabajos: partículas en paralelo dan el mismo resultado que en serie") {
     CHECK(a == b);
     CHECK(a[0] > 300u);
 }
+
+// ---- Carga asíncrona: decodificar imágenes en varios hilos a la vez (lo que hace ResourceCache con un JobSystem).
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STBI_WRITE_NO_STDIO
+#include "stb_image_write.h"
+#include "titan/core/FileSource.h"
+#include "titan/render/Renderer.h"
+
+TEST("trabajos: decodificar 32 PNG en paralelo da los mismos píxeles que en serie; los errores son por hilo") {
+    MemoryFileSource files;
+    for (int i = 0; i < 32; ++i) {
+        const int n = 128 + i * 8;
+        std::vector<uint8_t> px(size_t(n) * n * 4);
+        for (size_t k = 0; k < px.size(); ++k) px[k] = uint8_t((k * 31 + size_t(i) * 7) & 0xFF);
+        std::vector<uint8_t> png;
+        stbi_write_png_to_func([](void* ctx, void* data, int size) {
+            auto* out = static_cast<std::vector<uint8_t>*>(ctx);
+            out->insert(out->end(), static_cast<uint8_t*>(data), static_cast<uint8_t*>(data) + size);
+        }, &png, n, n, 4, px.data(), n * 4);
+        files.add("img" + std::to_string(i) + ".png", png);
+    }
+    files.add("roto.png", std::vector<uint8_t>{0x89, 'P', 'N', 'G', 1, 2, 3});
+    std::vector<DecodedImage> serial(33), parallel(33);
+    auto name = [](size_t i) { return i < 32 ? "img" + std::to_string(i) + ".png" : std::string("roto.png"); };
+    for (size_t i = 0; i < 33; ++i) decodeImage(files, name(i), serial[i]);
+    JobSystem jobs(4);
+    jobs.parallelFor(33, 1, [&](size_t a, size_t b) {
+        for (size_t i = a; i < b; ++i) decodeImage(files, name(i), parallel[i]);
+    });
+    bool same = true;
+    for (size_t i = 0; i < 32; ++i)
+        same &= parallel[i].width == int(128 + i * 8) && parallel[i].rgba == serial[i].rgba && parallel[i].error.empty();
+    CHECK(same);
+    CHECK(parallel[32].rgba.empty());
+    CHECK(!parallel[32].error.empty()); // el motivo del fallo llega al hilo que lo pidió
+    DecodedImage missing;
+    CHECK(!decodeImage(files, "no_existe.png", missing));
+    CHECK_EQ(missing.error, std::string("no se encontró el archivo"));
+}

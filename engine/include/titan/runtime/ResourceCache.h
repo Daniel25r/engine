@@ -2,9 +2,13 @@
 // Caché de recursos de GPU por id de recurso (AssetRef → textura, modelo o fuente del Renderer).
 // La comparten el editor y el modo Jugar: al pulsar Jugar no se vuelve a leer ni a subir nada que el editor ya
 // tenga cargado, y cada textura está una sola vez en la memoria de la GPU.
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
+#include <vector>
+
+#include "titan/core/JobSystem.h"
 
 #include "titan/core/Project.h"
 #include "titan/render/Renderer.h"
@@ -19,8 +23,20 @@ public:
         assets_ = assets;
         if (files) files_ = files;
     }
+    // Carga asíncrona: con un JobSystem, las texturas se leen y decodifican en otros hilos y aquí solo se suben a
+    // la GPU (pump). Mientras tanto texture() devuelve la blanca. Sin JobSystem (nullptr), todo es síncrono.
+    void setJobs(JobSystem* jobs);
+    // Pide una textura sin esperarla (precarga al empezar una escena). No hace nada si ya está o ya se pidió.
+    void requestTexture(AssetRef ref);
+    // Sube a la GPU las texturas ya decodificadas, hasta gastar budgetMs (al menos una). Devuelve cuántas subió.
+    // Llamarla en el hilo del render, una vez por fotograma.
+    int pump(double budgetMs);
+    size_t pendingTextures() const { return pending_.size(); }
+    // Espera a que terminen las lecturas en curso (antes de destruir el JobSystem o el FileSource).
+    void waitPending();
+
     // Las rutas de los recursos son relativas a "assets/" en el FileSource del Renderer.
-    TextureHandle texture(AssetRef ref); // kWhiteTexture si no existe o no se puede leer
+    TextureHandle texture(AssetRef ref); // kWhiteTexture si no existe, no se puede leer o aún se está cargando
     int model(AssetRef ref);             // -1 si no existe
     int font(AssetRef ref);              // -1 si no existe (se usará la fuente del motor)
     // Material (.mat) leído y validado; nulo si no existe o no es válido. Sus campos de material
@@ -41,6 +57,21 @@ private:
     std::unordered_map<uint64_t, int> fonts_;
     std::unordered_map<uint64_t, std::unique_ptr<MeshRenderer>> materials_; // nulo = no existe o no es válido
     FileSource* files_ = nullptr;
+    // Carga asíncrona
+    struct Decoded {
+        std::atomic<bool> done{false};
+        DecodedImage image;
+    };
+    struct Pending {
+        uint64_t ref;
+        std::string path;
+        TextureOptions options;
+        std::shared_ptr<Decoded> result; // compartido con el trabajo: sigue vivo aunque se limpie la caché
+    };
+    JobSystem* jobs_ = nullptr;
+    JobCounter inFlight_;
+    std::vector<Pending> pending_;
+    bool texturePath(AssetRef ref, std::string& path, TextureOptions& opt) const;
 };
 
 } // namespace titan

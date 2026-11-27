@@ -663,30 +663,44 @@ void Renderer::drawShadowCastersInstanced(MeshPrimitive type, const std::vector<
     glUniform1i(uShadowInstanced_, 0);
 }
 
-bool Renderer::uploadTexture(Texture& t) {
+bool decodeImage(FileSource& files, const std::string& path, DecodedImage& out) {
     std::vector<uint8_t> bytes;
-    if (!files_->read(t.path, bytes)) {
-        TITAN_ERROR("render", "No se encontró la textura '%s'", t.path.c_str());
+    if (!files.read(path, bytes)) {
+        out.error = "no se encontró el archivo";
         return false;
     }
-    int w = 0, h = 0, channels = 0;
-    stbi_uc* pixels = stbi_load_from_memory(bytes.data(), static_cast<int>(bytes.size()), &w, &h, &channels, 4);
+    int channels = 0;
+    stbi_uc* pixels = stbi_load_from_memory(bytes.data(), static_cast<int>(bytes.size()), &out.width, &out.height, &channels, 4);
     if (!pixels) {
-        TITAN_ERROR("render", "No se pudo decodificar '%s': %s", t.path.c_str(), stbi_failure_reason());
+        out.error = stbi_failure_reason(); // stb_image guarda el motivo por hilo (STBI_THREAD_LOCAL)
         return false;
     }
+    out.rgba.assign(pixels, pixels + static_cast<size_t>(out.width) * out.height * 4);
+    stbi_image_free(pixels);
+    return true;
+}
+
+bool Renderer::uploadTexture(Texture& t) {
+    DecodedImage img;
+    if (!decodeImage(*files_, t.path, img)) {
+        TITAN_ERROR("render", "Textura '%s': %s", t.path.c_str(), img.error.c_str());
+        return false;
+    }
+    return uploadPixels(t, img);
+}
+
+bool Renderer::uploadPixels(Texture& t, const DecodedImage& img) {
+    const int w = img.width, h = img.height;
     GLint maxSize = 0;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize);
     if (w > maxSize || h > maxSize) {
         TITAN_ERROR("render", "'%s' mide %dx%d y esta GPU admite como máximo %d", t.path.c_str(), w, h, maxSize);
-        stbi_image_free(pixels);
         return false;
     }
     glGenTextures(1, &t.gl);
     glBindTexture(GL_TEXTURE_2D, t.gl);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-    stbi_image_free(pixels);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
     const GLint mag = t.options.nearest ? GL_NEAREST : GL_LINEAR;
     GLint min = mag;
     if (t.options.mipmaps) {
@@ -837,16 +851,32 @@ void Renderer::drawTextNow(int f, Vec2 pos, float size, std::string_view text, C
 }
 
 TextureHandle Renderer::loadTexture(const std::string& path, TextureOptions options) {
-    for (TextureHandle i = 1; i < textures_.size(); ++i)
-        if (textures_[i].path == path && textures_[i].options.nearest == options.nearest &&
-            textures_[i].options.mipmaps == options.mipmaps)
-            return i;
+    if (TextureHandle existing = findTexture(path, options)) return existing;
     Texture t;
     t.path = path;
     t.options = options;
     if (!uploadTexture(t)) return kWhiteTexture;
     textures_.push_back(t);
     TITAN_INFO("render", "Textura '%s' cargada (%dx%d)", path.c_str(), t.width, t.height);
+    return static_cast<TextureHandle>(textures_.size() - 1);
+}
+
+TextureHandle Renderer::findTexture(const std::string& path, TextureOptions options) const {
+    for (TextureHandle i = 1; i < textures_.size(); ++i)
+        if (textures_[i].path == path && textures_[i].options.nearest == options.nearest &&
+            textures_[i].options.mipmaps == options.mipmaps)
+            return i;
+    return kWhiteTexture;
+}
+
+TextureHandle Renderer::addDecodedTexture(const std::string& path, TextureOptions options, const DecodedImage& image) {
+    if (TextureHandle existing = findTexture(path, options)) return existing;
+    Texture t;
+    t.path = path; // tras perder el contexto se vuelve a leer del disco, como las demás
+    t.options = options;
+    if (!uploadPixels(t, image)) return kWhiteTexture;
+    textures_.push_back(t);
+    TITAN_INFO("render", "Textura '%s' cargada en segundo plano (%dx%d)", path.c_str(), t.width, t.height);
     return static_cast<TextureHandle>(textures_.size() - 1);
 }
 
