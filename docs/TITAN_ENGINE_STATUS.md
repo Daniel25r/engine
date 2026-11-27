@@ -252,6 +252,7 @@ Multihilo propio, pools, streaming, carga asíncrona, LOD, oclusión: ❌.
 
 | Fecha | Bloque | Resultado |
 |---|---|---|
+| 2026-11-27 | Titán Studio: modos Modelar y Esculpir en el editor, exportar GLB/OBJ | 120/120 pruebas; extruir y esculpir probados en el editor con entrada simulada |
 | 2026-11-27 | Titán Studio, fase 1: malla editable con operaciones de modelado, escritor GLB, importar OBJ/MTL, STL, PLY y .blend (con Blender instalado). Ver `docs/TITAN_STUDIO.md` | 118/118 pruebas; OBJ con textura y STL importados y vistos en el reproductor |
 | 2026-11-27 | Nueva pantalla de inicio (lanzador): barra lateral, proyectos en tarjetas por fecha con búsqueda y borrado confirmado, galería de plantillas con ilustraciones y la plantilla de ejemplo "Isla Estelar" (juego completo) creada desde el editor | Probado con clics simulados: crear el ejemplo, abrirlo y Jugar |
 | 2026-11-27 | Interfaz del editor para PC: escala de Windows, tamaño elegible (100–200 %, Ctrl + / Ctrl −, 125 % por defecto, se recuerda), calidad alta por defecto en PC, editor sin consola | 111/111 pruebas; capturas a 1920×1080 |

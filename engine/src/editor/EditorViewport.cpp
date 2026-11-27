@@ -106,6 +106,7 @@ void Editor::Impl::renderViewport() {
     });
     updateParticles(scene, dt); // vista previa de los efectos mientras se edita
     applySculpt(dt);
+    meshEditTick(dt);
     updateEditorCamera(float(vp.width) / float(vp.height));
     SceneView view;
     view.view = editorView;
@@ -118,8 +119,9 @@ void Editor::Impl::renderViewport() {
     sceneRenderer.render(scene, renderer, vp, view, [this](AssetRef r) { return editorTexture(r); },
                          [this](AssetRef r) { return editorModel(r); },
                          [this](AssetRef r) { return resources.material(r); });
-    drawGizmos();
+    if (!medit.active) drawGizmos(); // en modelado, el alambre y los vértices sustituyen al gizmo
     drawBrushGizmo();
+    meshEditLines();
     if (showUI) {
         editorUI.layout(scene, {float(vp.width), float(vp.height)});
         titan::drawUI(renderer, scene, editorUI, [this](AssetRef r) { return editorTexture(r); },
@@ -368,7 +370,8 @@ void Editor::Impl::viewportPointerDown(int id, ImVec2 p) {
     }
     if (touches.size() != 1) return;
 
-    // 0) Esculpir o pintar el terreno seleccionado.
+    // 0) Modelado/escultura de una malla, o esculpir y pintar el terreno seleccionado.
+    if (medit.active && meshEditPointerDown(p)) return;
     if (terrainPointerDown(p)) return;
     // 0b) Un elemento de la interfaz ya seleccionado se arrastra con el dedo (con cualquier herramienta).
     if (Entity sel = selectedEntity(); !sel.isNull() && scene.world().has<UIRect>(sel) && pick(p) == sel) {
@@ -417,6 +420,10 @@ void Editor::Impl::viewportPointerMove(int id, ImVec2 p) {
     t->pos = p;
     if (runtime) {
         runtime->input().touchMoved(id, {p.x - vpMin.x, p.y - vpMin.y});
+        return;
+    }
+    if ((medit.dragging || medit.sculpting) && touches.size() == 1) {
+        meshEditPointerMove(p);
         return;
     }
     if (sculpting) {
@@ -500,6 +507,10 @@ void Editor::Impl::viewportPointerUp(int id, ImVec2 p) {
     touches.erase(it);
     if (runtime) {
         runtime->input().touchEnded(id, {p.x - vpMin.x, p.y - vpMin.y});
+        return;
+    }
+    if (medit.dragging || medit.sculpting) {
+        meshEditPointerUp();
         return;
     }
     if (gizmoDragging && touches.empty()) {

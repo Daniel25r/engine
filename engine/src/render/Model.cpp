@@ -34,13 +34,38 @@ int Renderer::loadModel(const std::string& path) {
     return models_.back().ok ? static_cast<int>(models_.size() - 1) : -1;
 }
 
+void Renderer::releaseModelGpu(Model& m) {
+    for (ModelPart& p : m.parts) {
+        if (p.mesh.vbo) glDeleteBuffers(1, &p.mesh.vbo);
+        if (p.mesh.ibo) glDeleteBuffers(1, &p.mesh.ibo);
+        if (p.mesh.vao) glDeleteVertexArrays(1, &p.mesh.vao);
+        if (p.skinVbo) glDeleteBuffers(1, &p.skinVbo);
+    }
+    m.parts.clear();
+}
+
+int Renderer::setModelData(const std::string& path, std::vector<uint8_t> glb) {
+    size_t i = 0;
+    while (i < models_.size() && models_[i].path != path) ++i;
+    if (i == models_.size()) {
+        models_.emplace_back();
+        models_.back().path = path;
+    }
+    Model& m = models_[i];
+    releaseModelGpu(m);
+    m.memory = std::move(glb);
+    m.ok = buildModel(m);
+    return m.ok ? static_cast<int>(i) : -1;
+}
+
 bool Renderer::buildModel(Model& m) {
     m.collisionVerts.clear();
     m.collisionIndices.clear();
     m.parts.clear();
     m.triangles = 0;
     std::vector<uint8_t> bytes;
-    if (!files_ || !files_->read(m.path, bytes)) {
+    if (!m.memory.empty()) bytes = m.memory;
+    else if (!files_ || !files_->read(m.path, bytes)) {
         TITAN_ERROR("render", "No se encontró el modelo '%s'", m.path.c_str());
         return false;
     }

@@ -111,6 +111,9 @@ titan::EditorKey mapKey(int key, bool& ok) {
     case GLFW_KEY_EQUAL: case GLFW_KEY_KP_ADD: case GLFW_KEY_RIGHT_BRACKET: return K::Plus; // "+" en teclados españoles
     case GLFW_KEY_MINUS: case GLFW_KEY_KP_SUBTRACT: case GLFW_KEY_SLASH: return K::Minus;
     case GLFW_KEY_0: case GLFW_KEY_KP_0: return K::Num0;
+    case GLFW_KEY_I: return K::I;
+    case GLFW_KEY_1: case GLFW_KEY_KP_1: return K::Num1;
+    case GLFW_KEY_3: case GLFW_KEY_KP_3: return K::Num3;
     default: ok = false; return K::Tab;
     }
 }

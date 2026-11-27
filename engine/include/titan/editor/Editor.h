@@ -42,6 +42,7 @@ enum class EditorKey {
     Tab, Left, Right, Up, Down, PageUp, PageDown, Home, End, Delete, Backspace, Enter, Escape,
     Ctrl, Shift, Alt, A, C, V, X, Y, Z, S, D, F, P, N, Q, W, E, R,
     Plus, Minus, Num0, // Ctrl+ / Ctrl- / Ctrl+0: tamaño de la interfaz
+    I, Num1, Num3,     // modelado: inset, modo vértices, modo caras
 };
 
 class Editor {

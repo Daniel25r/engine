@@ -949,6 +949,14 @@ void Editor::Impl::stop() {
 
 void Editor::Impl::handleShortcuts() {
     ImGuiIO& io = ImGui::GetIO();
+    if (medit.active && !runtime) { // en modelado, las teclas son las del modelado (E, I, X, Tab...)
+        meshEditKeys();
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
+            meshEditSave();
+            save();
+        }
+        return;
+    }
     // Tamaño de la interfaz: en cualquier pantalla (también el navegador de proyectos y escribiendo).
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Equal, false)) setUiZoom(uiZoom + 0.125f);
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Minus, false)) setUiZoom(uiZoom - 0.125f);
@@ -959,6 +967,9 @@ void Editor::Impl::handleShortcuts() {
     }
     if (!project) return;
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) save();
+    if (!runtime && !io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Tab, false)) { // Tab: modelar el objeto seleccionado
+        if (Entity sel = selectedEntity(); !sel.isNull() && scene.world().has<MeshRenderer>(sel)) enterMeshEdit(sel);
+    }
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) undo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) redo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D, false)) duplicateSelected();
@@ -1075,7 +1086,8 @@ void Editor::onKey(EditorKey key, bool down) {
         ImGuiKey_PageDown, ImGuiKey_Home, ImGuiKey_End, ImGuiKey_Delete, ImGuiKey_Backspace, ImGuiKey_Enter,
         ImGuiKey_Escape, ImGuiKey_LeftCtrl, ImGuiKey_LeftShift, ImGuiKey_LeftAlt, ImGuiKey_A, ImGuiKey_C, ImGuiKey_V,
         ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z, ImGuiKey_S, ImGuiKey_D, ImGuiKey_F, ImGuiKey_P, ImGuiKey_N, ImGuiKey_Q,
-        ImGuiKey_W, ImGuiKey_E, ImGuiKey_R, ImGuiKey_Equal, ImGuiKey_Minus, ImGuiKey_0};
+        ImGuiKey_W, ImGuiKey_E, ImGuiKey_R, ImGuiKey_Equal, ImGuiKey_Minus, ImGuiKey_0,
+        ImGuiKey_I, ImGuiKey_1, ImGuiKey_3};
     ImGuiIO& io = ImGui::GetIO();
     const ImGuiKey k = map[static_cast<int>(key)];
     if (key == EditorKey::Ctrl) io.AddKeyEvent(ImGuiMod_Ctrl, down);
@@ -1148,7 +1160,11 @@ void Editor::stop() { impl_->stop(); }
 bool Editor::isPlaying() const { return impl_->runtime != nullptr; }
 Input* Editor::playInput() { return impl_->runtime ? &impl_->runtime->input() : nullptr; }
 
-void Editor::createEntity(const std::string& kind) { impl_->createEntityOfKind(kind); }
+void Editor::createEntity(const std::string& kind) {
+    // "Modelo:Cubo", "Modelo:Esfera"...: modelo editable (como Crear › Modelo editable), para automatizar pruebas.
+    if (kind.rfind("Modelo:", 0) == 0) impl_->createEditableModel(kind.substr(7).c_str());
+    else impl_->createEntityOfKind(kind);
+}
 
 void Editor::selectEntity(const std::string& name) { impl_->select(impl_->scene.findByName(name)); }
 

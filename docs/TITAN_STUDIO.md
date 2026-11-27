@@ -47,4 +47,8 @@ ya trabajan con glTF, así que cada formato nuevo funciona en todo el motor sin 
 | Escritor GLB propio (`GlbWriter`): posiciones, normales, UV, índices de 32 bits, materiales PBR, texturas incrustadas | ✅ (el GLB se valida con cgltf en las pruebas) |
 | Malla editable `EditMesh`: cubo, plano, cilindro, cono, esfera UV; extruir región, inset, subdivisión lineal y Catmull-Clark, borrar caras/vértices, fusionar por distancia, voltear, simetría; guardar `.tmesh` | ✅ núcleo con 5 pruebas geométricas (malla cerrada, Euler, normales hacia fuera) |
 | Importación en el editor (Contenido › Importar) y `titan import`: OBJ/STL/PLY/.blend → GLB | ✅ OBJ y STL probados de principio a fin (importar, colocar, ver en el reproductor) |
-| **Modo edición en el visor** (seleccionar vértices/caras con el ratón, extruir con E, etc.) | ▶ siguiente bloque: el núcleo ya está, falta la interfaz |
+| **Modo Modelar** (Detalles › "Modelar / Esculpir" o Tab): vértices (1) y caras (3) con el ratón, Mayús para añadir, arrastrar para mover, E extruir, I inset, X borrar, A todo, subdividir, Catmull-Clark, simetría X/Y/Z, voltear, fusionar, color/metal/rugosidad, sombreado suave, deshacer propio (Ctrl+Z), exportar GLB y OBJ | ✅ probado en el editor con clics simulados (cara seleccionada y extruida dos veces, guardada en .tmesh) |
+| **Modo Esculpir**: pinceles Dibujar, Inflar, Suavizar, Aplanar, Pellizcar y Agarrar; radio y fuerza; Ctrl hunde; círculo del pincel sobre la superficie | ✅ probado en el editor con trazos simulados sobre una esfera de 6144 caras |
+| Crear › Modelo editable: cubo, esfera, cilindro, cono, plano y "Cabeza (esfera densa)" para esculpir | ✅ |
+| Convertir un modelo importado en malla editable (se crea una copia en models/; el original no se toca) | ✅ forma; ⚠️ todavía pierde texturas, UV y huesos |
+| Retopología, rigging (huesos y pesos), línea de tiempo de animación, FBX | ▶ siguientes bloques, en este orden: rigging + animación, FBX, retopología |

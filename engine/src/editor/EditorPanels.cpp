@@ -288,7 +288,8 @@ void Editor::Impl::drawUI() {
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
         if (!runtime) {
             drawUIOutlines(dl);
-            if (showGizmos) drawGizmo(dl);
+            if (showGizmos && !medit.active) drawGizmo(dl);
+            meshEditOverlay(dl);
             drawAxisIndicator(dl);
         } else {
             dl->AddRect(vpMin, vpMax, IM_COL32(77, 190, 90, 255), 0, 0, 2 * scale);
@@ -330,6 +331,11 @@ void Editor::Impl::drawCreateMenu() {
     if (ImGui::BeginMenu("Interfaz")) {
         for (const char* k : {"Texto", "Imagen", "Panel", "Botón", "Barra de vida", "Joystick"})
             if (ImGui::MenuItem(k)) createEntityOfKind(k);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Modelo editable")) {
+        for (const char* k : {"Cubo", "Esfera", "Cilindro", "Cono", "Plano", "Cabeza (esfera densa)"})
+            if (ImGui::MenuItem(k)) createEditableModel(k);
         ImGui::EndMenu();
     }
     if (ImGui::MenuItem("Terreno")) createEntityOfKind("Terreno");
@@ -838,6 +844,10 @@ void propLabel(const char* label) {
 }
 
 void Editor::Impl::drawDetails() {
+    if (medit.active && !runtime) {
+        drawMeshEditPanel();
+        return;
+    }
     panelHeader("DETALLES", scale);
     Entity e = selectedEntity();
     if (e.isNull()) {
@@ -985,7 +995,13 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         if (m.model.isNull()) {
             combo("Malla", mesh, "Cubo\0Esfera\0Plano\0Cilindro\0Cono\0Cápsula\0");
             m.mesh = static_cast<MeshPrimitive>(mesh);
+            propLabel("");
+            ImGui::TextDisabled("Para modelarla: Crear › Modelo editable");
         } else {
+            propLabel("");
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.5f, 0.1f, 1));
+            if (ImGui::Button("Modelar / Esculpir (Tab)", ImVec2(-1, 0))) enterMeshEdit(e);
+            ImGui::PopStyleColor();
             propLabel("Triángulos");
             ImGui::TextDisabled("%d", renderer.modelTriangles(editorModel(m.model)));
         }

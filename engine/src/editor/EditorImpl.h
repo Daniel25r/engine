@@ -4,6 +4,7 @@
 // Estado interno del editor, compartido por EditorCore.cpp, EditorPanels.cpp y EditorViewport.cpp.
 #include <deque>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -11,6 +12,8 @@
 #include "imgui.h"
 #include "titan/core/FileSource.h"
 #include "titan/core/Log.h"
+#include "titan/core/EditMesh.h"
+#include "titan/core/MeshSculpt.h"
 #include "titan/core/Project.h"
 #include "titan/editor/Editor.h"
 #include "titan/render/Renderer.h"
@@ -246,6 +249,44 @@ struct Editor::Impl {
     void startSoundCheck();
     void updateSoundCheck(float dt);
     void drawDiagnostics();
+    // Modelado y escultura (EditorModeling.cpp)
+    struct MeshEditState {
+        bool active = false;
+        UUID entity;
+        std::string glbRel, tmeshRel; // relativos a assets/
+        EditMesh mesh;
+        int mode = 0; // 0 vértices, 1 caras, 2 esculpir
+        std::set<int> selVerts, selFaces;
+        std::vector<EditMesh> undo;
+        float extrudeDistance = 0.25f, insetAmount = 0.25f, mergeDistance = 0.001f;
+        bool dragging = false, dragMoved = false;
+        std::vector<int> dragVerts;
+        std::vector<Vec3> dragOrig;
+        Vec3 dragPlaneN, dragPlanePoint, dragHitStart;
+        bool sculpting = false;
+        MeshBrush brush = MeshBrush::Draw;
+        float radius = 0.2f, strength = 0.5f;
+        SculptStroke stroke;
+        ImVec2 brushAt;
+        Vec3 grabNormal, grabStart;
+    } medit;
+    bool enterMeshEdit(Entity e);
+    void exitMeshEdit();
+    void createEditableModel(const char* shape);
+    bool meshEditPointerDown(ImVec2 p); // true si el clic es para el modelado
+    void meshEditPointerMove(ImVec2 p);
+    void meshEditPointerUp();
+    void meshEditTick(float dt);
+    void meshEditOp(const char* op);
+    void meshEditExport(bool obj);
+    void meshEditKeys();
+    void meshEditLines();
+    void meshEditOverlay(ImDrawList* dl);
+    void drawMeshEditPanel();
+    void meshEditRebuild();
+    void meshEditSave();
+    void meshEditSnapshot();
+    void meshEditChanged();
     // Mezclador de audio (EditorMixer.cpp): edita assets/audio_buses.json; en Jugar, los cambios suenan al momento.
     bool showMixer = false;
     AudioBusLayout mixerLayout;

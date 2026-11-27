@@ -144,6 +144,9 @@ public:
     // ---- Modelos importados (glTF 2.0 / GLB) ----
     // Devuelve -1 si el archivo no existe o no se puede interpretar (el motivo va al registro).
     int loadModel(const std::string& path);
+    // Sustituye (o crea) el modelo de esa ruta con un GLB en memoria: el modelado del editor lo usa para ver cada
+    // cambio al momento sin escribir en disco. Libera los búferes de la GPU de la versión anterior.
+    int setModelData(const std::string& path, std::vector<uint8_t> glb);
     bool modelBounds(int model, Vec3& min, Vec3& max) const;
     // Triángulos del modelo en la CPU (espacio del modelo), para la colisión de malla.
     bool modelTriangles(int model, std::vector<Vec3>& verts, std::vector<uint32_t>& indices) const;
@@ -283,10 +286,12 @@ private:
         Vec3 min, max;
         int triangles = 0;
         bool ok = false;
+        std::vector<uint8_t> memory;           // GLB en memoria (setModelData); vacío = se lee del FileSource
         std::vector<Vec3> collisionVerts;      // copia para la física (colliders de malla)
         std::vector<uint32_t> collisionIndices;
     };
     bool buildModel(Model& m);
+    void releaseModelGpu(Model& m);
     void sampleClip(const Model& m, int anim, float time, bool loop, std::vector<AnimNode>& local) const;
     void uploadJoints(const std::vector<Mat4>& joints);
     void drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4& world, const Surface& s);
