@@ -1,0 +1,92 @@
+# Compila Titán para Windows x86_64 (editor, reproductor y herramienta de línea de comandos), pasa las pruebas y
+# sube los .exe listos para usar como un Artifact descargable (pestaña Actions › la ejecución › Artifacts).
+#
+# Equivale a "scons platform=windows target=editor" de Godot, pero Titán usa CMake: MSVC + vcpkg (GLFW y ANGLE,
+# que traduce OpenGL ES 3.0 a Direct3D 11, igual que hacen Chrome y Godot en Windows).
+name: Windows
+
+# Solo manual (pestaña Actions › Windows › Run workflow): todavía no se ha ejecutado nunca, así que no se lanza
+# en cada push. Cuando una ejecución termine bien, se puede añadir "push: branches: [main]".
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Caché binaria de vcpkg: ANGLE tarda bastante en compilarse; la primera ejecución la llena y las siguientes la reutilizan.
+  VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-cache,readwrite
+  VCPKG_DEFAULT_TRIPLET: x64-windows
+
+jobs:
+  build-windows:
+    name: Editor de Windows (x86_64, Release)
+    runs-on: windows-latest
+    timeout-minutes: 150
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Restaurar la caché de vcpkg
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
+      - name: Configurar (CMake + vcpkg)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force vcpkg-cache | Out-Null
+          cmake -S . -B build -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DTITAN_BUILD_TESTS=ON -DTITAN_BUILD_TOOLS=ON
+
+      - name: Guardar la caché de vcpkg
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('vcpkg.json') }}
+
+      - name: Compilar
+        run: cmake --build build --config Release --parallel
+
+      - name: Pruebas automáticas
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Comprobar la herramienta titan
+        shell: pwsh
+        run: |
+          ./build/Release/titan.exe benchmark "$env:RUNNER_TEMP/Benchmark"
+          if (-not (Test-Path "$env:RUNNER_TEMP/Benchmark/project.titan")) { throw "titan benchmark no creó el proyecto" }
+
+      - name: Preparar bin/
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bin | Out-Null
+          Copy-Item build/Release/titan_editor.exe, build/Release/titan_player.exe, build/Release/titan.exe bin/
+          Copy-Item build/Release/*.dll bin/
+          Copy-Item -Recurse engine/assets bin/engine_assets
+          @"
+          Titán para Windows x86_64 ($env:GITHUB_SHA)
+
+          titan_editor.exe   Editor (crea la carpeta TitanProyectos donde lo abras)
+          titan_player.exe   Reproductor: titan_player.exe <carpeta del proyecto>
+          titan.exe          Herramienta: titan.exe benchmark <carpeta>, titan.exe audiotest prueba.wav ...
+
+          Las DLL (GLFW y ANGLE) y la carpeta engine_assets tienen que quedarse junto a los .exe.
+          Necesita una GPU con Direct3D 11 (cualquier PC con Windows 10 u 11).
+          "@ | Set-Content -Encoding utf8 bin/LEEME.txt
+          Get-ChildItem bin
+
+      - name: Subir el Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Titan-Windows-x86_64
+          path: bin/
+          retention-days: 60

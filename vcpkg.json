@@ -1,0 +1,9 @@
+{
+  "name": "titan",
+  "version-string": "0.14.0",
+  "description": "Dependencias de Titán para Windows: GLFW (ventana y entrada) y ANGLE (OpenGL ES 3.0 sobre Direct3D 11). Android y Linux no usan este archivo.",
+  "dependencies": [
+    "glfw3",
+    "angle"
+  ]
+}
