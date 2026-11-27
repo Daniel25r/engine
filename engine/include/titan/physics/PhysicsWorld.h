@@ -5,6 +5,7 @@
 // Ciclo: build(scene) crea un cuerpo por cada entidad con Collider → step(dt) a paso fijo:
 //   cuerpos cinemáticos siguen a su Transform, se simula, los dinámicos escriben su Transform y se
 //   recogen los contactos que empiezan y terminan (para onCollisionEnter/Exit y onTriggerEnter/Exit).
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -21,6 +22,11 @@ struct ContactEvent {
 
 class PhysicsWorld final : public PhysicsApi {
 public:
+    // Triángulos para los colliders de malla y envolvente convexa de una entidad (espacio local de la entidad,
+    // sin su escala). Lo conecta quien tiene los modelos (runtime o editor). Sin él, esos colliders no se crean.
+    using MeshProvider = std::function<bool(Entity, std::vector<Vec3>& verts, std::vector<uint32_t>& indices)>;
+    void setMeshProvider(MeshProvider p) { meshProvider_ = std::move(p); }
+
     PhysicsWorld();
     ~PhysicsWorld() override;
     PhysicsWorld(const PhysicsWorld&) = delete;
@@ -66,6 +72,7 @@ private:
     void createJoints(Scene& scene);
     void createTerrainBody(Scene& scene, Entity e, const Terrain& t);
     std::unique_ptr<Impl> impl_;
+    MeshProvider meshProvider_;
 };
 
 } // namespace titan

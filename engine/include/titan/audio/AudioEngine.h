@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "titan/core/FileSource.h"
 #include "titan/core/Math.h"
@@ -52,6 +53,13 @@ public:
     size_t activeVoices() const;
     // Solo pruebas sin dispositivo: mezcla N fotogramas y devuelve la amplitud máxima.
     float renderForTest(int frames);
+    // Sin dispositivo: mezcla N fotogramas estéreo intercalados (L, R, L, R...) — para analizar o guardar en WAV.
+    void render(int frames, std::vector<float>& interleaved);
+    int sampleRate() const;
+    // Diagnóstico: sistema de audio (AAudio, OpenSL ES, ALSA...), dispositivo, frecuencia y canales.
+    std::string deviceInfo() const;
+    // false si no hay salida real: sin dispositivo, o miniaudio usa su "dispositivo nulo" (no suena nada).
+    bool hasRealOutput() const;
 
     struct Impl;
 

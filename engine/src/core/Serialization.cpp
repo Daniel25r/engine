@@ -486,6 +486,37 @@ ComponentRegistry ComponentRegistry::createDefault() {
             ++t.revision;
         });
 
+    r.addSimple<CameraFollow>(
+        "CameraFollow",
+        [](const CameraFollow& c) {
+            return Json{{"target", c.target.isNull() ? Json(nullptr) : Json(c.target.toString())},
+                        {"distance", toJson(c.distance)}, {"minDistance", toJson(c.minDistance)},
+                        {"maxDistance", toJson(c.maxDistance)}, {"height", toJson(c.height)}, {"yaw", toJson(c.yaw)},
+                        {"pitch", toJson(c.pitch)}, {"minPitch", toJson(c.minPitch)}, {"maxPitch", toJson(c.maxPitch)},
+                        {"rotateWithInput", c.rotateWithInput}, {"touchSensitivity", toJson(c.touchSensitivity)},
+                        {"padSpeed", toJson(c.padSpeed)}, {"smoothing", toJson(c.smoothing)},
+                        {"avoidWalls", c.avoidWalls}, {"wallRadius", toJson(c.wallRadius)}};
+        },
+        [](CameraFollow& c, FieldReader& rd) {
+            std::string id;
+            rd.read("target", id);
+            if (!id.empty()) UUID::parse(id, c.target);
+            rd.read("distance", c.distance);
+            rd.read("minDistance", c.minDistance);
+            rd.read("maxDistance", c.maxDistance);
+            rd.read("height", c.height);
+            rd.read("yaw", c.yaw);
+            rd.read("pitch", c.pitch);
+            rd.read("minPitch", c.minPitch);
+            rd.read("maxPitch", c.maxPitch);
+            rd.read("rotateWithInput", c.rotateWithInput);
+            rd.read("touchSensitivity", c.touchSensitivity);
+            rd.read("padSpeed", c.padSpeed);
+            rd.read("smoothing", c.smoothing);
+            rd.read("avoidWalls", c.avoidWalls);
+            rd.read("wallRadius", c.wallRadius);
+        });
+
     r.addSimple<CharacterController>(
         "CharacterController",
         [](const CharacterController& c) {
@@ -663,13 +694,12 @@ ComponentRegistry ComponentRegistry::createDefault() {
     r.addSimple<Collider>(
         "Collider",
         [](const Collider& c) {
-            static const char* shapes[] = {"box", "sphere", "capsule"};
+            static const char* shapes[] = {"box", "sphere", "capsule", "mesh", "convex"};
             return Json{{"shape", shapes[static_cast<int>(c.shape)]}, {"size", toJson(c.size)}, {"radius", toJson(c.radius)},
                         {"height", toJson(c.height)}, {"center", toJson(c.center)}, {"isTrigger", c.isTrigger}, {"layer", c.layer}};
         },
         [](Collider& c, FieldReader& rd) {
-            rd.readEnum("shape", c.shape, {{"box", Collider::Shape::Box}, {"sphere", Collider::Shape::Sphere},
-                                           {"capsule", Collider::Shape::Capsule}});
+            rd.readEnum("shape", c.shape, {{"box", Collider::Shape::Box}, {"sphere", Collider::Shape::Sphere}, {"capsule", Collider::Shape::Capsule}, {"mesh", Collider::Shape::Mesh}, {"convex", Collider::Shape::ConvexHull}});
             rd.read("size", c.size);
             rd.read("radius", c.radius);
             rd.read("height", c.height);

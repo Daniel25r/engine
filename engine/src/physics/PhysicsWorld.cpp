@@ -10,6 +10,7 @@
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
@@ -229,7 +230,37 @@ void PhysicsWorld::createBodies(Scene& scene, const std::vector<Entity>& list) {
 
         // Forma con la escala del Transform ya aplicada.
         JPH::Ref<JPH::ShapeSettings> shape;
-        if (c.shape == Collider::Shape::Sphere) {
+        Rigidbody::Type bodyType = rb ? rb->type : Rigidbody::Type::Static;
+        if (c.shape == Collider::Shape::Mesh || c.shape == Collider::Shape::ConvexHull) {
+            std::vector<Vec3> verts;
+            std::vector<uint32_t> idx;
+            if (!meshProvider_ || !meshProvider_(e, verts, idx) || verts.empty()) {
+                TITAN_WARN("physics", "'%s': collider de malla sin MeshRenderer con malla o modelo; se ignora",
+                           scene.info(e).name.c_str());
+                continue;
+            }
+            bool convex = c.shape == Collider::Shape::ConvexHull;
+            if (!convex && bodyType == Rigidbody::Type::Dynamic) {
+                // Jolt (como PhysX) no simula mallas cóncavas como cuerpos dinámicos: se usa su envolvente.
+                TITAN_WARN("physics", "'%s': una malla dinámica usa su envolvente convexa", scene.info(e).name.c_str());
+                convex = true;
+            }
+            if (convex) {
+                JPH::Array<JPH::Vec3> pts;
+                pts.reserve(verts.size());
+                for (const Vec3& v : verts) pts.push_back(JPH::Vec3(v.x * s.x, v.y * s.y, v.z * s.z));
+                shape = new JPH::ConvexHullShapeSettings(pts, 0.01f);
+            } else {
+                JPH::VertexList vl;
+                vl.reserve(verts.size());
+                for (const Vec3& v : verts) vl.push_back(JPH::Float3(v.x * s.x, v.y * s.y, v.z * s.z));
+                JPH::IndexedTriangleList tl;
+                tl.reserve(idx.size() / 3);
+                for (size_t k = 0; k + 2 < idx.size(); k += 3) tl.push_back(JPH::IndexedTriangle(idx[k], idx[k + 1], idx[k + 2], 0));
+                shape = new JPH::MeshShapeSettings(std::move(vl), std::move(tl));
+                if (bodyType == Rigidbody::Type::Dynamic) bodyType = Rigidbody::Type::Static;
+            }
+        } else if (c.shape == Collider::Shape::Sphere) {
             shape = new JPH::SphereShapeSettings(std::max(0.005f, c.radius * std::max(s.x, std::max(s.y, s.z))));
         } else if (c.shape == Collider::Shape::Capsule) {
             const float r = std::max(0.005f, c.radius * std::max(s.x, s.z));
@@ -249,7 +280,7 @@ void PhysicsWorld::createBodies(Scene& scene, const std::vector<Entity>& list) {
             continue;
         }
 
-        const Rigidbody::Type type = rb ? rb->type : Rigidbody::Type::Static;
+        const Rigidbody::Type type = bodyType;
         const JPH::EMotionType motion = type == Rigidbody::Type::Dynamic   ? JPH::EMotionType::Dynamic
                                       : type == Rigidbody::Type::Kinematic ? JPH::EMotionType::Kinematic
                                                                            : JPH::EMotionType::Static;

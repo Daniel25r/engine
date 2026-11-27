@@ -13,6 +13,7 @@
 
 #include "titan/core/FileIO.h"
 #include "titan/core/Log.h"
+#include "titan/audio/SoundCheck.h"
 #include "titan/core/Project.h"
 #include "titan/core/Version.h"
 
@@ -34,7 +35,9 @@ int usage() {
         "  titan assets <carpeta>                     listar los recursos y sus ids\n"
         "  titan prefab <carpeta> <entidad>           guardar la entidad (con sus hijos) como prefabs/<nombre>.prefab\n"
         "  titan check <carpeta>                      validar escenas y referencias\n"
-        "  titan package <carpeta> <salida>           generar el paquete de juego para el runtime\n\n"
+        "  titan package <carpeta> <salida>           generar el paquete de juego para el runtime\n"
+        "  titan benchmark <carpeta>                  crear el proyecto de pruebas de rendimiento\n"
+        "  titan audiotest <archivo.wav>              grabar la prueba de sonido del motor en un WAV\n\n"
         "Opción: --scene <ruta dentro de assets/> para trabajar en otra escena.\n",
         kEngineName, kEngineVersion);
     return 2;
@@ -338,6 +341,57 @@ int cmdSet(Context& ctx, Entity e, const std::string& target, const std::vector<
 
 } // namespace
 
+// Graba en un WAV lo que mezcla el motor de audio durante la prueba de sonido (tono, melodía y pasos 3D).
+// Sirve para escuchar el resultado en cualquier aparato aunque el ordenador que lo genera no tenga altavoces.
+int cmdBenchmark(const std::string& dir); // Benchmark.cpp
+
+int cmdAudioTest(const std::string& outPath) {
+    MemoryFileSource files;
+    addSoundCheckFiles(files);
+    AudioEngine audio;
+    if (!audio.init(files, false)) return 1;
+    SoundCheck check;
+    check.start(audio);
+    const int rate = audio.sampleRate(), block = rate / 100;
+    std::vector<float> all, chunk;
+    float t = 0;
+    while (check.update(audio, t)) {
+        audio.render(block, chunk);
+        all.insert(all.end(), chunk.begin(), chunk.end());
+        t += float(block) / rate;
+    }
+    // WAV estéreo de 16 bits.
+    const uint32_t n = static_cast<uint32_t>(all.size());
+    std::string w(44 + n * 2, '\0');
+    auto put32 = [&](size_t at, uint32_t v) { std::memcpy(&w[at], &v, 4); };
+    auto put16 = [&](size_t at, uint16_t v) { std::memcpy(&w[at], &v, 2); };
+    std::memcpy(&w[0], "RIFF", 4);
+    put32(4, 36 + n * 2);
+    std::memcpy(&w[8], "WAVEfmt ", 8);
+    put32(16, 16);
+    put16(20, 1);
+    put16(22, 2);
+    put32(24, uint32_t(rate));
+    put32(28, uint32_t(rate) * 4);
+    put16(32, 4);
+    put16(34, 16);
+    std::memcpy(&w[36], "data", 4);
+    put32(40, n * 2);
+    float peak = 0;
+    for (uint32_t i = 0; i < n; ++i) {
+        const float v = std::fmax(-1.0f, std::fmin(1.0f, all[i]));
+        peak = std::fmax(peak, std::fabs(v));
+        put16(44 + i * 2, static_cast<uint16_t>(static_cast<int16_t>(v * 32767.0f)));
+    }
+    std::string err;
+    if (!fileio::writeAtomic(outPath, w, false, &err)) {
+        std::fprintf(stderr, "Error: %s\n", err.c_str());
+        return 1;
+    }
+    std::printf("Prueba de sonido grabada en %s: %.1f s, %d Hz, estéreo, pico %.2f\n", outPath.c_str(), t, rate, peak);
+    return 0;
+}
+
 int main(int argc, char** argv) {
     Log::setPlatformOutput(std::getenv("TITAN_VERBOSE") != nullptr);
     std::vector<std::string> args;
@@ -349,6 +403,9 @@ int main(int argc, char** argv) {
     if (args.size() < 2) return usage();
     const std::string& cmd = args[0];
     const std::string& dir = args[1];
+
+    if (cmd == "audiotest") return cmdAudioTest(dir); // aquí "dir" es el archivo WAV de salida
+    if (cmd == "benchmark") return cmdBenchmark(dir);
 
     if (cmd == "new") {
         if (args.size() < 3) return usage();

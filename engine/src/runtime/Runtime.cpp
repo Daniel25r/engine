@@ -1,6 +1,7 @@
 #include "titan/runtime/Runtime.h"
 #include "titan/runtime/UIRenderer.h"
 #include "titan/core/AnimationGraph.h"
+#include "titan/core/Geometry.h"
 #include "titan/core/Particles.h"
 
 #include <algorithm>
@@ -24,6 +25,17 @@ Runtime::~Runtime() { shutdown(); }
 bool Runtime::initSystems(FileSource& files) {
     files_ = &files;
     actions_.addDefaults();
+    // Colliders de malla: triángulos del modelo glTF (o de la primitiva) del MeshRenderer de la entidad.
+    physics_.setMeshProvider([this](Entity e, std::vector<Vec3>& verts, std::vector<uint32_t>& idx) {
+        const MeshRenderer* mr = scene_ ? scene_->world().get<MeshRenderer>(e) : nullptr;
+        if (!mr) return false;
+        if (!mr->model.isNull()) return renderer_->modelTriangles(cache_->model(mr->model), verts, idx);
+        const MeshData d = buildPrimitive(mr->mesh);
+        verts.clear();
+        for (const MeshVertex& v : d.vertices) verts.push_back(v.position);
+        idx.assign(d.indices.begin(), d.indices.end());
+        return true;
+    });
     if (!usesSharedRenderer()) {
         if (!renderer_->init(files)) return false;
         // Juego exportado: perfil según lo que se puede medir de este dispositivo (el juego puede cambiarlo).
@@ -267,6 +279,7 @@ void Runtime::frame(const Viewport& viewport) {
         for (const auto& [e, ev] : animEvents) scripts_->dispatchEvent(e, "onAnimationEvent", ev.c_str());
         TransformSystem::update(*scene_); // los emisores necesitan su posición actual
         updateParticles(*scene_, dt);
+        cameras_.update(*scene_, input_, &actions_, &physics_, dt); // cámaras que siguen al jugador
     }
 
     // Audio: el oyente es la cámara activa; las voces 3D siguen a su entidad.
@@ -351,6 +364,39 @@ void Runtime::render(const Viewport& viewport) {
         renderer_->drawText({std::max(h * 0.5f, screen_.x - width - h * 0.6f), h * 0.6f}, h, text, Color{1, 1, 1, 0.75f});
     }
     renderer_->endFrame();
+}
+
+bool Runtime::scriptCameraBasis(Vec3& forward, Vec3& right) const {
+    if (!scene_) return false;
+    Entity cam;
+    SceneView v;
+    if (!SceneRenderer::cameraView(*scene_, 1, v, &cam)) return false;
+    const Mat4 w = scene_->computeWorldMatrix(cam);
+    Vec3 f = w.transformDirection({0, 0, -1});
+    f.y = 0;
+    if (f.length() < 1e-4f) f = w.transformDirection({0, 1, 0}) * -1.0f; // cámara mirando recto abajo
+    f.y = 0;
+    forward = f.normalized();
+    right = Vec3{-forward.z, 0, forward.x};
+    return true;
+}
+
+ScriptHost::FrameStats Runtime::scriptFrameStats() const {
+    FrameStats f;
+    const RenderStats& rs = renderer_->stats();
+    const CullStats& cs = sceneRenderer_.cullStats();
+    f.fps = fps_;
+    f.frameMs = static_cast<float>(profile_.frameMs);
+    f.scriptMs = static_cast<float>(profile_.scriptMs);
+    f.renderMs = static_cast<float>(profile_.renderMs);
+    f.drawCalls = rs.drawCalls;
+    f.triangles = rs.triangles;
+    f.meshes = cs.meshes;
+    f.meshesVisible = cs.meshesVisible;
+    f.particles = cs.particlesDrawn;
+    f.bodies = static_cast<int>(physics_.bodyCount());
+    f.entities = scene_ ? static_cast<int>(scene_->entityCount()) : 0;
+    return f;
 }
 
 bool Runtime::scriptSetQuality(const std::string& name) {

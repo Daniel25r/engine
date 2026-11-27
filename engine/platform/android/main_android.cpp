@@ -82,8 +82,11 @@ bool createSurface(App& app) {
     eglSwapInterval(app.display, 1);
 
     if (!app.engine.running()) {
-        if (app.android->activity->internalDataPath) // almacenamiento privado de la app: solo este juego lo lee
-            app.engine.setSavePath(std::string(app.android->activity->internalDataPath) + "/partida.json");
+        if (app.android->activity->internalDataPath) { // almacenamiento privado de la app: solo este juego lo lee
+            const std::string dir = app.android->activity->internalDataPath;
+            app.engine.setSavePath(dir + "/partida.json");
+            titan::Log::openFile(dir + "/titan-registro.txt"); // informe de errores del juego exportado
+        }
         if (!app.engine.start(app.files)) TITAN_ERROR("android", "No se pudo arrancar el juego");
     } else if (freshContext && app.contextWasLost) {
         app.engine.renderer().onContextRestored();

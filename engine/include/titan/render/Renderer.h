@@ -127,6 +127,8 @@ public:
     // Devuelve -1 si el archivo no existe o no se puede interpretar (el motivo va al registro).
     int loadModel(const std::string& path);
     bool modelBounds(int model, Vec3& min, Vec3& max) const;
+    // Triángulos del modelo en la CPU (espacio del modelo), para la colisión de malla.
+    bool modelTriangles(int model, std::vector<Vec3>& verts, std::vector<uint32_t>& indices) const;
     int modelTriangles(int model) const;
     // El color del MeshRenderer tiñe el del modelo; su textura, si la tiene, sustituye a la del modelo.
     // joints: matrices de los huesos (computePose); nulo = pose de reposo.
@@ -263,6 +265,8 @@ private:
         Vec3 min, max;
         int triangles = 0;
         bool ok = false;
+        std::vector<Vec3> collisionVerts;      // copia para la física (colliders de malla)
+        std::vector<uint32_t> collisionIndices;
     };
     bool buildModel(Model& m);
     void sampleClip(const Model& m, int anim, float time, bool loop, std::vector<AnimNode>& local) const;

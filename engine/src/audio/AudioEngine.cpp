@@ -83,11 +83,19 @@ bool AudioEngine::init(FileSource& files, bool withDevice) {
         cfg.channels = 2;
         cfg.sampleRate = 48000;
     }
-    if (ma_engine_init(&cfg, &impl_->engine) != MA_SUCCESS) {
-        TITAN_WARN("audio", "No hay dispositivo de audio disponible: el juego funcionará sin sonido");
+    const ma_result r = ma_engine_init(&cfg, &impl_->engine);
+    if (r != MA_SUCCESS) {
+        TITAN_WARN("audio", "No hay dispositivo de audio disponible (%s): el juego funcionará sin sonido",
+                   ma_result_description(r));
         return false;
     }
     impl_->initialized = true;
+    if (withDevice) {
+        TITAN_INFO("audio", "Audio listo: %s", deviceInfo().c_str());
+        if (!hasRealOutput())
+            TITAN_WARN("audio", "La salida es el dispositivo NULO de miniaudio: no hay tarjeta de sonido o el sistema no dejó "
+                                "abrir ninguna. El juego funciona, pero NO se oirá nada.");
+    }
     return true;
 }
 
@@ -114,6 +122,9 @@ uint32_t AudioEngine::play(const std::string& path, const PlayParams& p) {
     v.owner = p.owner;
     v.spatial = p.spatial;
     ma_audio_buffer_ref_init(ma_format_f32, 2, clip->pcm, clip->frames, &v.buffer);
+    // El clip ya está a la frecuencia del motor; se dice explícitamente (miniaudio 0.11 lo deja a 0 y entonces
+    // supone la del motor, que es lo mismo, pero no queremos depender de ese detalle).
+    v.buffer.sampleRate = ma_engine_get_sample_rate(&impl_->engine);
     if (ma_sound_init_from_data_source(&impl_->engine, &v.buffer, p.spatial ? 0 : MA_SOUND_FLAG_NO_SPATIALIZATION, nullptr,
                                        &v.sound) != MA_SUCCESS) {
         ma_audio_buffer_ref_uninit(&v.buffer);
@@ -199,6 +210,36 @@ void AudioEngine::updateImpl(const std::function<bool(Entity, Vec3&)>& positionO
 }
 
 size_t AudioEngine::activeVoices() const { return impl_->voices.size(); }
+
+void AudioEngine::render(int frames, std::vector<float>& out) {
+    out.assign(static_cast<size_t>(frames) * 2, 0.0f);
+    if (impl_->initialized) ma_engine_read_pcm_frames(&impl_->engine, out.data(), static_cast<ma_uint64>(frames), nullptr);
+}
+
+bool AudioEngine::hasRealOutput() const {
+    if (!impl_->initialized) return false;
+    ma_device* d = ma_engine_get_device(&impl_->engine);
+    return d && d->pContext->backend != ma_backend_null;
+}
+
+int AudioEngine::sampleRate() const {
+    return impl_->initialized ? static_cast<int>(ma_engine_get_sample_rate(&impl_->engine)) : 0;
+}
+
+std::string AudioEngine::deviceInfo() const {
+    if (!impl_->initialized) return "sin audio";
+    ma_engine* e = &impl_->engine;
+    ma_device* d = ma_engine_get_device(e);
+    char buf[512];
+    if (!d) {
+        std::snprintf(buf, sizeof(buf), "sin dispositivo (mezcla en memoria), %u Hz, %u canales", ma_engine_get_sample_rate(e),
+                      ma_engine_get_channels(e));
+        return buf;
+    }
+    std::snprintf(buf, sizeof(buf), "%s, salida '%s', %u Hz, %u canales, volumen %.2f", ma_get_backend_name(d->pContext->backend),
+                  d->playback.name, d->sampleRate, d->playback.channels, ma_engine_get_volume(e));
+    return buf;
+}
 
 float AudioEngine::renderForTest(int frames) {
     std::vector<float> buf(static_cast<size_t>(frames) * 2);

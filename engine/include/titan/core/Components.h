@@ -285,7 +285,9 @@ struct Rigidbody {
 };
 
 struct Collider {
-    enum class Shape { Box, Sphere, Capsule };
+    // Mesh: los triángulos exactos de su MeshRenderer (modelo o primitiva); solo para lo que no se mueve (escenarios).
+    // ConvexHull: la envolvente convexa del modelo; sirve también para cuerpos dinámicos.
+    enum class Shape { Box, Sphere, Capsule, Mesh, ConvexHull };
     Shape shape = Shape::Box;
     Vec3 size{1, 1, 1};           // caja: tamaño completo (antes de la escala del Transform)
     float radius = 0.5f;          // esfera y cápsula
@@ -426,6 +428,29 @@ struct Terrain {
     Color layerColors[4] = {Color::hex(0x5E8C3A), Color::hex(0x8A7350), Color::hex(0x8C8C8C), Color::hex(0xE8EEF2)};
     float layerTiling = 6.0f;    // metros que ocupa cada repetición de las texturas de capa
     uint32_t revision = 1;       // cambia al editar (el render y la física se rehacen)
+};
+
+// ---- Cámara que sigue a un objetivo (tercera persona, lateral, cenital) ----
+// Va en la entidad de la cámara. Orbita alrededor del objetivo, gira con el dedo (fuera de la UI) o con la acción
+// "Mirar" del mando, se acerca si una pared se interpone y sigue con suavidad.
+struct CameraFollow {
+    UUID target;                 // entidad a seguir
+    float distance = 6.0f;
+    float minDistance = 1.5f, maxDistance = 15.0f;
+    float height = 1.4f;         // punto al que mira, sobre el origen del objetivo
+    float yaw = 0.0f;            // grados (0 = detrás, mirando hacia -Z)
+    float pitch = 20.0f;         // grados hacia abajo
+    float minPitch = -10.0f, maxPitch = 70.0f;
+    bool rotateWithInput = true; // false: ángulo fijo (vista lateral o cenital)
+    float touchSensitivity = 0.25f; // grados por píxel arrastrado
+    float padSpeed = 140.0f;     // grados por segundo con el stick derecho
+    float smoothing = 10.0f;     // cuanto mayor, más pegada (0 = sin suavizado)
+    bool avoidWalls = true;
+    float wallRadius = 0.25f;
+    // En ejecución (no se guarda)
+    Vec3 position;
+    bool initialized = false;
+    float shake = 0, shakeTime = 0;
 };
 
 } // namespace titan

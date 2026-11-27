@@ -62,6 +62,8 @@ bool Editor::Impl::init() {
     pio.Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { gClipboardPlatform->setClipboard(text); };
 
     files.engine = &platform.engineFiles();
+    platformLogPath = platform.projectsDirectory() + "/titan-registro.txt";
+    if (!Log::openFile(platformLogPath)) platformLogPath.clear();
     if (!renderer.init(files)) return false;
     editorQuality = QualitySettings::preset(recommendedQuality(renderer.caps()));
     renderer.setQuality(editorQuality);
@@ -177,6 +179,7 @@ void Editor::Impl::applyStyle() {
 }
 
 void Editor::Impl::frame(int w, int h, float dt) {
+    updateSoundCheck(dt);
     fbWidth = std::max(w, 1);
     fbHeight = std::max(h, 1);
     ImGuiIO& io = ImGui::GetIO();
@@ -1079,6 +1082,8 @@ void Editor::showPanel(const std::string& name) {
     else if (name == "rotar") m.tool = Tool::Rotate;
     else if (name == "escalar") m.tool = Tool::Scale;
     else if (name == "esculpir") m.terrainTool = 0;
+    else if (name == "sonido") m.startSoundCheck();
+    else if (name == "diagnostico") m.showDiagnostics = true;
     else if (name == "pintar") m.terrainTool = 4;
     else if (name == "maquina" && !m.selected.isNull()) { m.machineEditorFor = m.selected; m.showMachineEditor = true; }
 }

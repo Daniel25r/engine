@@ -23,6 +23,7 @@
 #include "titan/audio/AudioEngine.h"
 #include "titan/physics/PhysicsWorld.h"
 #include "titan/render/Renderer.h"
+#include "titan/core/CameraSystem.h"
 #include "titan/runtime/ResourceCache.h"
 #include "titan/runtime/SceneRenderer.h"
 #include "titan/scripting/ScriptSystem.h"
@@ -93,6 +94,8 @@ public:
     DeviceCaps scriptDeviceCaps() const override { return renderer_->caps(); }
     InputActions* scriptActions() override { return &actions_; }
     std::string scriptSavePath() const override { return savePath_; }
+    FrameStats scriptFrameStats() const override;
+    bool scriptCameraBasis(Vec3& forward, Vec3& right) const override;
     // Dónde se guarda la partida (Save.* en Lua). Lo fija la plataforma antes de start().
     void setSavePath(const std::string& path) { savePath_ = path; }
     InputActions& actions() { return actions_; }
@@ -127,6 +130,7 @@ private:
     std::unique_ptr<ScriptSystem> scripts_;
     UISystem ui_;
     InputActions actions_;
+    CameraSystem cameras_;
     std::string savePath_;
     std::vector<Entity> clicked_;
     std::string projectName_;

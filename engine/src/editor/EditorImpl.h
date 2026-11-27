@@ -15,6 +15,7 @@
 #include "titan/render/Renderer.h"
 #include "titan/runtime/Runtime.h"
 #include "titan/runtime/SceneRenderer.h"
+#include "titan/audio/SoundCheck.h"
 #include "titan/runtime/ResourceCache.h"
 #include "titan/runtime/UIRenderer.h"
 #include "titan/ui/UISystem.h"
@@ -223,6 +224,18 @@ struct Editor::Impl {
     void drawDetails();
     void drawMachineEditor(); // EditorAnimation.cpp
     bool showMachineEditor = false;
+    // Prueba de sonido y diagnóstico (EditorDiagnostics.cpp)
+    std::unique_ptr<AudioEngine> soundCheckAudio;
+    MemoryFileSource soundCheckFiles;
+    SoundCheck soundCheck;
+    float soundCheckTime = 0;
+    bool soundCheckRunning = false, showDiagnostics = false;
+    std::string soundCheckDevice;
+    bool soundCheckRealOutput = false;
+    std::string platformLogPath; // registro en archivo (para informes de errores)
+    void startSoundCheck();
+    void updateSoundCheck(float dt);
+    void drawDiagnostics();
     // Herramientas de terreno (EditorTerrain.cpp)
     int terrainTool = -1;        // -1 ninguna; si no, SculptTool
     int terrainLayer = 1;

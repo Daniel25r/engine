@@ -38,6 +38,7 @@ add_library(titan_core STATIC
     engine/src/core/InputActions.cpp
     engine/src/core/AnimationGraph.cpp
     engine/src/core/TerrainTools.cpp
+    engine/src/core/CameraSystem.cpp
     engine/src/core/Log.cpp
     engine/src/core/Uuid.cpp
     engine/src/core/FileIO.cpp
@@ -74,7 +75,7 @@ target_compile_options(titan_physics PRIVATE ${TITAN_WARNINGS})
 
 # ------------------------------------------------------------------ titan_audio (miniaudio 0.11.21, dominio público / MIT-0)
 
-add_library(titan_audio STATIC engine/src/audio/AudioEngine.cpp)
+add_library(titan_audio STATIC engine/src/audio/AudioEngine.cpp engine/src/audio/SoundCheck.cpp)
 target_link_libraries(titan_audio PUBLIC titan_core)
 target_compile_options(titan_audio PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>)
 if(NOT WIN32)
@@ -138,6 +139,7 @@ add_library(titan_editor STATIC
     engine/src/editor/EditorViewport.cpp
     engine/src/editor/EditorAnimation.cpp
     engine/src/editor/EditorTerrain.cpp
+    engine/src/editor/EditorDiagnostics.cpp
 )
 target_link_libraries(titan_editor PUBLIC titan_runtime titan_imgui titan_lua)
 target_include_directories(titan_editor PRIVATE third_party/stb)
@@ -170,8 +172,8 @@ else()
     target_compile_definitions(titan_editor_desktop PRIVATE TITAN_ENGINE_ASSETS="${CMAKE_SOURCE_DIR}/engine/assets")
 
     if(TITAN_BUILD_TOOLS)
-        add_executable(titan tools/titan/main.cpp)
-        target_link_libraries(titan PRIVATE titan_core titan_scripting)
+        add_executable(titan tools/titan/main.cpp tools/titan/Benchmark.cpp)
+        target_link_libraries(titan PRIVATE titan_core titan_scripting titan_audio)
         target_compile_options(titan PRIVATE ${TITAN_WARNINGS})
     endif()
 
@@ -198,7 +200,8 @@ else()
             tests/test_animation_graph.cpp
             tests/test_terrain.cpp
         )
-        target_compile_definitions(titan_tests PRIVATE TITAN_ENGINE_ASSETS_DIR="${CMAKE_SOURCE_DIR}/engine/assets")
+        target_compile_definitions(titan_tests PRIVATE TITAN_ENGINE_ASSETS_DIR="${CMAKE_SOURCE_DIR}/engine/assets"
+            TITAN_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")
         target_link_libraries(titan_tests PRIVATE titan_core titan_scripting titan_physics titan_audio titan_ui)
         add_test(NAME titan_tests COMMAND titan_tests)
     endif()

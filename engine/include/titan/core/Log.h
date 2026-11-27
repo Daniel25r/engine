@@ -34,6 +34,11 @@ public:
     static std::vector<LogMessage> recent();
     // Activa/desactiva la salida estándar de la plataforma (stdout / logcat).
     static void setPlatformOutput(bool enabled);
+    // Copia todos los mensajes a un archivo de texto (para enviar un informe de errores desde un teléfono).
+    // Si ya existe y pasa de maxBytes, se renombra a <ruta>.anterior y se empieza uno nuevo.
+    // Los avisos y errores se escriben al disco al momento (sobreviven a un cierre inesperado).
+    static bool openFile(const std::string& path, size_t maxBytes = 1024 * 1024);
+    static void closeFile();
 };
 
 } // namespace titan

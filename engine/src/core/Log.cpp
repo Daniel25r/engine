@@ -90,6 +90,39 @@ std::vector<LogMessage> Log::recent() {
     return {s.recent.begin(), s.recent.end()};
 }
 
+namespace {
+std::FILE* gLogFile = nullptr;
+int gLogFileSink = -1;
+}
+
+bool Log::openFile(const std::string& path, size_t maxBytes) {
+    closeFile();
+    if (std::FILE* old = std::fopen(path.c_str(), "rb")) {
+        std::fseek(old, 0, SEEK_END);
+        const long size = std::ftell(old);
+        std::fclose(old);
+        if (size > 0 && static_cast<size_t>(size) > maxBytes) std::rename(path.c_str(), (path + ".anterior").c_str());
+    }
+    gLogFile = std::fopen(path.c_str(), "ab");
+    if (!gLogFile) return false;
+    std::fprintf(gLogFile, "\n==== Sesión nueva ====\n");
+    gLogFileSink = addSink([](const LogMessage& m) {
+        if (!gLogFile) return;
+        static const char* levels[] = {"info ", "AVISO", "ERROR"};
+        std::fprintf(gLogFile, "[%9.3f] %s [%s] %s\n", m.seconds, levels[static_cast<int>(m.level)], m.category.c_str(),
+                     m.text.c_str());
+        if (m.level != LogLevel::Info) std::fflush(gLogFile);
+    });
+    return true;
+}
+
+void Log::closeFile() {
+    if (gLogFileSink >= 0) removeSink(gLogFileSink);
+    gLogFileSink = -1;
+    if (gLogFile) std::fclose(gLogFile);
+    gLogFile = nullptr;
+}
+
 void Log::setPlatformOutput(bool enabled) {
     LogState& s = state();
     std::lock_guard<std::mutex> lock(s.mutex);

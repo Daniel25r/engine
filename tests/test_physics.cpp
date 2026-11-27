@@ -194,3 +194,88 @@ TEST("física: bisagra sujeta al mundo y cuerda entre dos cuerpos") {
     CHECK((bp - Vec3{5, 8, 0}).length() < 3.05f);      // la cuerda no deja que caiga más
     CHECK(bp.y < 5.5f && bp.y > 4.5f);
 }
+
+TEST("física: collider de malla (rampa) y envolvente convexa dinámica") {
+    Scene s;
+    // Rampa: un único triángulo grande inclinado (sube hacia +X) y un suelo hecho también de malla.
+    Entity ramp = s.createEntity("Rampa");
+    Collider rc;
+    rc.shape = Collider::Shape::Mesh;
+    s.world().add<Collider>(ramp, rc);
+    Entity ground = s.createEntity("Suelo");
+    s.transform(ground).setPosition({0, 0, 0});
+    s.world().add<Collider>(ground, rc);
+    Entity rock = s.createEntity("Roca"); // envolvente convexa de un tetraedro, dinámica
+    s.transform(rock).setPosition({-6, 3, 0});
+    Collider hull;
+    hull.shape = Collider::Shape::ConvexHull;
+    s.world().add<Collider>(rock, hull);
+    s.world().add<Rigidbody>(rock);
+    PhysicsWorld w;
+    w.setMeshProvider([&](Entity e, std::vector<Vec3>& v, std::vector<uint32_t>& idx) {
+        if (e == ramp) {
+            v = {{0, 0, -5}, {0, 0, 5}, {10, 5, 5}, {10, 5, -5}};
+            idx = {0, 1, 2, 0, 2, 3}; // antihorario visto desde arriba
+        } else if (e == ground) {
+            v = {{-20, 0, -20}, {-20, 0, 20}, {20, 0, 20}, {20, 0, -20}};
+            idx = {0, 1, 2, 0, 2, 3};
+        } else if (e == rock) {
+            v = {{-0.5f, -0.5f, -0.5f}, {0.5f, -0.5f, -0.5f}, {0, -0.5f, 0.5f}, {0, 0.5f, 0}};
+            idx = {0, 1, 2, 0, 1, 3, 1, 2, 3, 2, 0, 3};
+        } else {
+            return false;
+        }
+        return true;
+    });
+    w.build(s);
+    CHECK_EQ(w.bodyCount(), 3u);
+    RaycastHit hit;
+    CHECK(w.raycast({5, 20, 0}, {0, -1, 0}, 50, hit)); // la rampa a mitad mide 2,5 m
+    CHECK(hit.entity == ramp);
+    CHECK_NEAR(hit.point.y, 2.5, 0.02);
+    CHECK(hit.normal.x < -0.3f && hit.normal.y > 0.8f); // normal inclinada
+    simulate(w, s, 3);
+    CHECK_NEAR(s.transform(rock).position().y, 0, 0.6); // la roca descansa en el suelo de malla
+    CHECK(s.transform(rock).position().y > -0.1f);      // y no lo atraviesa
+}
+
+#include "titan/core/CameraSystem.h"
+
+TEST("cámara: sigue al objetivo detrás y arriba, gira al arrastrar y se acerca si hay una pared") {
+    Scene s;
+    Entity hero = s.createEntity("Héroe");
+    s.transform(hero).setPosition({0, 0, 0});
+    Entity cam = s.createEntity("Cámara");
+    CameraFollow f;
+    f.target = s.info(hero).id;
+    f.distance = 6;
+    f.pitch = 0;
+    f.height = 1;
+    f.smoothing = 0; // sin suavizado para comprobar la posición exacta
+    s.world().add<CameraFollow>(cam, f);
+    CameraSystem cams;
+    Input in;
+    cams.update(s, in, nullptr, nullptr, 1.0f / 60);
+    CHECK_VEC3(s.transform(cam).position(), 0, 1, 6); // detrás (+Z) a 6 m, a la altura del punto de mira
+    CHECK_VEC3(s.transform(cam).forward(), 0, 0, -1);  // mirando al objetivo
+    // Arrastrar un dedo 100 px a la izquierda gira la cámara 25 grados.
+    in.touchBegan(1, {500, 300});
+    cams.update(s, in, nullptr, nullptr, 1.0f / 60);
+    in.endFrame();
+    in.touchMoved(1, {400, 300});
+    cams.update(s, in, nullptr, nullptr, 1.0f / 60);
+    CHECK_NEAR(s.world().get<CameraFollow>(cam)->yaw, 25, 1e-3);
+    // Una pared entre el héroe y la cámara la acerca.
+    s.world().get<CameraFollow>(cam)->yaw = 0;
+    Entity wall = s.createEntity("Pared");
+    s.transform(wall).setPosition({0, 1, 3});
+    s.transform(wall).setScale({10, 5, 0.5f});
+    s.world().add<Collider>(wall);
+    PhysicsWorld w;
+    w.build(s);
+    in.endFrame();
+    in.touchEnded(1, {400, 300});
+    cams.update(s, in, nullptr, &w, 1.0f / 60);
+    const float z = s.transform(cam).position().z;
+    CHECK(z < 2.8f && z > 2.0f); // delante de la pared (cara en z = 2,75), no detrás
+}

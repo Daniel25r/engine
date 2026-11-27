@@ -184,6 +184,7 @@ void Editor::Impl::drawUI() {
     const ImGuiStyle& st = ImGui::GetStyle();
     drawMenuBar();
     if (showMachineEditor) drawMachineEditor();
+    if (soundCheckRunning || showDiagnostics) drawDiagnostics();
     const float menuH = ImGui::GetFrameHeight();
     const float rowH = ImGui::GetFrameHeight() + st.WindowPadding.y * 2;
     drawToolbar(ImVec2(0, menuH), ImVec2(W, rowH));
@@ -389,6 +390,9 @@ void Editor::Impl::drawMenuBar() {
         ImGui::TextDisabled("%s %s", kEngineName, kEngineVersion);
         ImGui::TextDisabled("Q seleccionar · W mover · E rotar · R escalar");
         ImGui::TextDisabled("Ctrl+P jugar/detener · Ctrl+S guardar");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Prueba de sonido", nullptr, false, !runtime)) startSoundCheck();
+        if (ImGui::MenuItem("Diagnóstico del dispositivo")) showDiagnostics = true;
         ImGui::EndMenu();
     }
     // Nombre del proyecto a la derecha.
@@ -1381,15 +1385,19 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
     } else if (name == "Collider") {
         Collider& c = *w.get<Collider>(e);
         int shape = static_cast<int>(c.shape);
-        combo("Forma", shape, "Caja\0Esfera\0Cápsula\0");
+        combo("Forma", shape, "Caja\0Esfera\0Cápsula\0Malla (escenario)\0Envolvente convexa\0");
         c.shape = static_cast<Collider::Shape>(shape);
         if (c.shape == Collider::Shape::Box) {
             propLabel("Tamaño");
             ImGui::DragFloat3("##csize", &c.size.x, 0.02f, 0.001f, 10000);
             track();
-        } else {
+        } else if (c.shape == Collider::Shape::Sphere || c.shape == Collider::Shape::Capsule) {
             dragF("Radio", c.radius, 0.01f, 0.001f, 1000, "%.2f");
             if (c.shape == Collider::Shape::Capsule) dragF("Altura", c.height, 0.01f, 0.001f, 1000, "%.2f");
+        } else {
+            propLabel("");
+            ImGui::TextDisabled(c.shape == Collider::Shape::Mesh ? "Usa los triángulos de su modelo (solo estático)"
+                                                                 : "Envolvente del modelo (sirve para dinámicos)");
         }
         propLabel("Centro");
         ImGui::DragFloat3("##ccenter", &c.center.x, 0.02f);

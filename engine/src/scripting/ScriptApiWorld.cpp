@@ -63,10 +63,22 @@ int in_keyPressed(lua_State* L) {
     lua_pushboolean(L, sys(L).host().scriptInput().keyPressed(keyFromName(luaL_checkstring(L, 1))));
     return 1;
 }
+// Input.cameraAxis("Mover") → x, z en el mundo: el eje de la acción girado según hacia dónde mira la cámara.
+int in_cameraAxis(lua_State* L) {
+    InputActions* a = actions(L);
+    const Vec2 v = a ? a->axis(luaL_checkstring(L, 1)) : Vec2{};
+    Vec3 f{0, 0, -1}, r{1, 0, 0};
+    sys(L).host().scriptCameraBasis(f, r);
+    const Vec3 w = r * v.x + f * v.y;
+    lua_pushnumber(L, w.x);
+    lua_pushnumber(L, w.z);
+    return 2;
+}
 int in_gamepad(lua_State* L) { lua_pushboolean(L, sys(L).host().scriptInput().gamepadConnected()); return 1; }
 const luaL_Reg kInputExtra[] = {{"action", in_action}, {"pressed", in_pressed}, {"released", in_released},
                                 {"axis", in_axis}, {"define", in_define}, {"key", in_key},
-                                {"keyPressed", in_keyPressed}, {"gamepad", in_gamepad}, {nullptr, nullptr}};
+                                {"keyPressed", in_keyPressed}, {"gamepad", in_gamepad},
+                                {"cameraAxis", in_cameraAxis}, {nullptr, nullptr}};
 
 // ---------------------------------------------------------------- Save: partida guardada
 constexpr size_t kMaxSaveBytes = 1024 * 1024; // 1 MB: suficiente para progreso, inventario y ajustes
@@ -184,6 +196,25 @@ int sv_write(lua_State* L) {
 const luaL_Reg kSaveGlobals[] = {{"set", sv_set}, {"get", sv_get}, {"has", sv_has}, {"delete", sv_delete},
                                  {"clear", sv_clear}, {"write", sv_write}, {nullptr, nullptr}};
 
+// ---------------------------------------------------------------- Debug.stats
+int d_stats(lua_State* L) {
+    const ScriptHost::FrameStats s = sys(L).host().scriptFrameStats();
+    lua_createtable(L, 0, 11);
+    auto num = [&](const char* k, double v) { lua_pushnumber(L, v); lua_setfield(L, -2, k); };
+    num("fps", s.fps);
+    num("frameMs", s.frameMs);
+    num("scriptMs", s.scriptMs);
+    num("renderMs", s.renderMs);
+    num("drawCalls", s.drawCalls);
+    num("triangles", s.triangles);
+    num("meshes", s.meshes);
+    num("meshesVisible", s.meshesVisible);
+    num("particles", s.particles);
+    num("bodies", s.bodies);
+    num("entities", s.entities);
+    return 1;
+}
+
 const luaL_Reg kQualityGlobals[] = {{"set", q_set}, {"get", q_get}, {"recommended", q_recommended},
                                     {"device", q_device}, {nullptr, nullptr}};
 
@@ -298,7 +329,32 @@ int e_terrainHeight(lua_State* L) { // altura del terreno (en el mundo) en x, z 
     return 1;
 }
 
+// ---------------------------------------------------------------- Cámara de seguimiento
+int e_shakeCamera(lua_State* L) {
+    CameraFollow& c = component<CameraFollow>(L, live(L, 1), "CameraFollow");
+    c.shake = float(luaL_optnumber(L, 2, 0.2));
+    c.shakeTime = float(luaL_optnumber(L, 3, 0.3));
+    return 0;
+}
+int e_setCameraTarget(lua_State* L) {
+    CameraFollow& c = component<CameraFollow>(L, live(L, 1), "CameraFollow");
+    c.target = lua_isnoneornil(L, 2) ? UUID{} : scene(L).info(live(L, 2)).id;
+    return 0;
+}
+int e_setCameraDistance(lua_State* L) {
+    component<CameraFollow>(L, live(L, 1), "CameraFollow").distance = float(luaL_checknumber(L, 2));
+    return 0;
+}
+int e_setCameraAngles(lua_State* L) { // yaw, pitch en grados
+    CameraFollow& c = component<CameraFollow>(L, live(L, 1), "CameraFollow");
+    c.yaw = float(luaL_checknumber(L, 2));
+    c.pitch = float(luaL_optnumber(L, 3, c.pitch));
+    return 0;
+}
+
 const luaL_Reg kWorldEntityMethods[] = {
+    {"shakeCamera", e_shakeCamera}, {"setCameraTarget", e_setCameraTarget}, {"setCameraDistance", e_setCameraDistance},
+    {"setCameraAngles", e_setCameraAngles},
     {"terrainHeight", e_terrainHeight},
     {"setAnimParam", e_setAnimParam}, {"setAnimTrigger", e_setAnimTrigger}, {"getAnimParam", e_getAnimParam},
     {"getAnimState", e_getAnimState},
@@ -315,6 +371,10 @@ void registerWorldGlobals(lua_State* L) {
     setGlobalTable(L, "Save", kSaveGlobals);
     lua_getglobal(L, "Input"); // se añaden a la tabla Input que ya existe
     luaL_setfuncs(L, kInputExtra, 0);
+    lua_pop(L, 1);
+    lua_getglobal(L, "Debug");
+    lua_pushcfunction(L, d_stats);
+    lua_setfield(L, -2, "stats");
     lua_pop(L, 1);
     lua_getglobal(L, "Physics");
     luaL_setfuncs(L, kPhysicsExtra, 0);

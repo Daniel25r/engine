@@ -62,6 +62,14 @@ public:
     virtual InputActions* scriptActions() { return nullptr; }
     // Archivo de la partida guardada (lo decide la plataforma, nunca el script). Vacío = solo en memoria.
     virtual std::string scriptSavePath() const { return ""; }
+    // Estadísticas del último fotograma (Debug.stats): lo que mide el motor, nunca valores inventados.
+    struct FrameStats {
+        float fps = 0, frameMs = 0, scriptMs = 0, renderMs = 0;
+        int drawCalls = 0, triangles = 0, meshes = 0, meshesVisible = 0, particles = 0, bodies = 0, entities = 0;
+    };
+    virtual FrameStats scriptFrameStats() const { return {}; }
+    // Delante y derecha de la cámara activa, en horizontal (para mover al jugador respecto a la cámara).
+    virtual bool scriptCameraBasis(Vec3& forward, Vec3& right) const { return false; }
 };
 
 struct ScriptError {

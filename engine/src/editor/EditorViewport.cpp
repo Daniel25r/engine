@@ -224,12 +224,18 @@ void Editor::Impl::drawGizmos() {
         if (!scene.isActiveInHierarchy(e)) return;
         const Mat4& m = t.worldMatrix();
         const Color col = c.isTrigger ? Color{0.3f, 0.9f, 1, 0.8f} : Color{0.35f, 1, 0.45f, 0.8f};
-        if (c.shape == Collider::Shape::Box) {
+        if (c.shape == Collider::Shape::Box || c.shape == Collider::Shape::Mesh || c.shape == Collider::Shape::ConvexHull) {
+            // Malla y envolvente: se dibuja la caja de su modelo (la forma exacta la calcula la física).
+            Vec3 bmin{-0.5f, -0.5f, -0.5f}, bmax{0.5f, 0.5f, 0.5f};
+            if (c.shape == Collider::Shape::Box) {
+                bmin = c.center - c.size * 0.5f;
+                bmax = c.center + c.size * 0.5f;
+            } else {
+                localBounds(e, bmin, bmax);
+            }
             Vec3 p[8];
             for (int i = 0; i < 8; ++i)
-                p[i] = m.transformPoint(c.center + Vec3{(i & 1) ? c.size.x * 0.5f : -c.size.x * 0.5f,
-                                                        (i & 2) ? c.size.y * 0.5f : -c.size.y * 0.5f,
-                                                        (i & 4) ? c.size.z * 0.5f : -c.size.z * 0.5f});
+                p[i] = m.transformPoint({(i & 1) ? bmax.x : bmin.x, (i & 2) ? bmax.y : bmin.y, (i & 4) ? bmax.z : bmin.z});
             const int ed[12][2] = {{0, 1}, {2, 3}, {4, 5}, {6, 7}, {0, 2}, {1, 3}, {4, 6}, {5, 7}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
             for (auto& d : ed) renderer.drawLine(p[d[0]], p[d[1]], col);
         } else {

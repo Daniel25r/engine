@@ -35,6 +35,8 @@ int Renderer::loadModel(const std::string& path) {
 }
 
 bool Renderer::buildModel(Model& m) {
+    m.collisionVerts.clear();
+    m.collisionIndices.clear();
     m.parts.clear();
     m.triangles = 0;
     std::vector<uint8_t> bytes;
@@ -210,6 +212,12 @@ bool Renderer::buildModel(Model& m) {
                 for (auto& v : verts) v.normal = v.normal.normalized();
             }
 
+            // Copia en la CPU de los triángulos (colisión de malla). Los personajes con esqueleto también la tienen
+            // en su pose de reposo, aunque para ellos se recomienda una cápsula.
+            const uint32_t base = static_cast<uint32_t>(m.collisionVerts.size());
+            for (const MeshVertex& v : verts) m.collisionVerts.push_back(v.position);
+            for (uint32_t i : idx) m.collisionIndices.push_back(base + i);
+
             ModelPart part;
             part.skinned = node->skin && node->skin == mainSkin && jnt && wgt &&
                            mainSkin->joints_count <= static_cast<size_t>(kMaxJoints);
@@ -282,6 +290,13 @@ bool Renderer::buildModel(Model& m) {
     }
     TITAN_INFO("render", "Modelo '%s' cargado: %zu partes, %d triángulos", m.path.c_str(), m.parts.size(), m.triangles);
     return true;
+}
+
+bool Renderer::modelTriangles(int model, std::vector<Vec3>& verts, std::vector<uint32_t>& indices) const {
+    if (model < 0 || model >= static_cast<int>(models_.size()) || !models_[model].ok) return false;
+    verts = models_[model].collisionVerts;
+    indices = models_[model].collisionIndices;
+    return !indices.empty();
 }
 
 bool Renderer::modelBounds(int model, Vec3& min, Vec3& max) const {
