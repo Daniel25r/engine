@@ -521,7 +521,10 @@ ComponentRegistry ComponentRegistry::createDefault() {
         "CharacterController",
         [](const CharacterController& c) {
             return Json{{"height", toJson(c.height)}, {"radius", toJson(c.radius)}, {"maxSlope", toJson(c.maxSlope)},
-                        {"stepHeight", toJson(c.stepHeight)}, {"gravityScale", toJson(c.gravityScale)}, {"layer", c.layer}};
+                        {"stepHeight", toJson(c.stepHeight)}, {"gravityScale", toJson(c.gravityScale)}, {"layer", c.layer},
+                        {"acceleration", toJson(c.acceleration)}, {"deceleration", toJson(c.deceleration)},
+                        {"airControl", toJson(c.airControl)}, {"maxJumps", c.maxJumps}, {"jumpCut", toJson(c.jumpCut)},
+                        {"faceMovement", c.faceMovement}, {"turnSpeed", toJson(c.turnSpeed)}};
         },
         [](CharacterController& c, FieldReader& rd) {
             rd.read("height", c.height);
@@ -531,6 +534,13 @@ ComponentRegistry ComponentRegistry::createDefault() {
             rd.read("gravityScale", c.gravityScale);
             rd.read("layer", c.layer);
             c.layer = std::clamp(c.layer, 0, 15);
+            rd.read("acceleration", c.acceleration);
+            rd.read("deceleration", c.deceleration);
+            rd.read("airControl", c.airControl);
+            rd.read("maxJumps", c.maxJumps);
+            rd.read("jumpCut", c.jumpCut);
+            rd.read("faceMovement", c.faceMovement);
+            rd.read("turnSpeed", c.turnSpeed);
         });
 
     r.addSimple<Joint>(

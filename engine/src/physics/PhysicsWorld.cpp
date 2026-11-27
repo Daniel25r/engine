@@ -468,12 +468,40 @@ void PhysicsWorld::step(Scene& scene, float dt) {
         if ((Vec3{float(cp.GetX()), float(cp.GetY()), float(cp.GetZ())} - tp).length() > 0.001f) c.SetPosition(JPH::RVec3(tp.x, tp.y, tp.z));
         c.UpdateGroundVelocity();
         const bool grounded = c.GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround;
+        if (grounded && ch.verticalVelocity <= 0) cc->jumpsUsed = 0;
         if (grounded && ch.verticalVelocity < 0) ch.verticalVelocity = 0;
-        if (grounded && cc->jumpSpeed > 0) ch.verticalVelocity = cc->jumpSpeed;
+        // Saltos: desde el suelo, o en el aire mientras queden (doble salto). El primero en el aire ya cuenta
+        // como gastado si el personaje se cayó de un borde sin saltar.
+        if (cc->jumpSpeed > 0) {
+            if (!grounded && cc->jumpsUsed == 0) cc->jumpsUsed = 1;
+            if (grounded || cc->jumpsUsed < std::max(1, cc->maxJumps)) {
+                ch.verticalVelocity = cc->jumpSpeed;
+                ++cc->jumpsUsed;
+            }
+        }
         cc->jumpSpeed = 0;
+        if (cc->cutJump && ch.verticalVelocity > 0) ch.verticalVelocity *= std::clamp(cc->jumpCut, 0.0f, 1.0f);
+        cc->cutJump = false;
+        if (cc->hasSetVertical) ch.verticalVelocity = cc->setVertical;
+        cc->hasSetVertical = false;
         ch.verticalVelocity += g.y * cc->gravityScale * dt;
+        // Velocidad horizontal: se acerca a la pedida con aceleración (frenado si se suelta); menos control en el aire.
+        Vec3 h = cc->horizontal;
+        const Vec3 want{cc->desiredVelocity.x, 0, cc->desiredVelocity.z};
+        const float rate = (want.length() > h.length() ? cc->acceleration : cc->deceleration) *
+                           (grounded ? 1.0f : std::clamp(cc->airControl, 0.0f, 1.0f));
+        if (cc->acceleration <= 0 || rate <= 0) {
+            h = grounded || cc->airControl >= 1 ? want : h;
+        } else {
+            const Vec3 diff = want - h;
+            const float step = rate * dt;
+            h = diff.length() <= step ? want : h + diff.normalized() * step;
+        }
+        h = h + Vec3{cc->impulse.x, 0, cc->impulse.z};
+        cc->impulse = {};
+        cc->horizontal = h;
         const JPH::Vec3 ground = grounded ? c.GetGroundVelocity() : JPH::Vec3::sZero();
-        c.SetLinearVelocity(JPH::Vec3(cc->desiredVelocity.x, ch.verticalVelocity, cc->desiredVelocity.z) + ground);
+        c.SetLinearVelocity(JPH::Vec3(h.x, ch.verticalVelocity, h.z) + ground);
         JPH::CharacterVirtual::ExtendedUpdateSettings us;
         us.mWalkStairsStepUp = JPH::Vec3(0, std::max(0.0f, cc->stepHeight), 0);
         us.mStickToFloorStepDown = JPH::Vec3(0, -std::max(0.05f, cc->stepHeight), 0);
@@ -485,10 +513,31 @@ void PhysicsWorld::step(Scene& scene, float dt) {
         else ch.verticalVelocity = v.GetY();
         cc->grounded = c.GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround;
         cc->velocity = fromJ(v);
+        // Paredes: contactos casi verticales (para saltos de pared, deslizarse...).
+        cc->touchingWall = false;
+        for (const JPH::CharacterVirtual::Contact& k : c.GetActiveContacts()) {
+            if (!k.mHadCollision || std::fabs(k.mSurfaceNormal.GetY()) > 0.3f) continue;
+            cc->touchingWall = true;
+            cc->wallNormal = fromJ(k.mSurfaceNormal);
+            break;
+        }
+        // Al chocar con una pared, la velocidad horizontal real manda (no se acumula contra la pared).
+        cc->horizontal = {v.GetX() - (cc->grounded ? 0.0f : 0.0f), 0, v.GetZ()};
+        if (cc->grounded) cc->horizontal = cc->horizontal - Vec3{c.GetGroundVelocity().GetX(), 0, c.GetGroundVelocity().GetZ()};
         const JPH::RVec3 np = c.GetPosition();
         const Vec3 wp{float(np.GetX()), float(np.GetY()), float(np.GetZ())};
         const Entity parent = scene.parent(e);
         scene.transform(e).setPosition(parent.isNull() ? wp : scene.computeWorldMatrix(parent).inverted().transformPoint(wp));
+        // Girar hacia donde se mueve (solo el giro en Y, con velocidad limitada).
+        if (cc->faceMovement && Vec3{h.x, 0, h.z}.length() > 0.2f) {
+            Transform& tr = scene.transform(e);
+            const float target = std::atan2(-h.x, -h.z) * kRadToDeg; // el frente del personaje es su -Z
+            Vec3 eul = tr.eulerDegrees();
+            float delta = std::fmod(target - eul.y + 540.0f, 360.0f) - 180.0f;
+            const float maxStep = cc->turnSpeed * dt;
+            delta = std::clamp(delta, -maxStep, maxStep);
+            tr.setEulerDegrees({eul.x, eul.y + delta, eul.z});
+        }
     }
 
     impl_->system->Update(dt, 1, impl_->temp.get(), impl_->jobs.get());

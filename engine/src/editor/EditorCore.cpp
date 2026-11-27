@@ -591,6 +591,19 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
         scene.world().add<Collider>(e);
         fitCollider(e);
         scene.world().add<Rigidbody>(e);
+    } else if (kind == "Cámara en tercera persona") {
+        // Sigue al objeto seleccionado o, si no hay, al primer personaje de la escena.
+        Entity target = selectedEntity();
+        if (target.isNull())
+            scene.world().each<CharacterController>([&](Entity o, CharacterController&) { if (target.isNull()) target = o; });
+        Camera cam;
+        cam.projection = Camera::Projection::Perspective;
+        cam.priority = 10; // por encima de la cámara normal de la plantilla
+        scene.world().add<Camera>(e, cam);
+        CameraFollow f;
+        if (!target.isNull()) f.target = scene.info(target).id;
+        scene.world().add<CameraFollow>(e, f);
+        scene.transform(e).setPosition(spawnPoint() + Vec3{0, 3, 6});
     } else if (kind == "Terreno") {
         Terrain t;
         terrainEnsureData(t);

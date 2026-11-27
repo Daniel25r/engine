@@ -253,6 +253,26 @@ int e_move(lua_State* L) { // e:move(x, z): velocidad horizontal en m/s (se mant
 }
 int e_jump(lua_State* L) { character(L, live(L, 1)).jumpSpeed = float(luaL_optnumber(L, 2, 5)); return 0; }
 int e_isGrounded(lua_State* L) { lua_pushboolean(L, character(L, live(L, 1)).grounded); return 1; }
+int e_endJump(lua_State* L) { character(L, live(L, 1)).cutJump = true; return 0; } // salto variable: soltar el botón
+int e_isTouchingWall(lua_State* L) {
+    const CharacterController& c = character(L, live(L, 1));
+    lua_pushboolean(L, c.touchingWall);
+    lua_pushnumber(L, c.wallNormal.x);
+    lua_pushnumber(L, c.wallNormal.z);
+    return 3;
+}
+int e_setVerticalVelocity(lua_State* L) { // golpe al suelo (negativa), rebote en un enemigo (positiva)
+    CharacterController& c = character(L, live(L, 1));
+    c.setVertical = float(luaL_checknumber(L, 2));
+    c.hasSetVertical = true;
+    return 0;
+}
+int e_pushCharacter(lua_State* L) { // empujón horizontal inmediato (salto de pared, retroceso al recibir daño)
+    CharacterController& c = character(L, live(L, 1));
+    c.impulse = c.impulse + Vec3{float(luaL_checknumber(L, 2)), 0, float(luaL_checknumber(L, 3))};
+    return 0;
+}
+int e_jumpsUsed(lua_State* L) { lua_pushinteger(L, character(L, live(L, 1)).jumpsUsed); return 1; }
 
 uint32_t maskArg(lua_State* L, int idx) { return static_cast<uint32_t>(luaL_optinteger(L, idx, 0xFFFF)); }
 void pushEntityList(lua_State* L, const std::vector<Entity>& list) {
@@ -358,7 +378,9 @@ const luaL_Reg kWorldEntityMethods[] = {
     {"terrainHeight", e_terrainHeight},
     {"setAnimParam", e_setAnimParam}, {"setAnimTrigger", e_setAnimTrigger}, {"getAnimParam", e_getAnimParam},
     {"getAnimState", e_getAnimState},
-    {"move", e_move}, {"jump", e_jump}, {"isGrounded", e_isGrounded},
+    {"move", e_move}, {"jump", e_jump}, {"isGrounded", e_isGrounded}, {"endJump", e_endJump},
+    {"isTouchingWall", e_isTouchingWall}, {"setVerticalVelocity", e_setVerticalVelocity},
+    {"pushCharacter", e_pushCharacter}, {"jumpsUsed", e_jumpsUsed},
     {"playParticles", e_playParticles}, {"stopParticles", e_stopParticles}, {"emitParticles", e_emitParticles},
     {"particleCount", e_particleCount}, {nullptr, nullptr}};
 

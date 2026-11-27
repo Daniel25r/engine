@@ -279,3 +279,63 @@ TEST("cámara: sigue al objetivo detrás y arriba, gira al arrastrar y se acerca
     const float z = s.transform(cam).position().z;
     CHECK(z < 2.8f && z > 2.0f); // delante de la pared (cara en z = 2,75), no detrás
 }
+
+TEST("personaje avanzado: aceleración, doble salto, salto variable, giro y paredes") {
+    Scene s;
+    floorOf(s);
+    Entity wall = s.createEntity("Pared");
+    s.transform(wall).setPosition({6, 2, 0});
+    s.transform(wall).setScale({1, 4, 6});
+    s.world().add<Collider>(wall);
+    Entity hero = s.createEntity("Héroe");
+    s.transform(hero).setPosition({0, 0.1f, 0});
+    CharacterController cc;
+    cc.acceleration = 20;
+    cc.maxJumps = 2;
+    s.world().add<CharacterController>(hero, cc);
+    PhysicsWorld w;
+    w.build(s);
+    simulate(w, s, 0.5f);
+    CharacterController& c = *s.world().get<CharacterController>(hero);
+    c.desiredVelocity = {4, 0, 0};
+    w.step(s, 1.0f / 60);
+    CHECK(c.horizontal.x > 0.1f && c.horizontal.x < 1.0f); // acelera, no salta a 4 m/s de golpe
+    simulate(w, s, 0.5f);
+    CHECK_NEAR(c.horizontal.x, 4, 0.1);
+    CHECK_NEAR(s.transform(hero).eulerDegrees().y, -90, 5); // mira hacia +X (su frente es -Z)
+    simulate(w, s, 2);                                     // llega a la pared
+    CHECK(c.touchingWall);
+    CHECK(c.wallNormal.x < -0.9f);                         // la pared mira hacia -X
+    CHECK(s.transform(hero).position().x < 5.5f);           // no la atraviesa
+    // Doble salto: el segundo en el aire funciona; el tercero no.
+    c.desiredVelocity = {};
+    c.jumpSpeed = 5;
+    simulate(w, s, 0.3f);
+    const float y1 = s.transform(hero).position().y;
+    c.jumpSpeed = 5;
+    simulate(w, s, 0.3f);
+    CHECK(s.transform(hero).position().y > y1 + 0.5f);
+    CHECK_EQ(c.jumpsUsed, 2);
+    const float vBefore = c.velocity.y;
+    c.jumpSpeed = 5;
+    w.step(s, 1.0f / 60);
+    CHECK(c.velocity.y < vBefore); // sin saltos libres: sigue cayendo
+    simulate(w, s, 3);
+    CHECK(c.grounded && c.jumpsUsed == 0);
+    // Salto variable: soltar pronto da un salto más bajo.
+    auto peak = [&](bool cut) {
+        s.transform(hero).setPosition({0, 0.05f, 0});
+        simulate(w, s, 1);
+        c.jumpSpeed = 6;
+        w.step(s, 1.0f / 60);
+        if (cut) c.cutJump = true;
+        float top = 0;
+        for (int i = 0; i < 90; ++i) {
+            w.step(s, 1.0f / 60);
+            top = std::max(top, s.transform(hero).position().y);
+        }
+        return top;
+    };
+    const float high = peak(false), low = peak(true);
+    CHECK(low < high * 0.5f);
+}

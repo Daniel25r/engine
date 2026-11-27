@@ -306,11 +306,27 @@ struct CharacterController {
     float stepHeight = 0.35f;     // escalones que sube sin saltar
     float gravityScale = 1.0f;
     int layer = 0;
+    // Movimiento (0.14): cómo llega a la velocidad pedida y cómo salta.
+    float acceleration = 40.0f;   // m/s² en el suelo (0 = instantáneo, como antes de 0.14)
+    float deceleration = 50.0f;   // m/s² al soltar
+    float airControl = 0.5f;      // fracción de la aceleración en el aire
+    int maxJumps = 1;             // 2 = doble salto
+    float jumpCut = 0.5f;         // salto variable: al soltar (endJump) la subida se multiplica por esto
+    bool faceMovement = true;     // gira hacia donde se mueve
+    float turnSpeed = 720.0f;     // grados por segundo
     // En ejecución (no se guarda): lo que piden los scripts para el siguiente paso.
     Vec3 desiredVelocity;         // horizontal (x, z) en m/s
-    float jumpSpeed = 0;          // > 0: saltar en el próximo paso si está en el suelo
+    float jumpSpeed = 0;          // > 0: saltar en el próximo paso (en el suelo, o en el aire si quedan saltos)
+    bool cutJump = false;         // endJump(): cortar la subida
+    float setVertical = 0;        // != 0: fijar la velocidad vertical (golpe al suelo, rebote)
+    bool hasSetVertical = false;
+    Vec3 impulse;                 // empujón horizontal inmediato (salto de pared, retroceso)
     bool grounded = false;
+    int jumpsUsed = 0;
+    bool touchingWall = false;
+    Vec3 wallNormal;
     Vec3 velocity;                // la que tuvo en el último paso
+    Vec3 horizontal;              // velocidad horizontal actual (con aceleración)
 };
 
 // Unión física entre esta entidad (necesita Rigidbody + Collider) y otra, o el mundo si "connected" está vacío.

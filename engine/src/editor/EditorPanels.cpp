@@ -298,7 +298,7 @@ void Editor::Impl::drawUI() {
 // ============================================================ Menú y barras
 
 void Editor::Impl::drawCreateMenu() {
-    static const char* basic[] = {"Vacío", "Cámara", "Sprite"};
+    static const char* basic[] = {"Vacío", "Cámara", "Cámara en tercera persona", "Sprite"};
     static const char* shapes[] = {"Cubo", "Esfera", "Plano", "Cilindro", "Cono", "Cápsula"};
     static const char* lights[] = {"Luz direccional", "Luz puntual", "Foco"};
     for (const char* k : basic)
@@ -713,6 +713,7 @@ void Editor::Impl::drawBrowser() {
 
 const char* Editor::Impl::typeLabel(Entity e) {
     World& w = scene.world();
+    if (w.has<CameraFollow>(e)) return "Cámara 3ª persona";
     if (w.has<Camera>(e)) return "Cámara";
     if (w.has<ParticleSystem>(e)) return "Partículas";
     if (w.has<Terrain>(e)) return "Terreno";
@@ -1412,6 +1413,41 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         propLabel("Capa");
         ImGui::SliderInt("##collayer", &c.layer, 0, 15);
         track();
+    } else if (name == "CameraFollow") {
+        CameraFollow& c = *w.get<CameraFollow>(e);
+        propLabel("Sigue a");
+        const Entity tgt = c.target.isNull() ? Entity{} : scene.findById(c.target);
+        if (ImGui::BeginCombo("##camtarget", tgt.isNull() ? "(nadie)" : scene.info(tgt).name.c_str())) {
+            scene.traverse([&](Entity o, int) {
+                if (o == e) return;
+                ImGui::PushID(static_cast<int>(o.index));
+                if (ImGui::Selectable(scene.info(o).name.c_str(), o == tgt)) {
+                    pushUndo();
+                    c.target = scene.info(o).id;
+                }
+                ImGui::PopID();
+            });
+            ImGui::EndCombo();
+        }
+        dragF("Distancia", c.distance, 0.05f, 0.5f, 100, "%.1f m");
+        propLabel("Zoom mín./máx.");
+        ImGui::DragFloatRange2("##camzoom", &c.minDistance, &c.maxDistance, 0.05f, 0.3f, 200, "%.1f");
+        track();
+        dragF("Altura mira", c.height, 0.02f, -10, 10, "%.2f m");
+        dragF("Giro", c.yaw, 0.5f, -360, 360, "%.0f°");
+        dragF("Inclinación", c.pitch, 0.5f, -89, 89, "%.0f°");
+        propLabel("Inclinación lím.");
+        ImGui::DragFloatRange2("##campitch", &c.minPitch, &c.maxPitch, 0.5f, -89, 89, "%.0f°");
+        track();
+        check("Girar con dedo/mando", c.rotateWithInput);
+        if (c.rotateWithInput) {
+            dragF("Sensib. dedo", c.touchSensitivity, 0.005f, 0.01f, 2, "%.2f");
+            dragF("Vel. mando", c.padSpeed, 1, 10, 720, "%.0f°/s");
+        }
+        dragF("Suavizado", c.smoothing, 0.1f, 0, 50, "%.1f");
+        check("Evitar paredes", c.avoidWalls);
+        propLabel("");
+        ImGui::TextDisabled("Mover respecto a la cámara: Input.cameraAxis(\"Mover\")");
     } else if (name == "Terrain") {
         drawTerrainPanel(e, *w.get<Terrain>(e));
     } else if (name == "CharacterController") {
@@ -1421,6 +1457,15 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         dragF("Pendiente máx.", c.maxSlope, 0.5f, 1, 89, "%.0f°");
         dragF("Escalón", c.stepHeight, 0.01f, 0, 2, "%.2f m");
         dragF("Escala gravedad", c.gravityScale, 0.01f, -5, 5, "%.2f");
+        dragF("Aceleración", c.acceleration, 0.5f, 0, 500, "%.0f m/s²");
+        dragF("Frenado", c.deceleration, 0.5f, 0, 500, "%.0f m/s²");
+        dragF("Control aéreo", c.airControl, 0.01f, 0, 1, "%.2f");
+        propLabel("Saltos");
+        ImGui::SliderInt("##ccjumps", &c.maxJumps, 1, 5);
+        track();
+        dragF("Corte de salto", c.jumpCut, 0.01f, 0, 1, "%.2f");
+        check("Girar al moverse", c.faceMovement);
+        if (c.faceMovement) dragF("Vel. de giro", c.turnSpeed, 5, 30, 3600, "%.0f°/s");
         propLabel("Capa");
         ImGui::SliderInt("##cclayer", &c.layer, 0, 15);
         track();
