@@ -131,6 +131,9 @@ public:
     void beginShadowPass(const Mat4& lightViewProjection, int cascade = -1);
     // Antialiasing temporal para la próxima cámara en perspectiva (antes de setCamera).
     void setTemporalAA(bool on) { taaRequested_ = on; }
+    // HDR para el próximo beginFrame (la escena en coma flotante, tonemapping al final).
+    void setHdr(bool on) { hdrRequested_ = on; }
+    bool hdrActive() const { return hdrActive_; }
     void drawShadowCaster(MeshPrimitive mesh, const Mat4& world);
     void endShadowPass();
 
@@ -383,6 +386,8 @@ private:
     bool specBuffersOn_ = false;
     // TAA: proyección desplazada una fracción de píxel cada fotograma; la cámara del fotograma anterior reproyecta.
     bool taaRequested_ = false, taaActive_ = false, prevValid_ = false;
+    bool hdrRequested_ = false, hdrActive_ = false;
+    void setHdrUniforms(bool on);
     Mat4 unjitteredVP_, prevVP_;
     uint32_t taaFrame_ = 0;
     float jitterUV_[2] = {0, 0};

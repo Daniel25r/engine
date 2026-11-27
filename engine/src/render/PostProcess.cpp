@@ -79,6 +79,8 @@ uniform int uAOOn;
 uniform sampler2D uSSR;
 uniform sampler2D uSpec;
 uniform int uSSROn;
+uniform int uHdr;
+vec3 acesTone(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 out vec4 outColor;
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 vec3 fxaa(vec2 uv) {
@@ -110,6 +112,7 @@ void main() {
         c = c * (1.0 - luma(tint) * r.a) + r.rgb * tint * r.a;
     }
     if (uBloomOn == 1) c += texture(uBloom, vUV).rgb * uBloomIntensity;
+    if (uHdr == 1) c = pow(acesTone(max(c, 0.0)), vec3(1.0 / 2.2)); // HDR: el tonemapping se hace aquí
     c = (c - 0.5) * uContrast + 0.5;
     c = mix(vec3(luma(c)), c, uSaturation);
     c *= vec3(1.0 + 0.1 * uTemperature, 1.0, 1.0 - 0.1 * uTemperature);
@@ -369,11 +372,12 @@ GLuint link(const char* fs) {
     return p;
 }
 
-GLuint makeColorTexture(int w, int h) {
+GLuint makeColorTexture(int w, int h, bool hdr = false) {
     GLuint t = 0;
     glGenTextures(1, &t);
     glBindTexture(GL_TEXTURE_2D, t);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    if (hdr) glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_HALF_FLOAT, nullptr);
+    else glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -450,7 +454,7 @@ void PostProcessor::onContextLost() {
 
 bool PostProcessor::createTargets(int w, int h) {
     destroyTargets();
-    sceneColor_ = makeColorTexture(w, h);
+    sceneColor_ = makeColorTexture(w, h, hdr_);
     // Profundidad como textura (no renderbuffer): el SSAO la lee.
     glGenTextures(1, &sceneDepth_);
     glBindTexture(GL_TEXTURE_2D, sceneDepth_);
@@ -477,7 +481,7 @@ bool PostProcessor::createTargets(int w, int h) {
     // Pirámide del bloom: la mitad, un cuarto... hasta 5 niveles o 8 píxeles.
     int bw = std::max(1, w / 2), bh = std::max(1, h / 2);
     for (int i = 0; i < kBloomLevels && bw >= 8 && bh >= 8; ++i) {
-        bloomTex_[i] = makeColorTexture(bw, bh);
+        bloomTex_[i] = makeColorTexture(bw, bh, hdr_);
         glGenFramebuffers(1, &bloomFbo_[i]);
         glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloomTex_[i], 0);
@@ -511,31 +515,43 @@ bool PostProcessor::createTargets(int w, int h) {
             aoFbo_[i] = aoTex_[i] = 0;
         }
     }
-    ssrTex_ = makeColorTexture(aoW_, aoH_);
+    ssrTex_ = makeColorTexture(aoW_, aoH_, hdr_);
     glGenFramebuffers(1, &ssrFbo_);
     glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo_);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssrTex_, 0);
     for (int i = 0; i < 2; ++i) { // historia del TAA, a resolución completa
-        taaTex_[i] = makeColorTexture(w, h);
+        taaTex_[i] = makeColorTexture(w, h, hdr_);
         glGenFramebuffers(1, &taaFbo_[i]);
         glBindFramebuffer(GL_FRAMEBUFFER, taaFbo_[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, taaTex_[i], 0);
     }
     historyValid_ = false;
-    ssrTex2_ = makeColorTexture(aoW_, aoH_);
+    ssrTex2_ = makeColorTexture(aoW_, aoH_, hdr_);
     glGenFramebuffers(1, &ssrFbo2_);
     glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo2_);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssrTex2_, 0);
     if (!aoFbo_[0] || !aoFbo_[1]) TITAN_WARN("render", "SSAO desactivado: la GPU no puede dibujar en texturas RG16F");
     width_ = w;
     height_ = h;
-    TITAN_INFO("render", "Render target de la escena: %dx%d (%d niveles de bloom, profundidad de %d bits)", w, h, bloomLevels_, depthBits_);
+    TITAN_INFO("render", "Render target de la escena: %dx%d (%d niveles de bloom, profundidad de %d bits%s)", w, h, bloomLevels_,
+               depthBits_, hdr_ ? ", HDR" : "");
     return true;
 }
 
-bool PostProcessor::begin(int w, int h) {
+bool PostProcessor::begin(int w, int h, bool hdr) {
     if (!composite_ && !init()) return false;
-    if ((w != width_ || h != height_ || !sceneFbo_) && !createTargets(w, h)) return false;
+    hdr = hdr && !hdrFailed_;
+    if (w != width_ || h != height_ || !sceneFbo_ || hdr != hdr_) {
+        hdr_ = hdr;
+        if (!createTargets(w, h)) {
+            if (!hdr_) return false;
+            // La GPU no dibuja en RGBA16F: se sigue sin HDR (y no se vuelve a intentar).
+            TITAN_WARN("render", "HDR no disponible en esta GPU; se dibuja sin HDR");
+            hdrFailed_ = true;
+            hdr_ = false;
+            if (!createTargets(w, h)) return false;
+        }
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo_);
     glViewport(0, 0, w, h);
     if (sceneSpec_) { // reflectancia a cero: lo que no sea un opaco (cielo, sprites) no refleja nada
@@ -687,6 +703,7 @@ void PostProcessor::resolve(uint32_t target, int x, int y, int w, int h, const P
     glUniform1i(glGetUniformLocation(composite_, "uSSR"), 3);
     glUniform1i(glGetUniformLocation(composite_, "uSpec"), 4);
     glUniform1i(glGetUniformLocation(composite_, "uSSROn"), ssr ? 1 : 0);
+    glUniform1i(glGetUniformLocation(composite_, "uHdr"), (s.hdr && hdr_) ? 1 : 0);
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, ssr ? ssrTex2_ : sceneColor_);
     glActiveTexture(GL_TEXTURE4);

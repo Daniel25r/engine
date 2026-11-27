@@ -40,7 +40,13 @@ in vec2 vUV;
 in vec4 vColor;
 uniform sampler2D uTex;
 uniform int uSdf;
+uniform int uHdr;
 out vec4 outColor;
+vec3 invAces(vec3 y) { // inversa de la curva ACES: tras el tonemapping final queda el color original
+    y = clamp(y, 0.0, 0.99);
+    vec3 a = 2.43 * y - 2.51, b = 0.59 * y - 0.03, c = 0.14 * y;
+    return (-b - sqrt(max(b * b - 4.0 * a * c, 0.0))) / (2.0 * a);
+}
 void main() {
     if (uSdf == 1) {
         // Texto: el canal rojo es la distancia al borde de la letra (0,5 = borde).
@@ -50,6 +56,7 @@ void main() {
     } else {
         outColor = texture(uTex, vUV) * vColor;
     }
+    if (uHdr == 1) outColor.rgb = invAces(pow(outColor.rgb, vec3(2.2)));
 }
 )";
 
@@ -139,6 +146,12 @@ uniform ivec4 uGraphOut;       // registros de color base, metal, rugosidad y em
 uniform sampler2D uGraphTex0;
 uniform sampler2D uGraphTex1;
 uniform float uTime;
+uniform int uHdr;
+vec3 invAces(vec3 y) { // inversa de la curva ACES: tras el tonemapping final queda el color original
+    y = clamp(y, 0.0, 0.99);
+    vec3 a = 2.43 * y - 2.51, b = 0.59 * y - 0.03, c = 0.14 * y;
+    return (-b - sqrt(max(b * b - 4.0 * a * c, 0.0))) / (2.0 * a);
+}
 uniform float uAlphaCutoff; // < 0: sin recorte
 uniform sampler2DShadow uShadowMap;
 uniform vec4 uColor;
@@ -326,7 +339,7 @@ void main() {
         n = normalize(cotangentFrame(n, vWorld, vUV) * tn);
     }
     if (uGrid == 1) albedo *= 1.0 - gridLines(n);
-    if (uUnlit == 1) { outColor = vec4(pow(albedo, vec3(1.0 / 2.2)), alpha); return; }
+    if (uUnlit == 1) { outColor = vec4(uHdr == 1 ? invAces(albedo) : pow(albedo, vec3(1.0 / 2.2)), alpha); return; }
 
     float metal = uMetallic, rough = uRoughness;
     if (uHasMR == 1) {
@@ -405,8 +418,12 @@ void main() {
     outSpec = vec4(clamp(specTint, 0.0, 1.0), smoothness);
     color += toLinear(uEmission * texture(uEmissiveTex, vUV).rgb) * 2.0 + graphEmission * 2.0;
 
-    color = pow(aces(color * uExposure), vec3(1.0 / 2.2));
     float fog = 1.0 - exp(-uFogDensity * length(uCameraPos - vWorld));
+    if (uHdr == 1) { // lineal sin tonemapear: lo más brillante que 1 hace bloom de verdad
+        outColor = vec4(mix(color * uExposure, invAces(toLinear(uFogColor)), clamp(fog, 0.0, 1.0)), alpha);
+        return;
+    }
+    color = pow(aces(color * uExposure), vec3(1.0 / 2.2));
     outColor = vec4(mix(color, uFogColor, clamp(fog, 0.0, 1.0)), alpha);
 }
 )";
@@ -460,12 +477,23 @@ uniform vec3 uHorizon;
 uniform vec3 uGroundC;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
+uniform int uHdr;
 out vec4 outColor;
+vec3 invAces(vec3 y) { // inversa de la curva ACES: tras el tonemapping final queda el color original
+    y = clamp(y, 0.0, 0.99);
+    vec3 a = 2.43 * y - 2.51, b = 0.59 * y - 0.03, c = 0.14 * y;
+    return (-b - sqrt(max(b * b - 4.0 * a * c, 0.0))) / (2.0 * a);
+}
 void main() {
     vec4 far = uInvViewProj * vec4(vNdc, 1.0, 1.0);
     vec3 dir = normalize(far.xyz / far.w - uCam);
     vec3 c = dir.y > 0.0 ? mix(uHorizon, uZenith, pow(dir.y, 0.55)) : mix(uHorizon, uGroundC, pow(-dir.y, 0.35));
     float s = max(dot(dir, -uSunDir), 0.0);
+    if (uHdr == 1) { // el disco del sol es mucho más brillante que el cielo: hace bloom
+        c += uSunColor * pow(s, 12.0) * 0.18;
+        outColor = vec4(invAces(pow(c, vec3(2.2))) + pow(uSunColor, vec3(2.2)) * pow(s, 900.0) * 12.0, 1.0);
+        return;
+    }
     c += uSunColor * (pow(s, 900.0) * 3.0 + pow(s, 12.0) * 0.18);
     outColor = vec4(c, 1.0);
 }
@@ -930,6 +958,7 @@ void Renderer::resolveScene() {
     sceneInTarget_ = false;
     const Environment& e = lighting_.env;
     PostSettings s;
+    s.hdr = hdrActive_;
     s.taa = taaActive_ && e.taa;
     s.fxaa = quality_.fxaa && !s.taa;
     if (s.taa) {
@@ -965,6 +994,10 @@ void Renderer::resolveScene() {
     s.proj[3] = projection_.m[14];
     post_->resolve(static_cast<uint32_t>(targetFbo_), viewport_.x, viewport_.y, viewport_.width, viewport_.height, s);
     stats_.postPasses = post_->lastPasses();
+    if (hdrActive_) { // lo que se dibuja después (interfaz, gizmos) ya va sobre la imagen final
+        setHdrUniforms(false);
+        hdrActive_ = false;
+    }
     glUseProgram(0);
 }
 
@@ -1124,6 +1157,14 @@ void Renderer::shutdown() {
 
 // ---------------------------------------------------------------- Fotograma
 
+void Renderer::setHdrUniforms(bool on) {
+    for (GLuint p : {meshProgram_, spriteProgram_, skyProgram_}) {
+        if (!p) continue;
+        glUseProgram(p);
+        glUniform1i(glGetUniformLocation(p, "uHdr"), on ? 1 : 0);
+    }
+}
+
 void Renderer::beginFrame(const Viewport& vp, Color clear) {
     viewport_ = vp;
     if (viewport_.width < 1) viewport_.width = 1;
@@ -1137,9 +1178,11 @@ void Renderer::beginFrame(const Viewport& vp, Color clear) {
     if (quality_.postProcess) {
         const int sw = std::max(1, static_cast<int>(viewport_.width * quality_.renderScale + 0.5f));
         const int sh = std::max(1, static_cast<int>(viewport_.height * quality_.renderScale + 0.5f));
-        sceneInTarget_ = post_->begin(sw, sh);
+        sceneInTarget_ = post_->begin(sw, sh, hdrRequested_ && caps_.halfFloatTargets);
         if (!sceneInTarget_) glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(targetFbo_));
     }
+    hdrActive_ = sceneInTarget_ && post_->isHdr();
+    setHdrUniforms(hdrActive_);
     if (sceneInTarget_) {
         stats_.sceneWidth = post_->width();
         stats_.sceneHeight = post_->height();

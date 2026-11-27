@@ -162,6 +162,9 @@ struct Environment {
     float ssrIntensity = 1.0f;
     // Antialiasing temporal (TAA): bordes limpios y sin parpadeo; sustituye al FXAA. Desactivado por defecto.
     bool taa = false;
+    // HDR: la escena en coma flotante; emisión, sol y brillos por encima de 1 hacen bloom de verdad (neón).
+    // Sin cambios de aspecto en lo demás. Desactivado por defecto.
+    bool hdr = false;
 };
 
 struct Light {

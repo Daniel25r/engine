@@ -19,6 +19,7 @@ struct PostSettings {
     float ssrIntensity = 1.0f;
     // Antialiasing temporal: matrices sin desplazamiento (actual invertida y anterior) y desplazamiento en UV.
     bool taa = false, taaReset = false;
+    bool hdr = false; // la escena viene en lineal sin tonemapear: ACES al componer
     float invViewProj[16] = {}, prevViewProj[16] = {};
     float jitter[2] = {0, 0}; // P00, P11, P22, P23 de la proyección en perspectiva
     bool bloom = false;
@@ -36,7 +37,9 @@ public:
     void shutdown();
     void onContextLost(); // olvida los objetos (el contexto ya no existe)
     // Crea (si hace falta) y activa el render target de la escena. Devuelve false si no se puede.
-    bool begin(int width, int height);
+    // hdr: la escena en RGBA16F (valores por encima de 1: brillos, emisión, sol); se tonemapea al componer.
+    bool begin(int width, int height, bool hdr = false);
+    bool isHdr() const { return hdr_; }
     int width() const { return width_; }
     int height() const { return height_; }
     // Compone en el framebuffer "target", dentro del rectángulo (x, y, w, h) en píxeles de OpenGL.
@@ -55,6 +58,7 @@ private:
     uint32_t aoFbo_[2] = {}, aoTex_[2] = {}; // media resolución: oclusión y oclusión suavizada
     int aoW_ = 0, aoH_ = 0;
     int depthBits_ = 0;
+    bool hdr_ = false, hdrFailed_ = false;
     uint32_t sceneFbo_ = 0, sceneColor_ = 0, sceneDepth_ = 0;
     uint32_t sceneSpec_ = 0;          // reflectancia y lisura por píxel (la escriben los opacos)
     uint32_t ssr_ = 0, ssrFbo_ = 0, ssrTex_ = 0; // reflejos a media resolución
