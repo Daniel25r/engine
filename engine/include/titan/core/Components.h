@@ -318,6 +318,25 @@ struct Rigidbody {
     bool lockRotation = false;    // no gira (personajes)
 };
 
+// Vehículo con ruedas (Jolt): motor, caja de cambios automática, diferencial trasero, suspensión y fricción de
+// neumáticos. Necesita Rigidbody dinámico y Collider de caja en la misma entidad: las 4 ruedas se colocan en las
+// esquinas de la caja. Mira hacia -Z (como las cámaras). Se conduce desde Lua: e:drive(acelerar, girar, frenar).
+struct Vehicle {
+    float engineTorque = 500.0f;   // N·m
+    float maxRpm = 6000.0f;
+    float maxSteerAngle = 30.0f;   // grados (ruedas delanteras)
+    float wheelRadius = 0.35f;
+    float wheelWidth = 0.25f;
+    float suspensionLength = 0.35f;
+    float suspensionFrequency = 1.5f; // Hz: más alto = más dura
+    // Entidades que se mueven con cada rueda (delantera izq., delantera der., trasera izq., trasera der.); opcional.
+    std::vector<UUID> wheels;
+    // En ejecución (no se guarda): mandos y estado.
+    float throttle = 0, steer = 0, brake = 0, handbrake = 0;
+    float speedKmh = 0, rpm = 0;
+    int gear = 0;
+};
+
 struct Collider {
     // Mesh: los triángulos exactos de su MeshRenderer (modelo o primitiva); solo para lo que no se mueve (escenarios).
     // ConvexHull: la envolvente convexa del modelo; sirve también para cuerpos dinámicos.

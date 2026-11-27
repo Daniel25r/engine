@@ -324,6 +324,9 @@ void Editor::Impl::drawCreateMenu() {
         if (ImGui::MenuItem("Zona trigger")) createEntityOfKind("Zona trigger");
         if (ImGui::MenuItem("Personaje")) createEntityOfKind("Personaje");
         if (ImGui::MenuItem("Enemigo que persigue")) createEntityOfKind("Enemigo");
+        if (ImGui::MenuItem("Coche")) createEntityOfKind("Coche");
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("Coche conducible con motor, cambios, suspensión y ruedas (WASD; Espacio = freno de mano)");
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Efectos")) {
@@ -636,6 +639,7 @@ const char* Editor::Impl::typeLabel(Entity e) {
     if (w.has<Terrain>(e)) return "Terreno";
     if (w.has<VoxelTerrain>(e)) return "Mundo de bloques";
     if (w.has<ReflectionProbe>(e)) return "Sonda de reflexión";
+    if (w.has<Vehicle>(e)) return "Vehículo";
     if (w.has<NavAgent>(e)) return "Agente IA";
     if (w.has<CharacterController>(e)) return "Personaje";
     if (w.has<UIJoystick>(e)) return "Joystick";
@@ -1429,6 +1433,26 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         dragF("Recalcular cada", a.repathInterval, 0.01f, 0.05f, 10, "%.2f s");
         propLabel("");
         ImGui::TextDisabled("e:setDestination(x, y, z) o e:setDestination(jugador); AI.canSee(e, jugador)");
+    } else if (name == "Vehicle") {
+        Vehicle& v = *w.get<Vehicle>(e);
+        dragF("Par motor", v.engineTorque, 5, 10, 5000, "%.0f N·m");
+        dragF("Revoluciones máx.", v.maxRpm, 10, 1000, 15000, "%.0f rpm");
+        dragF("Giro máx.", v.maxSteerAngle, 0.2f, 0, 70, "%.0f°");
+        dragF("Radio rueda", v.wheelRadius, 0.005f, 0.05f, 2, "%.2f m");
+        dragF("Ancho rueda", v.wheelWidth, 0.005f, 0.02f, 1, "%.2f m");
+        dragF("Suspensión", v.suspensionLength, 0.005f, 0.05f, 2, "%.2f m");
+        dragF("Dureza susp.", v.suspensionFrequency, 0.02f, 0.3f, 5, "%.2f Hz");
+        propLabel("Ruedas visibles");
+        ImGui::TextDisabled("%zu de 4 (del. izq., del. der., tras. izq., tras. der.)", v.wheels.size());
+        propLabel("");
+        if (ImGui::SmallButton("Usar las 4 primeras hijas que se llamen \"Rueda\"")) {
+            pushUndo();
+            v.wheels.clear();
+            for (Entity c : scene.children(e))
+                if (scene.info(c).name.rfind("Rueda", 0) == 0 && v.wheels.size() < 4) v.wheels.push_back(scene.info(c).id);
+        }
+        propLabel("");
+        ImGui::TextDisabled("Necesita Rigidbody dinámico y Collider de caja. Mira hacia -Z.\nLua: e:drive(acelerar, girar, frenar), e:vehicleSpeed()");
     } else if (name == "ReflectionProbe") {
         ReflectionProbe& rp = *w.get<ReflectionProbe>(e);
         dragF("Intensidad", rp.intensity, 0.01f, 0, 4, "%.2f");

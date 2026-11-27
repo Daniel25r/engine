@@ -25,12 +25,15 @@ Importación y animación
 - Animaciones de otros archivos por nombre de hueso (flujo de Mixamo: personaje + animaciones "Without Skin").
 - Rigging y animación por claves en el editor de modelado.
 
+Física
+- Vehículos con ruedas (Jolt): motor, caja automática, suspensión, neumáticos; Crear › Física › Coche y `e:drive`.
+
 Multijugador
 - Módulo `titan_net` (ENet) y API `Net.*` de Lua; plantilla "Plaza multijugador".
 
 Plantillas nuevas: Mundo de bloques, Ciudad de neón (escaparate del render), Plaza multijugador.
 Proyectos anteriores: se cargan igual y se ven igual (las opciones nuevas están desactivadas en sus escenas).
-Licencia MIT. 144 pruebas automáticas.
+Licencia MIT. 146 pruebas automáticas.
 
 ## 0.13.0 — 2026-11-22 · Gran actualización: render, materiales, partículas, controles, física, animación y terreno
 

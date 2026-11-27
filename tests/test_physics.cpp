@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 
 #include "Test.h"
 #include "titan/physics/PhysicsWorld.h"
@@ -402,4 +403,69 @@ TEST("navegación: hornear, rodear una pared con A* y que un agente llegue camin
     CHECK(a.reached);
     const Vec3 p = s.transform(enemy).position();
     CHECK(p.z < -4.0f && std::fabs(p.x) < 1.5f);
+}
+
+namespace {
+Entity carAt(Scene& s, Vec3 p) {
+    Entity car = s.createEntity("Coche");
+    s.transform(car).setPosition(p);
+    Collider c;
+    c.size = {1.8f, 0.6f, 4.2f};
+    s.world().add<Collider>(car, c);
+    Rigidbody rb;
+    rb.mass = 1200;
+    s.world().add<Rigidbody>(car, rb);
+    s.world().add<Vehicle>(car);
+    for (int i = 0; i < 4; ++i) { // ruedas visibles
+        Entity w = s.createEntity("Rueda", car);
+        s.world().get<Vehicle>(car)->wheels.push_back(s.info(w).id);
+    }
+    return car;
+}
+} // namespace
+
+TEST("vehículo: acelera hacia delante (-Z), gira con el volante y no vuelca") {
+    Scene s;
+    Entity f = floorOf(s);
+    s.transform(f).setScale({400, 1, 400});
+    Entity car = carAt(s, {0, 1.2f, 0});
+    PhysicsWorld w;
+    w.build(s);
+    CHECK(w.isVehicle(car));
+    simulate(w, s, 1.0f); // se asienta sobre la suspensión
+    const Vec3 start = s.transform(car).position();
+    Vehicle& v = *s.world().get<Vehicle>(car);
+    v.throttle = 1;
+    simulate(w, s, 3.0f);
+    const Vec3 p = s.transform(car).position();
+    CHECK(p.z < start.z - 5.0f);           // avanzó hacia -Z
+    CHECK(std::fabs(p.x - start.x) < 1.0f); // en línea recta
+    CHECK(v.speedKmh > 40.0f); // sin patinar: ~60 km/h en 3 s
+    CHECK(v.rpm > 500.0f && v.gear >= 2); // con agarre normal la caja automática sube de marcha
+    const Vec3 up = s.computeWorldMatrix(car).transformDirection({0, 1, 0}).normalized();
+    CHECK(up.y > 0.9f);                     // de pie
+    // Las ruedas visibles siguen a las físicas: debajo del coche y por delante/detrás.
+    const Entity w0 = s.findById(v.wheels[0]);
+    CHECK(s.computeWorldMatrix(w0).translation().y < p.y);
+    // Volante a la derecha: se desvía hacia +X.
+    v.steer = 1;
+    simulate(w, s, 2.0f);
+    CHECK(s.transform(car).position().x > p.x + 1.0f);
+    // Frenar: casi se para.
+    v.throttle = 0;
+    v.steer = 0;
+    v.brake = 1;
+    simulate(w, s, 4.0f);
+    CHECK(std::fabs(v.speedKmh) < 3.0f);
+}
+
+TEST("vehículo: sin Rigidbody dinámico o sin caja no se crea (aviso, sin romper nada)") {
+    Scene s;
+    floorOf(s);
+    Entity e = s.createEntity("Coche roto");
+    s.world().add<Vehicle>(e);
+    PhysicsWorld w;
+    w.build(s);
+    CHECK(!w.isVehicle(e));
+    simulate(w, s, 0.2f);
 }

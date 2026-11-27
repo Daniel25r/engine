@@ -67,10 +67,12 @@ public:
     std::vector<Entity> overlapBox(const Vec3& center, const Vec3& halfExtents, const Quat& rotation,
                                    uint32_t layerMask = 0xFFFF) const override;
     bool isCharacter(Entity e) const override;
+    bool isVehicle(Entity e) const override;
 
     struct Impl;
 
 private:
+    void createVehicles(Scene& scene);
     void createBodies(Scene& scene, const std::vector<Entity>& list);
     void createCharacter(Scene& scene, Entity e, const CharacterController& cc);
     void createJoints(Scene& scene);

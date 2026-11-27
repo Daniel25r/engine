@@ -618,6 +618,66 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
             scene.transform(e).setPosition({spawnPoint().x, spawnPoint().y, 10});
         }
         scene.world().add<Camera>(e, c);
+    } else if (kind == "Coche") {
+        // Coche conducible: cuerpo físico con caja, vehículo de Jolt, carrocería con barniz, 4 ruedas y un script
+        // de conducción (WASD / joystick; Espacio = freno de mano).
+        scene.transform(e).setPosition(spawnPoint() + Vec3{0, 1.2f, 0});
+        Collider col;
+        col.size = {1.8f, 0.6f, 4.2f};
+        scene.world().add<Collider>(e, col);
+        Rigidbody rb;
+        rb.mass = 1200;
+        scene.world().add<Rigidbody>(e, rb);
+        Vehicle veh;
+        auto part = [&](const char* name, Vec3 pos, Vec3 scl, Color c, MeshPrimitive mesh) {
+            Entity p = scene.createEntity(name, e);
+            scene.transform(p).setPosition(pos);
+            scene.transform(p).setScale(scl);
+            MeshRenderer mr;
+            mr.mesh = mesh;
+            mr.color = c;
+            scene.world().add<MeshRenderer>(p, mr);
+            return p;
+        };
+        MeshRenderer& body = *scene.world().get<MeshRenderer>(part("Carrocería", {0, 0.05f, 0}, {1.8f, 0.55f, 4.2f}, Color::hex(0xB0101A), MeshPrimitive::Cube));
+        body.clearcoat = 1.0f;
+        body.roughness = 0.45f;
+        MeshRenderer& cab = *scene.world().get<MeshRenderer>(part("Cabina", {0, 0.55f, 0.2f}, {1.6f, 0.5f, 2.0f}, Color::hex(0x101216), MeshPrimitive::Cube));
+        cab.roughness = 0.05f;
+        const Vec3 wheelPos[4] = {{-0.8f, -0.3f, -1.4f}, {0.8f, -0.3f, -1.4f}, {-0.8f, -0.3f, 1.4f}, {0.8f, -0.3f, 1.4f}};
+        for (const Vec3& wp : wheelPos) { // la física las coloca y las hace girar al jugar
+            Entity w = part("Rueda", wp, {0.7f, 0.25f, 0.7f}, Color::hex(0x111111), MeshPrimitive::Cylinder);
+            scene.transform(w).setEulerDegrees({0, 0, 90});
+            veh.wheels.push_back(scene.info(w).id);
+        }
+        scene.world().add<Vehicle>(e, veh);
+        if (project) {
+            const std::string rel = "scripts/coche.lua";
+            if (!fs::exists(project->assetsDir() + "/" + rel)) {
+                fs::create_directories(project->assetsDir() + "/scripts");
+                fileio::writeAtomic(project->assetsDir() + "/" + rel, R"(-- Conducir: W/S acelerar y frenar (S hace marcha atrás si está casi parado), A/D girar,
+-- Espacio freno de mano. Funciona también con joystick o mando (acción "Mover").
+local Coche = { props = {} }
+
+function Coche:onUpdate(dt)
+    local giro, gas = Input.axis("Mover")
+    local freno = 0
+    if gas < 0 and self.entity:vehicleSpeed() > 2 then -- yendo hacia delante, S frena
+        freno = -gas
+        gas = 0
+    end
+    local mano = Input.action("Saltar") and 1 or 0
+    self.entity:drive(gas, giro, freno, mano)
+end
+
+return Coche
+)", false);
+            }
+            const AssetRecord* rec = project->assets().findByPath(rel);
+            const UUID sid = rec ? rec->id : project->assets().import(rel);
+            Script sc{sid, true};
+            scene.world().add<Script>(e, sc);
+        }
     } else if (kind == "Sonda de reflexión") {
         scene.transform(e).setPosition(spawnPoint() + Vec3{0, 1.5f, 0});
         scene.world().add<ReflectionProbe>(e);

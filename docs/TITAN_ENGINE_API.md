@@ -212,6 +212,15 @@ local izq, der = Audio.busLevel("Master") -- medidor en dB (-80 = silencio)
 Los errores son explícitos: un bus, tipo de efecto o parámetro que no existe detiene el script con un mensaje que
 dice cuál. Un sonido enviado a un bus inexistente suena en Master (con un aviso en el registro).
 
+### Vehículos
+
+En una entidad con `Vehicle`, `Rigidbody` dinámico y `Collider` de caja (Crear › Física › Coche lo monta todo):
+
+| Método | Hace |
+|---|---|
+| `e:drive(acelerar, girar, frenar, frenoDeMano)` | -1..1; acelerar < 0 = marcha atrás; girar > 0 = a la derecha; se mantiene hasta la siguiente llamada |
+| `e:vehicleSpeed()` / `e:vehicleRpm()` / `e:vehicleGear()` | km/h (negativo hacia atrás), revoluciones del motor, marcha actual |
+
 ### Red multijugador (`Net`)
 
 Un jugador crea la partida (servidor) y los demás se conectan. Los mensajes son tablas de Lua (o textos) que viajan

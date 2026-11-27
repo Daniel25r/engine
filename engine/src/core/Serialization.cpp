@@ -364,6 +364,34 @@ ComponentRegistry ComponentRegistry::createDefault() {
             readMaterialFields(m, rd);
         });
 
+    r.addSimple<Vehicle>(
+        "Vehicle",
+        [](const Vehicle& v) {
+            Json w = Json::array();
+            for (UUID id : v.wheels) w.push_back(assetToJson(id));
+            return Json{{"engineTorque", toJson(v.engineTorque)}, {"maxRpm", toJson(v.maxRpm)},
+                        {"maxSteerAngle", toJson(v.maxSteerAngle)}, {"wheelRadius", toJson(v.wheelRadius)},
+                        {"wheelWidth", toJson(v.wheelWidth)}, {"suspensionLength", toJson(v.suspensionLength)},
+                        {"suspensionFrequency", toJson(v.suspensionFrequency)}, {"wheels", w}};
+        },
+        [](Vehicle& v, FieldReader& rd) {
+            rd.read("engineTorque", v.engineTorque);
+            rd.read("maxRpm", v.maxRpm);
+            rd.read("maxSteerAngle", v.maxSteerAngle);
+            rd.read("wheelRadius", v.wheelRadius);
+            rd.read("wheelWidth", v.wheelWidth);
+            rd.read("suspensionLength", v.suspensionLength);
+            rd.read("suspensionFrequency", v.suspensionFrequency);
+            std::string raw;
+            rd.readRaw("wheels", raw);
+            const Json js = raw.empty() ? Json() : Json::parse(raw, nullptr, false);
+            if (js.is_array())
+                for (const Json& x : js) {
+                    UUID id;
+                    if (x.is_string() && UUID::parse(x.get<std::string>(), id)) v.wheels.push_back(id);
+                }
+        });
+
     r.addSimple<ReflectionProbe>(
         "ReflectionProbe",
         [](const ReflectionProbe& p) { return Json{{"intensity", toJson(p.intensity)}, {"resolution", p.resolution}}; },

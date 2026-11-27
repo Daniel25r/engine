@@ -46,6 +46,8 @@ public:
                                            uint32_t layerMask = 0xFFFF) const = 0;
     // ---- Controlador de personaje ----
     virtual bool isCharacter(Entity e) const = 0;
+    // Vehículos: false si la entidad no es un vehículo creado por la física.
+    virtual bool isVehicle(Entity e) const { (void)e; return false; }
 };
 
 } // namespace titan

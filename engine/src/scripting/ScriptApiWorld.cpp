@@ -252,6 +252,20 @@ int e_move(lua_State* L) { // e:move(x, z): velocidad horizontal en m/s (se mant
     return 0;
 }
 int e_jump(lua_State* L) { character(L, live(L, 1)).jumpSpeed = float(luaL_optnumber(L, 2, 5)); return 0; }
+// ---------------------------------------------------------------- Vehículos
+// e:drive(acelerar, girar, frenar, freno de mano): -1..1 (acelerar < 0 = marcha atrás), girar > 0 a la derecha.
+int e_drive(lua_State* L) {
+    Vehicle& v = component<Vehicle>(L, live(L, 1), "Vehicle");
+    v.throttle = float(luaL_optnumber(L, 2, 0));
+    v.steer = float(luaL_optnumber(L, 3, 0));
+    v.brake = float(luaL_optnumber(L, 4, 0));
+    v.handbrake = float(luaL_optnumber(L, 5, 0));
+    return 0;
+}
+int e_vehicleSpeed(lua_State* L) { lua_pushnumber(L, component<Vehicle>(L, live(L, 1), "Vehicle").speedKmh); return 1; }
+int e_vehicleRpm(lua_State* L) { lua_pushnumber(L, component<Vehicle>(L, live(L, 1), "Vehicle").rpm); return 1; }
+int e_vehicleGear(lua_State* L) { lua_pushinteger(L, component<Vehicle>(L, live(L, 1), "Vehicle").gear); return 1; }
+
 int e_isGrounded(lua_State* L) { lua_pushboolean(L, character(L, live(L, 1)).grounded); return 1; }
 int e_endJump(lua_State* L) { character(L, live(L, 1)).cutJump = true; return 0; } // salto variable: soltar el botón
 int e_isTouchingWall(lua_State* L) {
@@ -496,7 +510,9 @@ const luaL_Reg kWorldEntityMethods[] = {
     {"isTouchingWall", e_isTouchingWall}, {"setVerticalVelocity", e_setVerticalVelocity},
     {"pushCharacter", e_pushCharacter}, {"jumpsUsed", e_jumpsUsed},
     {"playParticles", e_playParticles}, {"stopParticles", e_stopParticles}, {"emitParticles", e_emitParticles},
-    {"particleCount", e_particleCount}, {nullptr, nullptr}};
+    {"particleCount", e_particleCount},
+    {"drive", e_drive}, {"vehicleSpeed", e_vehicleSpeed}, {"vehicleRpm", e_vehicleRpm}, {"vehicleGear", e_vehicleGear},
+    {nullptr, nullptr}};
 
 } // namespace
 
