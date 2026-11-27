@@ -16,6 +16,7 @@
 #include "lua.h"
 #include "lualib.h"
 #include "titan/core/FileIO.h"
+#include "titan/core/ModelImport.h"
 #include "titan/core/Templates.h"
 #include "titan/core/Version.h"
 
@@ -867,12 +868,27 @@ void Editor::Impl::importFile(const std::string& path, const std::string& name) 
     std::string base = name.empty() ? fs::path(path).filename().string() : name;
     for (char& c : base)
         if (c == '/' || c == '\\' || c == ':') c = '_';
+    // OBJ, STL, PLY y .blend se convierten a GLB (lo que carga el motor); se importa el GLB.
+    const bool convert = isConvertibleModel(base);
+    if (convert) base = fs::path(base).stem().string() + ".glb";
     std::string rel = "imported/" + base;
     for (int i = 2; fs::exists(project->assetsDir() + "/" + rel); ++i)
         rel = "imported/" + fs::path(base).stem().string() + "_" + std::to_string(i) + fs::path(base).extension().string();
     std::error_code ec;
     fs::create_directories(project->assetsDir() + "/imported", ec);
-    fs::copy_file(path, project->assetsDir() + "/" + rel, ec);
+    if (convert) {
+        ImportReport rep;
+        std::string err;
+        setStatus("Convirtiendo " + fs::path(path).filename().string() + "...");
+        if (!convertModelToGlb(path, project->assetsDir() + "/" + rel, &rep, &err)) {
+            TITAN_ERROR("editor", "No se pudo importar %s: %s", path.c_str(), err.c_str());
+            setStatus("Error al importar: " + err);
+            return;
+        }
+        for (const std::string& w : rep.warnings) TITAN_WARN("editor", "%s: %s", fs::path(path).filename().string().c_str(), w.c_str());
+    } else {
+        fs::copy_file(path, project->assetsDir() + "/" + rel, ec);
+    }
     if (ec) {
         TITAN_ERROR("editor", "No se pudo importar %s: %s", path.c_str(), ec.message().c_str());
         setStatus("Error al importar");

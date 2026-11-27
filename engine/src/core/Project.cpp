@@ -44,7 +44,8 @@ AssetType assetTypeFromExtension(const std::string& path) {
     if (ext == ".png" || ext == ".jpg" || ext == ".jpeg") return AssetType::Texture;
     if (ext == ".lua") return AssetType::Script;
     if (ext == ".wav" || ext == ".ogg" || ext == ".mp3") return AssetType::Audio;
-    if (ext == ".gltf" || ext == ".glb" || ext == ".obj") return AssetType::Model;
+    // OBJ, STL, PLY y .blend no se cargan directamente: al importarlos se convierten a .glb (ModelImport.h).
+    if (ext == ".gltf" || ext == ".glb") return AssetType::Model;
     if (ext == ".ttf" || ext == ".otf") return AssetType::Font;
     if (ext == ".json") return AssetType::Data;
     return AssetType::Unknown;

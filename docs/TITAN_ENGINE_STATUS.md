@@ -169,7 +169,9 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 | PNG, JPG, TGA, BMP | ✅ (stb_image) |
 | WAV, MP3, FLAC | ✅ (miniaudio) |
 | TTF/OTF | ✅ |
-| FBX, OBJ, DAE, STL, PLY, WEBP, HDR/EXR, OGG | ❌ |
+| OBJ (+MTL y texturas), STL, PLY → convertidos a GLB al importar | ✅ (ver `TITAN_STUDIO.md`) |
+| .blend (con Blender instalado) | 🔨 sin probar |
+| FBX, DAE, SMD/DMX, WEBP, HDR/EXR, OGG | ❌ |
 | Compresión de texturas (ASTC/ETC2), optimización de mallas, LOD automático | ❌ (se detecta si el dispositivo admite ASTC) |
 
 ## 14. UI de juego
@@ -250,6 +252,7 @@ Multihilo propio, pools, streaming, carga asíncrona, LOD, oclusión: ❌.
 
 | Fecha | Bloque | Resultado |
 |---|---|---|
+| 2026-11-27 | Titán Studio, fase 1: malla editable con operaciones de modelado, escritor GLB, importar OBJ/MTL, STL, PLY y .blend (con Blender instalado). Ver `docs/TITAN_STUDIO.md` | 118/118 pruebas; OBJ con textura y STL importados y vistos en el reproductor |
 | 2026-11-27 | Nueva pantalla de inicio (lanzador): barra lateral, proyectos en tarjetas por fecha con búsqueda y borrado confirmado, galería de plantillas con ilustraciones y la plantilla de ejemplo "Isla Estelar" (juego completo) creada desde el editor | Probado con clics simulados: crear el ejemplo, abrirlo y Jugar |
 | 2026-11-27 | Interfaz del editor para PC: escala de Windows, tamaño elegible (100–200 %, Ctrl + / Ctrl −, 125 % por defecto, se recuerda), calidad alta por defecto en PC, editor sin consola | 111/111 pruebas; capturas a 1920×1080 |
 | 2026-11-27 | Compilación para Windows en GitHub Actions; el editor abre en un PC con Windows | 3 intentos: errores de MSVC (include, cabeceras GLES) y cuota de Artifacts → Releases |

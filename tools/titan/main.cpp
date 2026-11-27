@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "titan/core/FileIO.h"
+#include "titan/core/ModelImport.h"
 #include "titan/samples/Samples.h"
 #include "titan/core/Log.h"
 #include "titan/audio/SoundCheck.h"
@@ -41,6 +42,7 @@ int usage() {
         "  titan package <carpeta> <salida>           generar el paquete de juego para el runtime\n"
         "  titan benchmark <carpeta>                  crear el proyecto de pruebas de rendimiento\n"
         "  titan demo-plataformas <carpeta>           crear la demo de plataformas 3D (menú, nivel, victoria)\n"
+        "  titan import <carpeta> <archivo>           importar (OBJ, STL, PLY y .blend se convierten a GLB)\n"
         "  titan audiotest <archivo.wav>              grabar la prueba de sonido del motor en un WAV\n\n"
         "Opción: --scene <ruta dentro de assets/> para trabajar en otra escena.\n",
         kEngineName, kEngineVersion);
@@ -427,6 +429,38 @@ int main(int argc, char** argv) {
     const std::string& dir = args[1];
 
     if (cmd == "audiotest") return cmdAudioTest(dir); // aquí "dir" es el archivo WAV de salida
+    if (cmd == "import") { // titan import <proyecto> <archivo>: modelos (convertidos a GLB), texturas, sonidos...
+        if (args.size() < 3) return usage();
+        std::string err;
+        auto p = Project::open(dir, &err);
+        if (!p) {
+            std::fprintf(stderr, "Error: %s\n", err.c_str());
+            return 1;
+        }
+        const std::filesystem::path src(args[2]);
+        std::filesystem::create_directories(p->assetsDir() + "/imported");
+        std::string rel = "imported/" + src.filename().string();
+        if (isConvertibleModel(src.string())) {
+            rel = "imported/" + src.stem().string() + ".glb";
+            ImportReport rep;
+            if (!convertModelToGlb(src.string(), p->assetsDir() + "/" + rel, &rep, &err)) {
+                std::fprintf(stderr, "Error: %s\n", err.c_str());
+                return 1;
+            }
+            for (const std::string& w : rep.warnings) std::printf("Aviso: %s\n", w.c_str());
+        } else {
+            std::error_code ec;
+            std::filesystem::copy_file(src, p->assetsDir() + "/" + rel, std::filesystem::copy_options::overwrite_existing, ec);
+            if (ec) {
+                std::fprintf(stderr, "Error: %s\n", ec.message().c_str());
+                return 1;
+            }
+        }
+        const UUID id = p->assets().import(rel);
+        p->save();
+        std::printf("Importado %s (%s)\n", rel.c_str(), id.toString().c_str());
+        return 0;
+    }
     if (cmd == "benchmark") return cmdBenchmark(dir);
     if (cmd == "demo-plataformas") return cmdDemoPlatformer(dir);
 
