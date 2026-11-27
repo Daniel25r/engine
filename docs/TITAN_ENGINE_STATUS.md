@@ -69,7 +69,8 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 | SSAO (oclusión ambiental en pantalla, estilo Alchemy/SAO): media resolución, 12 muestras en espiral, suavizado que respeta bordes; perfiles alto y muy alto; activado en las plantillas nuevas (los proyectos anteriores no cambian) | ✅ | Prueba `calidad:` (perfiles y guardado); capturas de la escena de materiales, el mundo de bloques e Isla Estelar |
 | Reflejos en pantalla (SSR): rayo en espacio de cámara con refinado binario y comprobación del impacto, suavizado por confianza, a media resolución; los opacos escriben su reflectancia en un segundo destino (MRT). Perfiles alto y muy alto; activado en las plantillas nuevas | ✅ | Prueba `calidad:`; captura de suelo pulido reflejando cilindro, cubo y esferas, sin rayas |
 | Barniz (clear coat) en el material: capa GGX con F0 0,04 y su propia rugosidad, sobre la normal geométrica; atenúa la capa de abajo y también se refleja en el SSR | ✅ | Prueba `calidad:` (guardado); captura de esferas rojas con barniz |
-| Sondas de reflexión con cubemaps, lightmaps, GI, volumétricas, cascadas de sombras, editor de materiales por nodos | ❌ | Lo que el SSR no ve (fuera de pantalla) refleja el cielo |
+| Sombras del sol en 4 cascadas (CSM) en un atlas 2×2: esferas estables por tramo, alineadas a texels, recorte por cascada, sesgo por la normal según el tamaño del texel y mezcla entre cascadas | ✅ | Capturas (escena de materiales, mundo de bloques): sombras nítidas cerca y hasta "Dist. sombras", sin costuras |
+| Sondas de reflexión con cubemaps, lightmaps, GI, volumétricas, editor de materiales por nodos | ❌ | Ver `docs/TITAN_RUMBO_AAA.md` |
 | TAA, DoF, motion blur, aberración cromática, grano, auto exposición | ❌ | |
 
 ## 3. Materiales y shaders

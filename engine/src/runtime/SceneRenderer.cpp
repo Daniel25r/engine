@@ -205,7 +205,46 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     // ---- Sombras del sol: un mapa ortográfico centrado delante de la cámara, alineado a sus texels
     // para que las sombras no "tiemblen" al mover la cámara.
     L.shadows = L.env.shadows && renderer.quality().shadows && haveSun && anyCaster && view.perspective;
-    if (L.shadows) {
+    L.cascades = 0;
+    if (L.shadows && cascadedShadows) {
+        // 4 cascadas: esferas que envuelven cada tramo del frustum (no cambian al girar la cámara) y alineadas a
+        // los texels (no tiemblan al moverla). Tramos más cortos cerca: más detalle donde se mira.
+        const float D = std::max(10.0f, L.env.shadowDistance);
+        const float splits[4] = {D * 0.07f, D * 0.18f, D * 0.42f, D};
+        const Vec3 fwd = camWorld.transformDirection({0, 0, -1}).normalized();
+        const Vec3 right = camWorld.transformDirection({1, 0, 0}).normalized();
+        const Vec3 up = camWorld.transformDirection({0, 1, 0}).normalized();
+        const float tanX = 1.0f / std::max(view.projection.m[0], 1e-4f), tanY = 1.0f / std::max(view.projection.m[5], 1e-4f);
+        const Vec3 dir = L.sunDirection.normalized();
+        const float tileSize = renderer.shadowMapSize() * 0.5f;
+        float prev = 0.1f;
+        for (int i = 0; i < 4; ++i) {
+            const float n = prev, f = splits[i];
+            Vec3 corners[8];
+            int k = 0;
+            for (float dist : {n, f})
+                for (float sx : {-1.0f, 1.0f})
+                    for (float sy : {-1.0f, 1.0f})
+                        corners[k++] = camPos + fwd * dist + right * (sx * tanX * dist) + up * (sy * tanY * dist);
+            Vec3 center{};
+            for (const Vec3& c : corners) center = center + c * 0.125f;
+            float radius = 0;
+            for (const Vec3& c : corners) radius = std::max(radius, (c - center).length());
+            radius = std::ceil(radius * 4.0f) / 4.0f; // radio estable (no cambia al girar)
+            const float back = std::max(radius * 3.0f, 60.0f);
+            Mat4 lightView = lookAt(center - dir * back, center);
+            const float texel = 2.0f * radius / tileSize;
+            const Vec3 ls = lightView.transformPoint(center);
+            const Vec3 snapped{std::floor(ls.x / texel) * texel, std::floor(ls.y / texel) * texel, ls.z};
+            lightView = Mat4::translate(snapped - ls) * lightView;
+            L.cascadeVP[i] = Mat4::ortho(-radius, radius, -radius, radius, 0.1f, back + radius) * lightView;
+            L.cascadeSplit[i] = f;
+            L.cascadeTexel[i] = texel;
+            prev = f;
+        }
+        L.cascades = 4;
+        L.lightViewProjection = L.cascadeVP[3];
+    } else if (L.shadows) {
         const float radius = std::max(5.0f, L.env.shadowDistance * 0.5f);
         const Vec3 forward = camWorld.transformDirection({0, 0, -1}).normalized();
         Vec3 focus = camPos + forward * radius * 0.8f;
@@ -222,12 +261,21 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     // (lo que queda fuera de ella tampoco aparecería en el mapa de sombras).
     const Frustum camFrustum = Frustum::fromMatrix(view.projection * view.view);
     const Frustum lightFrustum = Frustum::fromMatrix(L.lightViewProjection);
+    Frustum cascadeFrustum[4];
+    for (int i = 0; i < L.cascades; ++i) cascadeFrustum[i] = Frustum::fromMatrix(L.cascadeVP[i]);
+    auto inAnyShadow = [&](const AABB& b) {
+        if (L.cascades == 0) return lightFrustum.intersects(b);
+        for (int i = 0; i < L.cascades; ++i)
+            if (cascadeFrustum[i].intersects(b)) return true;
+        return false;
+    };
     for (Candidate& c : candidates_) {
         const MeshRenderer& m = *c.item.mesh;
         const bool opaque = m.color.a >= 0.999f || m.alphaClip;
         const bool caster = L.shadows && opaque && m.castShadows && !m.unlit;
         const bool inView = !culling || camFrustum.intersects(c.bounds);
-        const bool inShadow = caster && (!culling || lightFrustum.intersects(c.bounds));
+        const bool inShadow = caster && (!culling || inAnyShadow(c.bounds));
+        c.item.bounds = c.bounds;
         if (caster) stats_.shadowCasters++;
         if (!inView && !inShadow) continue;
         if (c.skinned) {
@@ -267,13 +315,19 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     groupInstances(casters_, shadowBatches_);
     groupInstances(opaque_, batches_);
     if (L.shadows) {
-        renderer.beginShadowPass(L.lightViewProjection);
-        for (const InstanceBatch& b : shadowBatches_) renderer.drawShadowCastersInstanced(b.material->mesh, b.worlds);
-        for (const TerrainItem& t : terrains_)
-            if (!culling || lightFrustum.intersects(t.bounds)) renderer.drawTerrainShadow(t.handle, *t.world);
-        for (const MeshItem& m : casters_) {
-            if (m.model >= 0) renderer.drawModelShadow(m.model, *m.world, m.pose >= 0 ? &poses_[m.pose] : nullptr);
-            else renderer.drawShadowCaster(m.mesh->mesh, *m.world);
+        const int passes = L.cascades > 0 ? L.cascades : 1;
+        for (int ci = 0; ci < passes; ++ci) {
+            const bool csm = L.cascades > 0;
+            const Frustum& fr = csm ? cascadeFrustum[ci] : lightFrustum;
+            renderer.beginShadowPass(csm ? L.cascadeVP[ci] : L.lightViewProjection, csm ? ci : -1);
+            for (const InstanceBatch& b : shadowBatches_) renderer.drawShadowCastersInstanced(b.material->mesh, b.worlds);
+            for (const TerrainItem& t : terrains_)
+                if (!culling || fr.intersects(t.bounds)) renderer.drawTerrainShadow(t.handle, *t.world);
+            for (const MeshItem& m : casters_) {
+                if (culling && csm && !fr.intersects(m.bounds)) continue; // cada cascada solo lo suyo
+                if (m.model >= 0) renderer.drawModelShadow(m.model, *m.world, m.pose >= 0 ? &poses_[m.pose] : nullptr);
+                else renderer.drawShadowCaster(m.mesh->mesh, *m.world);
+            }
         }
         renderer.endShadowPass();
     }

@@ -129,6 +129,10 @@ uniform int uHasMR;
 uniform int uHasOcclusion;
 uniform float uNormalStrength;
 uniform vec2 uClearcoat; // cantidad, rugosidad
+uniform int uCascades;
+uniform mat4 uCascadeVP[4];
+uniform vec4 uCascadeSplit;
+uniform vec4 uCascadeTexel;
 uniform float uAlphaCutoff; // < 0: sin recorte
 uniform sampler2DShadow uShadowMap;
 uniform vec4 uColor;
@@ -177,8 +181,37 @@ vec3 brdf(vec3 n, vec3 v, vec3 l, vec3 albedo, float metal, float rough, vec3 ra
     return (kd * albedo / PI + D * V * F) * radiance * ndl;
 }
 
+// Cascada i del atlas 2×2: PCF 3×3 sin salirse de su cuarto.
+float cascadeShadow(int i, vec3 nGeom) {
+    vec4 ls = uCascadeVP[i] * vec4(vWorld + nGeom * uCascadeTexel[i] * 1.5, 1.0);
+    vec3 p = ls.xyz / ls.w * 0.5 + 0.5;
+    if (p.z >= 1.0) return 1.0;
+    float texel = 1.0 / float(textureSize(uShadowMap, 0).x);
+    vec2 tile = vec2(float(i % 2), float(i / 2)) * 0.5;
+    vec2 lo = tile + vec2(texel * 1.5), hi = tile + vec2(0.5 - texel * 1.5);
+    vec2 uv = tile + clamp(p.xy, 0.0, 1.0) * 0.5;
+    float sum = 0.0;
+    for (int x = -1; x <= 1; ++x)
+        for (int y = -1; y <= 1; ++y)
+            sum += texture(uShadowMap, vec3(clamp(uv + vec2(x, y) * texel, lo, hi), p.z - 0.0005));
+    return sum / 9.0;
+}
+
 float shadowFactor() {
     if (uShadowsOn == 0) return 1.0;
+    if (uCascades > 0) {
+        vec3 nGeom = normalize(gl_FrontFacing ? vNormal : -vNormal);
+        float d = length(vWorld - uCameraPos);
+        int i = 0;
+        for (int k = 0; k < 3; ++k)
+            if (k < uCascades - 1 && d > uCascadeSplit[k]) i = k + 1;
+        float s = cascadeShadow(i, nGeom);
+        // Último 10 % de cada cascada: mezcla con la siguiente (sin costuras); la última se desvanece.
+        float end = uCascadeSplit[i], start = i == 0 ? 0.0 : uCascadeSplit[i - 1];
+        float t = clamp((d - (end - (end - start) * 0.1)) / max((end - start) * 0.1, 1e-3), 0.0, 1.0);
+        if (t > 0.0) s = mix(s, i + 1 < uCascades ? cascadeShadow(i + 1, nGeom) : 1.0, t);
+        return s;
+    }
     vec3 p = vShadow.xyz / vShadow.w * 0.5 + 0.5;
     if (p.x <= 0.0 || p.x >= 1.0 || p.y <= 0.0 || p.y >= 1.0 || p.z >= 1.0) return 1.0;
     float texel = 1.0 / float(textureSize(uShadowMap, 0).x);
@@ -555,6 +588,8 @@ bool Renderer::createGpuObjects() {
     uUVTransform_ = u("uUVTransform"); uNormalTex_ = u("uNormalTex"); uMRTex_ = u("uMRTex");
     uEmissiveTex_ = u("uEmissiveTex"); uOcclusionTex_ = u("uOcclusionTex"); uHasNormal_ = u("uHasNormal");
     uHasMR_ = u("uHasMR"); uHasOcclusion_ = u("uHasOcclusion"); uNormalStrength_ = u("uNormalStrength"); uClearcoat_ = u("uClearcoat");
+    uCascades_ = u("uCascades"); uCascadeVP_ = u("uCascadeVP[0]"); uCascadeSplit_ = u("uCascadeSplit");
+    uCascadeTexel_ = u("uCascadeTexel");
     uAlphaCutoff_ = u("uAlphaCutoff"); uSpot_ = u("uSpot"); uSpotInner_ = u("uSpotInner");
     uInstanced_ = u("uInstanced");
     uShadowInstanced_ = glGetUniformLocation(shadowProgram_, "uInstanced");
@@ -1071,14 +1106,25 @@ void Renderer::setCamera(const Mat4& view, const Mat4& projection) {
     camUp_ = camWorld.transformDirection({0, 1, 0}).normalized();
 }
 
-void Renderer::beginShadowPass(const Mat4& lightVP) {
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo_);
-    shadowDrawStart_ = stats_.drawCalls;
+void Renderer::beginShadowPass(const Mat4& lightVP, int cascade) {
+    if (cascade <= 0) {
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo_);
+        shadowDrawStart_ = stats_.drawCalls;
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
-    glViewport(0, 0, shadowSize_, shadowSize_);
-    glDisable(GL_SCISSOR_TEST);
     glDepthMask(GL_TRUE);
-    glClear(GL_DEPTH_BUFFER_BIT);
+    if (cascade <= 0) {
+        glDisable(GL_SCISSOR_TEST);
+        glClear(GL_DEPTH_BUFFER_BIT);
+    }
+    if (cascade < 0) {
+        glViewport(0, 0, shadowSize_, shadowSize_);
+    } else { // cuarto del atlas
+        const int half = shadowSize_ / 2, x = (cascade % 2) * half, y = (cascade / 2) * half;
+        glViewport(x, y, half, half);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(x, y, half, half);
+    }
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDisable(GL_CULL_FACE); // las caras traseras también proyectan sombra (planos, objetos abiertos)
@@ -1100,6 +1146,7 @@ void Renderer::drawShadowCaster(MeshPrimitive type, const Mat4& world) {
 }
 
 void Renderer::endShadowPass() {
+    glDisable(GL_SCISSOR_TEST);
     shadowDrawCalls_ += stats_.drawCalls - shadowDrawStart_;
     glBindVertexArray(0);
     glDisable(GL_POLYGON_OFFSET_FILL);
@@ -1142,6 +1189,15 @@ void Renderer::setLighting(const SceneLighting& l) {
     glUniform1f(uExposure_, std::max(e.exposure, 0.01f));
     glUniform1i(uShadowsOn_, l.shadows ? 1 : 0);
     glUniformMatrix4fv(uLightVP_, 1, GL_FALSE, l.lightViewProjection.m);
+    {
+        float vps[64];
+        for (int i = 0; i < 4; ++i)
+            for (int k = 0; k < 16; ++k) vps[i * 16 + k] = l.cascadeVP[i].m[k];
+        glUniform1i(uCascades_, l.shadows ? std::clamp(l.cascades, 0, 4) : 0);
+        glUniformMatrix4fv(uCascadeVP_, 4, GL_FALSE, vps);
+        glUniform4f(uCascadeSplit_, l.cascadeSplit[0], l.cascadeSplit[1], l.cascadeSplit[2], l.cascadeSplit[3]);
+        glUniform4f(uCascadeTexel_, l.cascadeTexel[0], l.cascadeTexel[1], l.cascadeTexel[2], l.cascadeTexel[3]);
+    }
     glUniform1i(uShadowMap_, 1);
     glUniform1i(uTex_, 0);
     glActiveTexture(GL_TEXTURE1);

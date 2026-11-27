@@ -43,6 +43,7 @@ public:
     bool culling = true;
     // Agrupar las primitivas iguales con el mismo material (sin texturas) y dibujarlas con GPU instancing.
     bool instancing = true;
+    bool cascadedShadows = true; // sombras del sol en 4 cascadas (false: un solo mapa, como antes)
     const CullStats& cullStats() const { return stats_; }
 
     using TextureResolver = std::function<TextureHandle(AssetRef)>;
@@ -66,6 +67,7 @@ private:
         float depth;
         int model;
         int pose; // índice en poses_ o -1
+        AABB bounds{};
     };
     std::vector<std::vector<Mat4>> poses_;
     size_t poseCount_ = 0;

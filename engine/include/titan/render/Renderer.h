@@ -83,7 +83,13 @@ struct SceneLighting {
     Color sunColor{1, 0.96f, 0.9f, 1};      // ya multiplicado por la intensidad
     std::vector<PointLightData> points;     // como máximo 4 se usan
     bool shadows = false;
-    Mat4 lightViewProjection;               // para el mapa de sombras
+    Mat4 lightViewProjection;               // para el mapa de sombras (la última cascada si hay cascadas)
+    // Sombras en cascada (CSM): hasta 4 mapas del sol, cada uno para un tramo de distancia a la cámara, en un
+    // atlas 2×2 dentro del mapa de sombras. 0 = un solo mapa (lightViewProjection).
+    int cascades = 0;
+    Mat4 cascadeVP[4];
+    float cascadeSplit[4] = {0, 0, 0, 0}; // distancia a la cámara donde termina cada cascada
+    float cascadeTexel[4] = {0, 0, 0, 0}; // tamaño de un texel en metros (sesgo por la normal)
 };
 
 class Renderer {
@@ -117,7 +123,8 @@ public:
 
     // Mapa de sombras del sol: se rellena ANTES de beginFrame.
     static constexpr int kShadowMapSize = 2048; // por defecto; el perfil de calidad lo cambia (shadowMapSize())
-    void beginShadowPass(const Mat4& lightViewProjection);
+    // cascade >= 0: dibuja en su cuarto del atlas (la 0 limpia el mapa entero).
+    void beginShadowPass(const Mat4& lightViewProjection, int cascade = -1);
     void drawShadowCaster(MeshPrimitive mesh, const Mat4& world);
     void endShadowPass();
 
@@ -325,7 +332,8 @@ private:
         uAmbientI_ = -1, uFogColor_ = -1, uFogDensity_ = -1, uExposure_ = -1, uLightVP_ = -1, uShadowMap_ = -1,
         uShadowsOn_ = -1, uSkinned_ = -1, uJoints_ = -1, uUVTransform_ = -1, uNormalTex_ = -1, uMRTex_ = -1,
         uEmissiveTex_ = -1, uOcclusionTex_ = -1, uHasNormal_ = -1, uHasMR_ = -1, uHasOcclusion_ = -1,
-        uNormalStrength_ = -1, uClearcoat_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
+        uNormalStrength_ = -1, uClearcoat_ = -1, uCascades_ = -1, uCascadeVP_ = -1, uCascadeSplit_ = -1,
+        uCascadeTexel_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
         uLayerTiling_ = -1;
     int uLayers_[4] = {-1, -1, -1, -1};
     int uInstanced_ = -1, uShadowInstanced_ = -1;
