@@ -62,6 +62,8 @@ layout(location = 2) in vec2 aUV;
 layout(location = 3) in vec4 aJoints;
 layout(location = 4) in vec4 aWeights;
 layout(location = 5) in vec4 aSplat; // terreno: peso de cada capa
+layout(location = 6) in mat4 aInstance; // instancing: matriz de mundo de cada copia (ocupa 6..9)
+uniform int uInstanced;
 uniform mat4 uViewProj;
 uniform mat4 uModel;
 uniform mat3 uNormalMat;
@@ -90,9 +92,11 @@ void main() {
         local = skin * local;
         normal = mat3(skin) * normal;
     }
-    vec4 w = uModel * local;
+    mat4 model = uInstanced == 1 ? aInstance : uModel;
+    mat3 normalMat = uInstanced == 1 ? transpose(inverse(mat3(model))) : uNormalMat;
+    vec4 w = model * local;
     vWorld = w.xyz;
-    vNormal = normalize(uNormalMat * normal);
+    vNormal = normalize(normalMat * normal);
     vUV = aUV * uUVTransform.xy + uUVTransform.zw;
     // Desplazar el punto un poco por la normal evita el "acné" de sombras.
     vShadow = uLightVP * vec4(w.xyz + vNormal * 0.04, 1.0);
@@ -275,6 +279,8 @@ const char* kShadowVS = R"(#version 300 es
 layout(location = 0) in vec3 aPos;
 layout(location = 3) in vec4 aJoints;
 layout(location = 4) in vec4 aWeights;
+layout(location = 6) in mat4 aInstance;
+uniform int uInstanced;
 uniform mat4 uLightVP;
 uniform mat4 uModel;
 uniform int uSkinned;
@@ -289,7 +295,7 @@ void main() {
     if (uSkinned == 1)
         local = (aWeights.x * jointMatrix(aJoints.x) + aWeights.y * jointMatrix(aJoints.y) +
                  aWeights.z * jointMatrix(aJoints.z) + aWeights.w * jointMatrix(aJoints.w)) * local;
-    gl_Position = uLightVP * uModel * local;
+    gl_Position = uLightVP * (uInstanced == 1 ? aInstance : uModel) * local;
 }
 )";
 
@@ -494,6 +500,8 @@ bool Renderer::createGpuObjects() {
     uEmissiveTex_ = u("uEmissiveTex"); uOcclusionTex_ = u("uOcclusionTex"); uHasNormal_ = u("uHasNormal");
     uHasMR_ = u("uHasMR"); uHasOcclusion_ = u("uHasOcclusion"); uNormalStrength_ = u("uNormalStrength");
     uAlphaCutoff_ = u("uAlphaCutoff"); uSpot_ = u("uSpot"); uSpotInner_ = u("uSpotInner");
+    uInstanced_ = u("uInstanced");
+    uShadowInstanced_ = glGetUniformLocation(shadowProgram_, "uInstanced");
     uTerrain_ = u("uTerrain"); uLayerColor_ = u("uLayerColor"); uLayerTiling_ = u("uLayerTiling");
     for (int i = 0; i < 4; ++i) uLayers_[i] = u(("uLayer" + std::to_string(i)).c_str());
     uShadowSkinned_ = glGetUniformLocation(shadowProgram_, "uSkinned");
@@ -586,7 +594,73 @@ void Renderer::createMeshes() {
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, uv));
         g.indexCount = static_cast<int>(data.indices.size());
     }
+    // Instancing: un VAO por primitiva con los mismos vértices y, además, la matriz de cada copia (divisor 1).
+    glGenBuffers(1, &instanceVbo_);
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVbo_);
+    glBufferData(GL_ARRAY_BUFFER, kMaxInstances * sizeof(Mat4), nullptr, GL_STREAM_DRAW);
+    for (int i = 0; i < 6; ++i) {
+        glGenVertexArrays(1, &instancedVao_[i]);
+        glBindVertexArray(instancedVao_[i]);
+        glBindBuffer(GL_ARRAY_BUFFER, meshes_[i].vbo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, meshes_[i].ibo);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, position));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, normal));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, uv));
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVbo_);
+        for (int c = 0; c < 4; ++c) {
+            glEnableVertexAttribArray(6 + c);
+            glVertexAttribPointer(6 + c, 4, GL_FLOAT, GL_FALSE, sizeof(Mat4), (void*)(sizeof(float) * 4 * c));
+            glVertexAttribDivisor(6 + c, 1);
+        }
+    }
     glBindVertexArray(0);
+}
+
+void Renderer::uploadInstances(const Mat4* worlds, int count) {
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVbo_);
+    // "Orphaning": búfer nuevo cada vez para no esperar a que la GPU termine con el anterior.
+    glBufferData(GL_ARRAY_BUFFER, kMaxInstances * sizeof(Mat4), nullptr, GL_STREAM_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(Mat4), worlds);
+}
+
+void Renderer::drawMeshInstanced(MeshPrimitive type, const std::vector<Mat4>& worlds, const MeshRenderer& mat) {
+    const int t = static_cast<int>(type);
+    if (!instancedVao_[t] || worlds.empty()) return;
+    Surface s;
+    s.color = mat.color;
+    s.metallic = mat.metallic;
+    s.roughness = mat.roughness;
+    s.emission = mat.emission;
+    s.grid = mat.prototypeGrid;
+    s.unlit = mat.unlit;
+    s.doubleSided = mat.doubleSided || type == MeshPrimitive::Plane;
+    s.tiling = mat.tiling;
+    s.offset = mat.offset;
+    for (size_t first = 0; first < worlds.size(); first += kMaxInstances) {
+        const int n = static_cast<int>(std::min<size_t>(kMaxInstances, worlds.size() - first));
+        uploadInstances(&worlds[first], n);
+        instanceCount_ = n;
+        drawSurface(instancedVao_[t], meshes_[t].indexCount, false, Mat4{}, s);
+        instanceCount_ = 0;
+    }
+}
+
+void Renderer::drawShadowCastersInstanced(MeshPrimitive type, const std::vector<Mat4>& worlds) {
+    const int t = static_cast<int>(type);
+    if (!instancedVao_[t] || worlds.empty()) return;
+    glUniform1i(uShadowSkinned_, 0);
+    glUniform1i(uShadowInstanced_, 1);
+    for (size_t first = 0; first < worlds.size(); first += kMaxInstances) {
+        const int n = static_cast<int>(std::min<size_t>(kMaxInstances, worlds.size() - first));
+        uploadInstances(&worlds[first], n);
+        glBindVertexArray(instancedVao_[t]);
+        glDrawElementsInstanced(GL_TRIANGLES, meshes_[t].indexCount, GL_UNSIGNED_SHORT, nullptr, n);
+        stats_.drawCalls++;
+    }
+    glUniform1i(uShadowInstanced_, 0);
 }
 
 bool Renderer::uploadTexture(Texture& t) {
@@ -783,6 +857,8 @@ Vec2 Renderer::textureSize(TextureHandle id) const {
 
 void Renderer::onContextLost() {
     post_->onContextLost();
+    instanceVbo_ = 0;
+    for (uint32_t& v : instancedVao_) v = 0;
     for (TerrainGpu& t : terrains_) t = {t.key, 0, {}, t.lastUsed}; // se vuelve a subir en el siguiente dibujo
     spriteProgram_ = meshProgram_ = spriteVao_ = spriteVbo_ = spriteIbo_ = lineVao_ = lineVbo_ = 0;
     shadowProgram_ = shadowFbo_ = shadowTex_ = skyProgram_ = skyVao_ = jointTex_ = 0;
@@ -913,6 +989,7 @@ void Renderer::beginShadowPass(const Mat4& lightVP) {
     glPolygonOffset(1.5f, 2.0f);
     glUseProgram(shadowProgram_);
     glUniformMatrix4fv(uShadowLVP_, 1, GL_FALSE, lightVP.m);
+    glUniform1i(uShadowInstanced_, 0);
 }
 
 void Renderer::drawShadowCaster(MeshPrimitive type, const Mat4& world) {
@@ -1128,6 +1205,7 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
     glUniform1i(uJoints_, 2);
     if (skinned) uploadJoints(*currentJoints_);
     glUniform4f(uUVTransform_, s.tiling.x, s.tiling.y, s.offset.x, s.offset.y);
+    glUniform1i(uInstanced_, instanceCount_ > 0 ? 1 : 0);
     glUniform1i(uTerrain_, terrainDraw_ ? 1 : 0);
     glUniform1f(uAlphaCutoff_, s.alphaCutoff);
     glUniform1f(uNormalStrength_, s.normalStrength);
@@ -1154,7 +1232,12 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
         glDepthMask(GL_FALSE);
     }
     glBindVertexArray(vao);
-    glDrawElements(GL_TRIANGLES, count, wideIndices ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, nullptr);
+    if (instanceCount_ > 0) {
+        glDrawElementsInstanced(GL_TRIANGLES, count, wideIndices ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, nullptr, instanceCount_);
+        stats_.instances += instanceCount_;
+    } else {
+        glDrawElements(GL_TRIANGLES, count, wideIndices ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, nullptr);
+    }
     glBindVertexArray(0);
     if (transparent) {
         glDisable(GL_BLEND);
@@ -1163,8 +1246,8 @@ void Renderer::drawSurface(uint32_t vao, int count, bool wideIndices, const Mat4
     glEnable(GL_CULL_FACE);
     glFrontFace(GL_CCW);
     stats_.drawCalls++;
-    stats_.meshes++;
-    stats_.triangles += count / 3;
+    stats_.meshes += instanceCount_ > 0 ? instanceCount_ : 1;
+    stats_.triangles += count / 3 * (instanceCount_ > 0 ? instanceCount_ : 1);
 }
 
 void Renderer::pushQuad(TextureHandle tex, const Vec3 c[4], Rect uv, Color color) {

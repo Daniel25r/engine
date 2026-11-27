@@ -41,6 +41,7 @@ struct RenderStats {
     int drawCalls = 0;       // todas, incluidas las de la pasada de sombras (sin contar el posprocesado)
     int shadowDrawCalls = 0;
     int postPasses = 0;      // pasadas a pantalla completa del posprocesado
+    int instances = 0;       // objetos dibujados con instancing (dentro de drawCalls cuentan una vez por lote)
     int sceneWidth = 0, sceneHeight = 0; // resolución a la que se dibujó la escena
     int sprites = 0;
     int meshes = 0;
@@ -115,6 +116,10 @@ public:
     void setUnlitOverride(bool on) { unlitOverride_ = on; }
 
     void drawMesh(MeshPrimitive mesh, const Mat4& world, const MeshRenderer& material, const MaterialTextures& tex);
+    // GPU instancing: muchas copias de la misma primitiva con el mismo material (sin texturas) en una llamada.
+    static constexpr int kMaxInstances = 1024;
+    void drawMeshInstanced(MeshPrimitive mesh, const std::vector<Mat4>& worlds, const MeshRenderer& material);
+    void drawShadowCastersInstanced(MeshPrimitive mesh, const std::vector<Mat4>& worlds); // dentro de la pasada de sombras
 
     // ---- Terreno ----
     // Malla de un terreno en la GPU, identificada por "key" (p. ej. la entidad). Solo se reconstruye si cambia
@@ -301,6 +306,10 @@ private:
         uNormalStrength_ = -1, uAlphaCutoff_ = -1, uSpot_ = -1, uSpotInner_ = -1, uTerrain_ = -1, uLayerColor_ = -1,
         uLayerTiling_ = -1;
     int uLayers_[4] = {-1, -1, -1, -1};
+    int uInstanced_ = -1, uShadowInstanced_ = -1;
+    uint32_t instanceVbo_ = 0, instancedVao_[6] = {};
+    int instanceCount_ = 0;
+    void uploadInstances(const Mat4* worlds, int count);
     bool terrainDraw_ = false;
     struct TerrainGpu {
         uint64_t key = 0;

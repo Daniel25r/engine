@@ -42,6 +42,54 @@ Mat4 lookAt(const Vec3& eye, const Vec3& target) {
 }
 } // namespace
 
+namespace {
+// Dos primitivas se pueden dibujar juntas si son la misma malla y su material es idéntico y sin texturas.
+bool instanceable(const MeshRenderer& m, const MaterialTextures& t) {
+    return m.model.isNull() && t.base == kWhiteTexture && t.normal == kWhiteTexture && t.metallicRoughness == kWhiteTexture &&
+           t.emission == kWhiteTexture && t.occlusion == kWhiteTexture && !m.alphaClip;
+}
+bool sameMaterial(const MeshRenderer& a, const MeshRenderer& b) {
+    return a.mesh == b.mesh && a.color.r == b.color.r && a.color.g == b.color.g && a.color.b == b.color.b &&
+           a.color.a == b.color.a && a.metallic == b.metallic && a.roughness == b.roughness && a.emission.r == b.emission.r &&
+           a.emission.g == b.emission.g && a.emission.b == b.emission.b && a.prototypeGrid == b.prototypeGrid &&
+           a.unlit == b.unlit && a.doubleSided == b.doubleSided;
+}
+} // namespace
+
+void SceneRenderer::groupInstances(std::vector<MeshItem>& items, std::vector<InstanceBatch>& out) {
+    out.clear();
+    if (!instancing) return;
+    // 1. Grupos de objetos iguales.
+    std::vector<int> groupOf(items.size(), -1);
+    std::vector<std::vector<size_t>> members;
+    for (size_t i = 0; i < items.size(); ++i) {
+        const MeshItem& it = items[i];
+        if (it.model >= 0 || !instanceable(*it.mesh, it.maps)) continue;
+        int g = -1;
+        for (size_t k = 0; k < members.size() && g < 0; ++k)
+            if (sameMaterial(*items[members[k][0]].mesh, *it.mesh)) g = static_cast<int>(k);
+        if (g < 0) {
+            members.emplace_back();
+            g = static_cast<int>(members.size() - 1);
+        }
+        members[size_t(g)].push_back(i);
+        groupOf[i] = g;
+    }
+    // 2. Los grupos de 2 o más se dibujan juntos; los sueltos, como siempre.
+    std::vector<MeshItem> rest;
+    rest.reserve(items.size());
+    for (size_t i = 0; i < items.size(); ++i)
+        if (groupOf[i] < 0 || members[size_t(groupOf[i])].size() < 2) rest.push_back(items[i]);
+    for (const auto& m : members) {
+        if (m.size() < 2) continue;
+        InstanceBatch b{items[m[0]].mesh, {}};
+        b.worlds.reserve(m.size());
+        for (size_t i : m) b.worlds.push_back(*items[i].world);
+        out.push_back(std::move(b));
+    }
+    items.swap(rest);
+}
+
 void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& viewport, const SceneView& view,
                            const TextureResolver& textures, const ModelResolver& models,
                            const MaterialResolver& materials) {
@@ -206,8 +254,11 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
         }
     }
 
+    groupInstances(casters_, shadowBatches_);
+    groupInstances(opaque_, batches_);
     if (L.shadows) {
         renderer.beginShadowPass(L.lightViewProjection);
+        for (const InstanceBatch& b : shadowBatches_) renderer.drawShadowCastersInstanced(b.material->mesh, b.worlds);
         for (const TerrainItem& t : terrains_)
             if (!culling || lightFrustum.intersects(t.bounds)) renderer.drawTerrainShadow(t.handle, *t.world);
         for (const MeshItem& m : casters_) {
@@ -234,6 +285,11 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
         if (culling && !camFrustum.intersects(t.bounds)) continue;
         stats_.meshesVisible++;
         renderer.drawTerrain(t.handle, *t.world, *t.terrain, t.layers);
+    }
+    for (const InstanceBatch& b : batches_) {
+        renderer.drawMeshInstanced(b.material->mesh, b.worlds, *b.material);
+        stats_.instanced += static_cast<int>(b.worlds.size());
+        stats_.instanceBatches++;
     }
     for (const MeshItem& m : opaque_) draw(m);
     for (const MeshItem& m : transparent_) draw(m);

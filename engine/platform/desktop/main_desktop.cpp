@@ -134,6 +134,7 @@ int main(int argc, char** argv) {
         // Diagnóstico: TITAN_CULLING=0 dibuja todo; TITAN_BENCH=1 imprime medias al terminar (con TITAN_FRAMES).
         const bool bench = std::getenv("TITAN_BENCH") != nullptr;
         if (const char* c = std::getenv("TITAN_CULLING")) runtime.sceneRenderer().culling = std::atoi(c) != 0;
+        if (const char* c = std::getenv("TITAN_INSTANCING")) runtime.sceneRenderer().instancing = std::atoi(c) != 0;
         double sumFrame = 0, sumRender = 0;
         long measured = 0;
         runtime.setSavePath(std::getenv("TITAN_SAVE") ? std::getenv("TITAN_SAVE") : std::string(argv[1]) + "/partida.json");
@@ -173,10 +174,11 @@ int main(int argc, char** argv) {
                 const titan::CullStats& cs = runtime.sceneRenderer().cullStats();
                 const titan::RenderStats& rs = runtime.renderer().stats();
                 std::printf("BENCH culling=%d fotogramas=%ld fotograma=%.2f ms render=%.2f ms draw_calls=%d "
-                            "(sombras %d) mallas=%d/%d sombras=%d/%d triangulos=%d posproceso=%d escena=%dx%d calidad=%s\n",
+                            "(sombras %d) mallas=%d/%d sombras=%d/%d triangulos=%d posproceso=%d escena=%dx%d calidad=%s instanciados=%d en %d lotes\n",
                             runtime.sceneRenderer().culling ? 1 : 0, measured, sumFrame / measured, sumRender / measured,
                             rs.drawCalls, rs.shadowDrawCalls, cs.meshesVisible, cs.meshes, cs.shadowCastersVisible, cs.shadowCasters, rs.triangles,
-                            rs.postPasses, rs.sceneWidth, rs.sceneHeight, runtime.scriptQuality().c_str());
+                            rs.postPasses, rs.sceneWidth, rs.sceneHeight, runtime.scriptQuality().c_str(), cs.instanced,
+                            cs.instanceBatches);
             }
         }
         runtime.shutdown();

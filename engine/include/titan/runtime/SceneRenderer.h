@@ -25,12 +25,15 @@ struct CullStats {
     int sprites = 0, spritesVisible = 0;
     int posesComputed = 0;                   // esqueletos calculados (solo los que se ven o dan sombra)
     int particleSystems = 0, particleSystemsVisible = 0, particlesDrawn = 0;
+    int instanced = 0, instanceBatches = 0; // objetos dibujados con instancing y en cuántos lotes
 };
 
 class SceneRenderer {
 public:
     // Descartar lo que queda fuera de la cámara (y de la zona de sombras). Solo se apaga para depurar o medir.
     bool culling = true;
+    // Agrupar las primitivas iguales con el mismo material (sin texturas) y dibujarlas con GPU instancing.
+    bool instancing = true;
     const CullStats& cullStats() const { return stats_; }
 
     using TextureResolver = std::function<TextureHandle(AssetRef)>;
@@ -78,6 +81,13 @@ private:
         TextureHandle layers[4];
     };
     std::vector<TerrainItem> terrains_;
+    struct InstanceBatch {
+        const MeshRenderer* material;
+        std::vector<Mat4> worlds;
+    };
+    std::vector<InstanceBatch> batches_, shadowBatches_;
+    // Reparte "items": las primitivas instanciables van a lotes; el resto se queda en la lista.
+    void groupInstances(std::vector<MeshItem>& items, std::vector<InstanceBatch>& out);
     std::deque<MeshRenderer> effective_; // copias con el material compartido aplicado (direcciones estables)
     std::vector<MeshItem> opaque_, transparent_, casters_;
     CullStats stats_;
