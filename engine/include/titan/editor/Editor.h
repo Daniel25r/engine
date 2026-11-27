@@ -77,6 +77,7 @@ public:
     // ---- Automatización (pruebas y línea de comandos) ----
     bool openProject(const std::string& path);
     bool createProject(const std::string& name, bool threeD, bool playableTemplate);
+    bool createSandboxProject(const std::string& name); // ejemplo "Mundo de bloques"
     void play();
     void stop();
     bool isPlaying() const;

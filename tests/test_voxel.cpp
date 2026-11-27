@@ -3,6 +3,7 @@
 #include <set>
 
 #include "Test.h"
+#include "stb_image.h"
 #include "titan/core/Voxel.h"
 
 using namespace titan;
@@ -132,4 +133,36 @@ TEST("voxel: guardado incremental, RLE y archivos dañados") {
     CHECK(back.blocks == c.blocks);
     std::vector<uint8_t> broken(enc.begin(), enc.begin() + long(enc.size() / 2));
     CHECK(!decodeChunk(broken, back)); // dañado: se rechaza (se regenerará) en vez de cargar basura
+}
+
+TEST("voxel: un chunk es una sola parte (una llamada de dibujo) con la paleta de colores incrustada") {
+    VoxelWorld g;
+    for (int dz = -1; dz <= 1; ++dz)
+        for (int dx = -1; dx <= 1; ++dx) g.ensureChunk(dx, dz);
+    const MeshBuild m = meshChunk(g.padded(0, 0), g.blocks);
+    CHECK_EQ(m.parts.size(), 1u);
+    CHECK_EQ(m.materials.size(), 1u);
+    const std::vector<uint8_t>& png = m.materials[0].image;
+    CHECK(png.size() > 8 && png[0] == 0x89 && png[1] == 'P' && png[2] == 'N' && png[3] == 'G');
+    // La paleta es un PNG válido (lo lee stb_image, el mismo lector que usa el motor) y tiene los colores exactos.
+    int w = 0, h = 0, ch = 0;
+    stbi_uc* px = stbi_load_from_memory(png.data(), int(png.size()), &w, &h, &ch, 4);
+    CHECK(px != nullptr);
+    if (px) {
+        CHECK_EQ(w, 16); // 8 casillas de 2 píxeles
+        const BlockId grass = g.blocks.find("Hierba");
+        const int e = grass * 2 + 1, x = (e % 8) * 2, y = (e / 8) * 2; // casilla "arriba" de la hierba
+        const Color top = g.blocks.get(grass).top;
+        CHECK_EQ(int(px[(y * w + x) * 4 + 1]), int(top.g * 255 + 0.5f));
+        stbi_image_free(px);
+    }
+    std::vector<uint8_t> glb;
+    CHECK(writeGlb(m, glb));
+    // La malla de colisión deja fuera el agua y la lava (no son sólidas): nunca tiene más caras que la de dibujo.
+    CHECK(meshChunk(g.padded(0, 0), g.blocks, true).triangleCount() <= m.triangleCount());
+    // Todo aire: sin geometría.
+    VoxelWorld e;
+    VoxelChunk& c = e.ensureChunk(0, 0);
+    std::fill(c.blocks.begin(), c.blocks.end(), kAir);
+    CHECK(meshChunk(e.padded(0, 0), e.blocks).parts.empty());
 }

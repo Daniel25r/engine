@@ -30,6 +30,15 @@ struct CullStats {
 
 class SceneRenderer {
 public:
+    // Modelos que no son entidades (chunks del mundo voxel): se dibujan, proyectan sombra y pasan por el culling
+    // como los de la escena. Quien los añade los mantiene aquí mientras deban verse.
+    struct ExtraModel {
+        int model = -1;
+        Mat4 world;
+        MeshRenderer material; // color blanco: los colores van en los materiales del modelo
+    };
+    std::vector<ExtraModel> extraModels;
+
     // Descartar lo que queda fuera de la cámara (y de la zona de sombras). Solo se apaga para depurar o medir.
     bool culling = true;
     // Agrupar las primitivas iguales con el mismo material (sin texturas) y dibujarlas con GPU instancing.

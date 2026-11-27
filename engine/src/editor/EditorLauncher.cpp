@@ -47,6 +47,10 @@ const TemplateInfo kTemplates[] = {
      "cámara en tercera persona, enemigos que patrullan y persiguen, monedas, plataformas móviles, peligros, puntos "
      "de control, vidas, menú, pantalla de victoria, récord guardado y música y efectos con el mezclador.",
      "3 escenas · 9 scripts Lua · 10 sonidos · Mezclador · Navegación e IA"},
+    {"Mundo de bloques", "Ejemplo sandbox",
+     "Un sandbox de construcción: mundo infinito por chunks con biomas (llanura, bosque, desierto, montaña, nieve, "
+     "océano, volcánico), cuevas y árboles. Rompe y coloca bloques; el mundo se guarda solo y se carga al volver.",
+     "Mundo de bloques · Personaje · Cámara 3ª persona · 1 script Lua (Voxel.*)"},
 };
 
 std::string relativeTime(fs::file_time_type t) {
@@ -110,6 +114,34 @@ void drawPreview2D(ImDrawList* dl, ImVec2 a, ImVec2 b, float s) {
     dl->AddRectFilled(ImVec2(hero.x, hero.y - 1.6f * t), ImVec2(hero.x + t, hero.y), IM_COL32(230, 90, 80, 255), 3 * s);
     dl->AddRectFilled(ImVec2(hero.x + t * 0.55f, hero.y - 1.3f * t), ImVec2(hero.x + t * 0.85f, hero.y - 1.0f * t),
                       IM_COL32(255, 255, 255, 255));
+}
+
+void drawPreviewSandbox(ImDrawList* dl, ImVec2 a, ImVec2 b, float s) {
+    gradient(dl, a, b, IM_COL32(74, 143, 224, 255), IM_COL32(214, 234, 248, 255));
+    const float t = 12 * s, W = b.x - a.x;
+    // Relieve escalonado de bloques: hierba arriba, tierra y piedra debajo, agua en lo bajo.
+    const int heights[] = {3, 3, 4, 5, 5, 6, 7, 7, 6, 5, 4, 3, 2, 2, 2, 3, 4, 4, 5, 6};
+    const float floorY = b.y;
+    for (int i = 0; i * t < W; ++i) {
+        const int h = heights[i % 20];
+        const float x = a.x + i * t;
+        for (int k = 0; k < h; ++k) {
+            const float y = floorY - (k + 1) * t;
+            const ImU32 c = k == h - 1 ? IM_COL32(95, 168, 58, 255) : k >= h - 3 ? IM_COL32(122, 90, 58, 255) : IM_COL32(138, 141, 147, 255);
+            dl->AddRectFilled(ImVec2(x, y), ImVec2(x + t - 1, y + t - 1), c);
+        }
+        for (int k = h; k < 3; ++k) {
+            const float y = floorY - (k + 1) * t;
+            dl->AddRectFilled(ImVec2(x, y), ImVec2(x + t - 1, y + t - 1), IM_COL32(46, 111, 184, 220));
+        }
+    }
+    // Árbol de bloques.
+    const float tx = a.x + 6 * t, ty = floorY - 7 * t;
+    for (int k = 0; k < 3; ++k) dl->AddRectFilled(ImVec2(tx, ty - (k + 1) * t), ImVec2(tx + t - 1, ty - k * t - 1), IM_COL32(110, 74, 42, 255));
+    dl->AddRectFilled(ImVec2(tx - t, ty - 5 * t), ImVec2(tx + 2 * t - 1, ty - 3 * t - 1), IM_COL32(62, 138, 52, 255));
+    // Bloque que se está colocando (marco blanco).
+    const float bx = a.x + 9 * t, by = floorY - 8 * t;
+    dl->AddRect(ImVec2(bx, by), ImVec2(bx + t, by + t), IM_COL32(255, 255, 255, 230), 0, 0, 2 * s);
 }
 
 void drawPreviewPlatformer(ImDrawList* dl, ImVec2 a, ImVec2 b, float s) {
@@ -355,15 +387,15 @@ void Editor::Impl::drawBrowser() {
         const float prevH = std::clamp(cardW * 0.5f, 80 * s, 150 * s), cardH = prevH + 64 * s;
         ImGui::BeginChild("##galeria", ImVec2(galleryW, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
         ImDrawList* gl = ImGui::GetWindowDrawList();
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 4; ++i) {
             if (i % cols) ImGui::SameLine(0, gap);
             ImGui::PushID(i);
             const ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + cardW, a.y + cardH);
             if (ImGui::InvisibleButton("##plantilla", ImVec2(cardW, cardH))) {
                 newProjectTemplate = i;
                 // Nombre sugerido: el del ejemplo, salvo que el usuario ya haya escrito uno propio.
-                if (i == 2 && newProjectName == "Mi juego") newProjectName = "Isla Estelar";
-                if (i != 2 && newProjectName == "Isla Estelar") newProjectName = "Mi juego";
+                const bool suggested = newProjectName == "Mi juego" || newProjectName == "Isla Estelar" || newProjectName == "Mundo de bloques";
+                if (suggested) newProjectName = i == 2 ? "Isla Estelar" : i == 3 ? "Mundo de bloques" : "Mi juego";
             }
             const bool hover = ImGui::IsItemHovered(), sel = newProjectTemplate == i;
             gl->AddRectFilled(a, b, hover ? kCardHover : kCard, 8 * s);
@@ -371,10 +403,11 @@ void Editor::Impl::drawBrowser() {
             gl->PushClipRect(a, pb, true);
             if (i == 0) drawPreview3D(gl, a, pb, s);
             else if (i == 1) drawPreview2D(gl, a, pb, s);
-            else drawPreviewPlatformer(gl, a, pb, s);
+            else if (i == 2) drawPreviewPlatformer(gl, a, pb, s);
+            else drawPreviewSandbox(gl, a, pb, s);
             gl->PopClipRect();
             gl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.1f, ImVec2(a.x + 14 * s, pb.y + 12 * s), kText, kTemplates[i].title);
-            gl->AddText(ImVec2(a.x + 14 * s, pb.y + 36 * s), i == 2 ? IM_COL32(255, 200, 61, 255) : kDimText, kTemplates[i].tag);
+            gl->AddText(ImVec2(a.x + 14 * s, pb.y + 36 * s), i >= 2 ? IM_COL32(255, 200, 61, 255) : kDimText, kTemplates[i].tag);
             if (sel) gl->AddRect(a, b, kAccent, 8 * s, 0, 3 * s);
             ImGui::PopID();
         }
@@ -382,7 +415,7 @@ void Editor::Impl::drawBrowser() {
         // Detalles y creación
         ImGui::SameLine(0, 24 * s);
         ImGui::BeginChild("##detalle", ImVec2(detailW, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
-        const TemplateInfo& t = kTemplates[std::clamp(newProjectTemplate, 0, 2)];
+        const TemplateInfo& t = kTemplates[std::clamp(newProjectTemplate, 0, 3)];
         ImDrawList* d2 = ImGui::GetWindowDrawList();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         d2->AddRectFilled(p, ImVec2(p.x + detailW, p.y + 2 * s), kAccent);
@@ -412,6 +445,7 @@ void Editor::Impl::drawBrowser() {
             std::string err;
             bool ok = false;
             if (newProjectTemplate == 2) ok = createPlatformerSample(dir, newProjectName, &err);
+            else if (newProjectTemplate == 3) ok = createSandboxSample(dir, newProjectName, &err);
             else ok = createProjectFromTemplate(dir, newProjectName,
                                                 newProjectTemplate == 0 ? ProjectTemplate::Empty3D : ProjectTemplate::Empty2D, &err) != nullptr;
             if (ok) {

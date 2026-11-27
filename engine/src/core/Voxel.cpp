@@ -219,14 +219,106 @@ void generateChunk(const VoxelGenSettings& s, const BlockRegistry& reg, VoxelChu
 }
 
 // ---------------------------------------------------------------- mallas (greedy meshing)
-MeshBuild meshChunk(const PaddedChunk& p, const BlockRegistry& reg) {
+namespace {
+// PNG RGBA sin comprimir (bloques "stored" de deflate): válido para cualquier lector y sin dependencias.
+uint32_t crc32(const uint8_t* d, size_t n, uint32_t c = 0xFFFFFFFFu) {
+    for (size_t i = 0; i < n; ++i) {
+        c ^= d[i];
+        for (int k = 0; k < 8; ++k) c = (c >> 1) ^ (0xEDB88320u & (0u - (c & 1u)));
+    }
+    return c;
+}
+std::vector<uint8_t> encodePngRgba(int w, int h, const std::vector<uint8_t>& rgba) {
+    std::vector<uint8_t> raw; // cada fila empieza con el filtro 0
+    for (int y = 0; y < h; ++y) {
+        raw.push_back(0);
+        raw.insert(raw.end(), rgba.begin() + long(y) * w * 4, rgba.begin() + long(y + 1) * w * 4);
+    }
+    std::vector<uint8_t> z = {0x78, 0x01};
+    for (size_t pos = 0; pos < raw.size() || pos == 0;) {
+        const size_t n = std::min<size_t>(65535, raw.size() - pos);
+        const bool last = pos + n >= raw.size();
+        z.push_back(last ? 1 : 0);
+        z.push_back(uint8_t(n));
+        z.push_back(uint8_t(n >> 8));
+        z.push_back(uint8_t(~n));
+        z.push_back(uint8_t(~n >> 8));
+        z.insert(z.end(), raw.begin() + long(pos), raw.begin() + long(pos + n));
+        pos += n;
+        if (last) break;
+    }
+    uint32_t a = 1, b = 0;
+    for (uint8_t v : raw) {
+        a = (a + v) % 65521;
+        b = (b + a) % 65521;
+    }
+    const uint32_t adler = (b << 16) | a;
+    for (int k = 3; k >= 0; --k) z.push_back(uint8_t(adler >> (k * 8)));
+    std::vector<uint8_t> png = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    auto be32 = [&](uint32_t v) { for (int k = 3; k >= 0; --k) png.push_back(uint8_t(v >> (k * 8))); };
+    auto chunk = [&](const char* type, const std::vector<uint8_t>& data) {
+        be32(uint32_t(data.size()));
+        const size_t start = png.size();
+        png.insert(png.end(), type, type + 4);
+        png.insert(png.end(), data.begin(), data.end());
+        be32(crc32(png.data() + start, png.size() - start) ^ 0xFFFFFFFFu);
+    };
+    std::vector<uint8_t> ihdr;
+    for (uint32_t v : {uint32_t(w), uint32_t(h)}) for (int k = 3; k >= 0; --k) ihdr.push_back(uint8_t(v >> (k * 8)));
+    ihdr.insert(ihdr.end(), {8, 6, 0, 0, 0}); // 8 bits, RGBA
+    chunk("IHDR", ihdr);
+    chunk("IDAT", z);
+    chunk("IEND", {});
+    return png;
+}
+
+// Paleta: casillas de 2×2 píxeles (se muestrea el centro, así el filtrado lineal no mezcla colores vecinos).
+constexpr int kCell = 2;
+std::vector<uint8_t> paletteImage(const BlockRegistry& reg, int cols, int rows) {
+    const int w = cols * kCell, h = rows * kCell;
+    std::vector<uint8_t> px(size_t(w) * size_t(h) * 4, 255);
+    auto to8 = [](float v) { return uint8_t(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
+    for (int e = 0; e < int(reg.size()) * 2; ++e) {
+        const BlockType& t = reg.get(BlockId(e / 2));
+        const Color c = (e & 1) ? t.top : t.side;
+        const int cx = (e % cols) * kCell, cy = (e / cols) * kCell;
+        for (int y = 0; y < kCell; ++y)
+            for (int x = 0; x < kCell; ++x) {
+                uint8_t* q = &px[(size_t(cy + y) * size_t(w) + size_t(cx + x)) * 4];
+                q[0] = to8(c.r);
+                q[1] = to8(c.g);
+                q[2] = to8(c.b);
+                q[3] = 255;
+            }
+    }
+    return encodePngRgba(w, h, px);
+}
+Vec2 paletteCell(int e, int cols, int rows) {
+    return {(float(e % cols) + 0.5f) / float(cols), (float(e / cols) + 0.5f) / float(rows)};
+}
+} // namespace
+
+MeshBuild meshChunk(const PaddedChunk& p, const BlockRegistry& reg, bool solidOnly) {
     MeshBuild out;
     const int dims[3] = {kChunkSize, kChunkHeight, kChunkSize};
-    std::unordered_map<int, size_t> partOf; // bloque * 2 + (cara de arriba)
+    // Una sola parte y un solo material por chunk (una llamada de dibujo): el color de cada cara sale de una
+    // textura-paleta con una casilla por tipo de bloque y cara (arriba / lados).
+    const int entries = int(reg.size()) * 2, cols = 8, rows = (entries + cols - 1) / cols;
+    {
+        MeshBuildMaterial m;
+        m.name = "Bloques";
+        m.color = {1, 1, 1, 1};
+        m.roughness = 0.9f;
+        m.image = paletteImage(reg, cols, rows);
+        m.imageMime = "image/png";
+        out.materials.push_back(m);
+        out.parts.push_back({});
+    }
     auto blockAt = [&](const int q[3]) { return p.b[size_t(PaddedChunk::index(q[0], q[1], q[2]))]; };
     // ¿Se ve la cara del bloque a hacia el vecino b? Sólido junto a no sólido, o agua/lava junto a aire.
     auto visible = [&](BlockId a, BlockId b) {
         if (a == kAir) return false;
+        if (solidOnly && !reg.get(a).solid) return false;
         if (reg.get(a).solid) return !reg.get(b).solid;
         return b == kAir;
     };
@@ -273,19 +365,8 @@ MeshBuild meshChunk(const PaddedChunk& p, const BlockRegistry& reg) {
                             for (int k = 0; k < w; ++k) mask[size_t(b + hh) * size_t(dims[u]) + size_t(a + k)] = kAir;
                         // Cuadrilátero
                         const bool top = d == 1 && s > 0;
-                        const int key = int(id) * 2 + (top ? 1 : 0);
-                        auto it = partOf.find(key);
-                        if (it == partOf.end()) {
-                            it = partOf.emplace(key, out.parts.size()).first;
-                            MeshBuildMaterial m;
-                            m.name = reg.get(id).name + (top ? " (arriba)" : "");
-                            m.color = top ? reg.get(id).top : reg.get(id).side;
-                            m.roughness = 0.9f;
-                            out.materials.push_back(m);
-                            out.parts.push_back({});
-                            out.parts.back().material = int(out.materials.size() - 1);
-                        }
-                        MeshBuildPart& part = out.parts[it->second];
+                        MeshBuildPart& part = out.parts[0];
+                        const Vec2 paletteUv = paletteCell(int(id) * 2 + (top ? 1 : 0), cols, rows);
                         float base[3] = {0, 0, 0}, du[3] = {0, 0, 0}, dv[3] = {0, 0, 0};
                         base[d] = float(i + (s > 0 ? 1 : 0));
                         base[u] = float(a);
@@ -299,7 +380,8 @@ MeshBuild meshChunk(const PaddedChunk& p, const BlockRegistry& reg) {
                             mv.position = {base[0] + du[0] * ku + dv[0] * kv + ox, base[1] + du[1] * ku + dv[1] * kv,
                                            base[2] + du[2] * ku + dv[2] * kv + oz};
                             mv.normal = nrm;
-                            mv.uv = uv;
+                            mv.uv = paletteUv; // toda la cara toma el color de su casilla de la paleta
+                            (void)uv;
                             part.vertices.push_back(mv);
                         };
                         const uint32_t first = uint32_t(part.vertices.size());
@@ -313,6 +395,10 @@ MeshBuild meshChunk(const PaddedChunk& p, const BlockRegistry& reg) {
                     }
             }
         }
+    }
+    if (out.parts[0].indices.empty()) { // chunk vacío (todo aire): sin partes ni material
+        out.parts.clear();
+        out.materials.clear();
     }
     return out;
 }

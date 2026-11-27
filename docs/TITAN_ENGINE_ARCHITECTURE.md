@@ -227,6 +227,21 @@ aparte; al detener se descarta y la escena de edición queda como estaba. Ese Ru
 `ResourceCache` del editor (no los crea ni los cierra), así que no recarga nada; el juego exportado usa los suyos. Deshacer y rehacer guardan, de momento,
 instantáneas de la escena serializada (pendiente: comandos por operación).
 
+## 12b. Mundo de bloques (voxel)
+
+- `core/Voxel` (sin dependencias de render ni física): `VoxelChunk` (16×64×16 bytes), `BlockRegistry`,
+  generación (`generateChunk`, ruido de gradiente + fbm, biomas por temperatura/humedad, cuevas con ruido 3D,
+  árboles), `meshChunk` (caras ocultas eliminadas + fusión greedy, una sola parte por chunk con una textura-paleta
+  PNG incrustada: una llamada de dibujo), rayo DDA, `VoxelWorld` (chunks en un mapa, guardado RLE incremental).
+- `runtime/VoxelSystem`: conecta el mundo con el juego. Cada fotograma, desde la posición de la cámara: aplica lo
+  terminado en otros hilos (como mucho 4 subidas a la GPU/colisión), pide chunks que faltan (generar o leer del
+  disco en el JobSystem), pide mallas de chunks con sus 4 vecinos cargados (sobre una copia `PaddedChunk`, el
+  trabajo no toca el mundo), y descarga lo lejano guardando lo modificado. Las mallas se registran con
+  `Renderer::setModelData("voxel/cx_cz.glb")` y se dibujan como `SceneRenderer::extraModels` (con culling y
+  sombras); la colisión es `PhysicsWorld::addStaticMesh` con solo los bloques sólidos.
+- Cambiar un bloque (Lua `Voxel.set`) rehace al momento la malla del chunk y la del vecino si es un borde.
+- Carpeta del mundo: `<carpeta de la partida>/mundos/<nombre>` (en el editor, `.titan/mundos/`).
+
 ## 13. Límites actuales
 
 Ver `docs/AUDITORIA.md` (problemas con su causa) y `docs/TITAN_ENGINE_STATUS.md`.

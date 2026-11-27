@@ -42,6 +42,7 @@ int usage() {
         "  titan package <carpeta> <salida>           generar el paquete de juego para el runtime\n"
         "  titan benchmark <carpeta>                  crear el proyecto de pruebas de rendimiento\n"
         "  titan demo-plataformas <carpeta>           crear la demo de plataformas 3D (menú, nivel, victoria)\n"
+        "  titan demo-bloques <carpeta>               crear el sandbox de bloques (mundo infinito, romper y colocar)\n"
         "  titan import <carpeta> <archivo>           importar (OBJ, STL, PLY y .blend se convierten a GLB)\n"
         "  titan audiotest <archivo.wav>              grabar la prueba de sonido del motor en un WAV\n\n"
         "Opción: --scene <ruta dentro de assets/> para trabajar en otra escena.\n",
@@ -369,6 +370,16 @@ int cmdDemoPlatformer(const std::string& dir) {
     return 0;
 }
 
+int cmdDemoSandbox(const std::string& dir) {
+    std::string err;
+    if (!createSandboxSample(dir, "Mundo de bloques", &err)) {
+        std::fprintf(stderr, "Error: %s\n", err.c_str());
+        return 1;
+    }
+    std::printf("Sandbox de bloques creado en %s. Ábrelo en el editor y pulsa Jugar.\n", dir.c_str());
+    return 0;
+}
+
 int cmdAudioTest(const std::string& outPath) {
     MemoryFileSource files;
     addSoundCheckFiles(files);
@@ -463,6 +474,7 @@ int main(int argc, char** argv) {
     }
     if (cmd == "benchmark") return cmdBenchmark(dir);
     if (cmd == "demo-plataformas") return cmdDemoPlatformer(dir);
+    if (cmd == "demo-bloques") return cmdDemoSandbox(dir);
 
     if (cmd == "new") {
         if (args.size() < 3) return usage();

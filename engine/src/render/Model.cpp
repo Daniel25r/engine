@@ -58,6 +58,18 @@ int Renderer::setModelData(const std::string& path, std::vector<uint8_t> glb) {
     return m.ok ? static_cast<int>(i) : -1;
 }
 
+void Renderer::unloadModel(const std::string& path) {
+    for (Model& m : models_)
+        if (m.path == path) {
+            releaseModelGpu(m);
+            m.memory.clear();
+            m.memory.shrink_to_fit();
+            m.collisionVerts.clear();
+            m.collisionIndices.clear();
+            m.ok = false;
+        }
+}
+
 bool Renderer::buildModel(Model& m) {
     m.collisionVerts.clear();
     m.collisionIndices.clear();
@@ -313,7 +325,8 @@ bool Renderer::buildModel(Model& m) {
         TITAN_ERROR("render", "'%s' no contiene mallas de triángulos", m.path.c_str());
         return false;
     }
-    TITAN_INFO("render", "Modelo '%s' cargado: %zu partes, %d triángulos", m.path.c_str(), m.parts.size(), m.triangles);
+    if (m.path.rfind("voxel/", 0) != 0) /* los chunks del mundo de bloques se cargan a cientos: sin mensaje */
+        TITAN_INFO("render", "Modelo '%s' cargado: %zu partes, %d triángulos", m.path.c_str(), m.parts.size(), m.triangles);
     return true;
 }
 

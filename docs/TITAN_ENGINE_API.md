@@ -212,6 +212,35 @@ local izq, der = Audio.busLevel("Master") -- medidor en dB (-80 = silencio)
 Los errores son explícitos: un bus, tipo de efecto o parámetro que no existe detiene el script con un mensaje que
 dice cuál. Un sonido enviado a un bus inexistente suena en Master (con un aviso en el registro).
 
+### Mundo de bloques (`Voxel`)
+
+Funciona si la escena tiene un objeto con el componente **VoxelTerrain** (Crear › Mundo de bloques). Sin él,
+`Voxel.available()` es `false`, las consultas devuelven aire/`nil` y los cambios devuelven `false`.
+Las coordenadas son de bloque (enteras; se redondean hacia abajo). Y va de 0 a 63.
+
+| Función | Devuelve |
+|---|---|
+| `Voxel.available()` | `true` si hay mundo de bloques |
+| `Voxel.get(x, y, z)` | id del bloque (0 = aire; también si el chunk no está cargado) |
+| `Voxel.set(x, y, z, bloque)` | `true` si cambió. `bloque` es un id o un nombre (`"Piedra"`, `"Aire"`). Rehace al momento la malla y la colisión |
+| `Voxel.block(nombre)` / `Voxel.blockName(id)` / `Voxel.blockCount()` | id por nombre (0 si no existe), nombre por id, número de tipos |
+| `Voxel.raycast(ox, oy, oz, dx, dy, dz, distancia)` | `nil` o `{x, y, z, nx, ny, nz, block, distance}`; `n` es la cara por la que entra el rayo (colocar en `x+nx, y+ny, z+nz`) |
+| `Voxel.surface(x, z)` | y del bloque sólido más alto (-1 si no hay) |
+| `Voxel.biome(x, z)` | `"Océano"`, `"Playa"`, `"Llanura"`, `"Bosque"`, `"Desierto"`, `"Montaña"`, `"Nieve"` o `"Volcánico"` |
+| `Voxel.save()` | guarda los chunks modificados; devuelve cuántos (también se guarda al descargar chunks y al salir) |
+| `Voxel.loaded()` / `Voxel.seed()` | chunks en memoria / semilla del mundo |
+
+Tipos de bloque: Hierba, Tierra, Piedra, Arena, Nieve, Agua, Madera, Hojas, Roca volcánica, Lava, Grava, Hielo,
+Ladrillo, Tablones. El agua y la lava no son sólidas (no tienen colisión).
+
+```lua
+local golpe = Voxel.raycast(x, y + 1.5, z, dx, dy, dz, 6)
+if golpe and Input.pressed("Atacar") then Voxel.set(golpe.x, golpe.y, golpe.z, "Aire") end
+if golpe and Input.pressed("Interactuar") then
+    Voxel.set(golpe.x + golpe.nx, golpe.y + golpe.ny, golpe.z + golpe.nz, "Ladrillo")
+end
+```
+
 ## C++ (para el motor, las herramientas y el futuro editor)
 
 ```cpp

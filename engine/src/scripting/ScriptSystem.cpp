@@ -589,6 +589,7 @@ void ScriptSystem::registerApi() {
     setGlobalTable(L_, "Physics", kPhysicsGlobals);
     setGlobalTable(L_, "Audio", kAudioGlobals);
     registerWorldGlobals(L_);
+    registerVoxelGlobals(L_);
     lua_pushcfunction(L_, d_log);
     lua_setglobal(L_, "print");
 }

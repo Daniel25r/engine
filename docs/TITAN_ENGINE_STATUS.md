@@ -1,7 +1,7 @@
 # TITÁN ENGINE — Estado real del desarrollo
 
 Fecha: 2026-11-27 · Versión del código: 0.13.0 + mezclador de audio (0.14 en desarrollo) · ~20 000 líneas propias
-(`engine/`, sin `third_party/`) · 104 pruebas automáticas, todas pasan.
+(`engine/`, sin `third_party/`) · 129 pruebas automáticas, todas pasan.
 
 **Cómo leer este documento.** Cada fila dice qué existe *de verdad en el código*, con la prueba que lo respalda.
 
@@ -22,7 +22,7 @@ Titán es hoy un motor **forward en OpenGL ES 3.0** con editor táctil propio, E
 con mezclador, animación esquelética glTF, partículas CPU, terreno, navegación en rejilla y exportación a APK.
 Es suficiente para juegos 3D y 2D pequeños o medianos (la demo de plataformas lo demuestra). **No** tiene: Vulkan,
 render graph, deferred/clustered, GI, Nanite-like, editor de shaders por nodos, programación visual, red, plugins,
-mundos abiertos con streaming, física 2D, IK, secuenciador. Esas partes son trabajo de muchos meses y se abordan en el
+mundos abiertos con streaming (salvo el mundo de bloques), física 2D, IK, secuenciador. Esas partes son trabajo de muchos meses y se abordan en el
 orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 
 ## 1. Arquitectura central
@@ -83,8 +83,13 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 |---|---|---|
 | Terreno por mapa de alturas: esculpir (subir, bajar, aplanar, suavizar), 4 capas de pintura, colisión | ✅ | Pruebas `terreno:` (4); captura `terreno-personaje.png` |
 | Vegetación, agua, ríos, caminos/splines, texturas por pendiente/altura | ❌ | |
-| World partition, streaming, origen flotante, HLOD | ❌ | |
-| Generación procedural (PCG) | ❌ | Solo "montañas" aleatorias con semilla en la herramienta de terreno |
+| **Mundo de bloques (voxel)**: chunks 16×64×16, 14 tipos de bloque, biomas (océano, playa, llanura, bosque, desierto, montaña, nieve, volcánico), cuevas, árboles, generación reproducible por semilla | ✅ | Pruebas `voxel:` (6): determinismo, ≥5 biomas, caras ocultas y fusión (greedy), rayo/colocar/romper, guardado RLE, una parte por chunk |
+| Streaming de chunks del mundo de bloques alrededor de la cámara (generar/leer y mallar en los hilos del JobSystem, como mucho 4 subidas a la GPU por fotograma, descarga de lo lejano) | ✅ | Reproductor: 149 chunks, 73 llamadas de dibujo, el personaje anda sobre los bloques (colisión de malla estática de Jolt) |
+| Guardado incremental del mundo (solo chunks modificados, RLE, escritura atómica) y recarga | ✅ | Reproductor: romper/colocar → `mundos/mundo/chunks/0_-1.chunk`; segunda ejecución lo carga |
+| Plantilla "Mundo de bloques" (Demo A: explorar, romper, colocar, biomas, guardar) y `titan demo-bloques` | ✅ | Editor (`--template 4` + Jugar) y reproductor con teclas simuladas |
+| World partition para escenas normales, origen flotante, HLOD | ❌ | El streaming existe solo para el mundo de bloques |
+| Vista previa del mundo de bloques en el editor sin pulsar Jugar | ❌ | Se ve al jugar |
+| Generación procedural (PCG) de terreno por mapa de alturas | ❌ | Solo "montañas" aleatorias con semilla en la herramienta de terreno |
 
 ## 5. Física (Jolt Physics 5.2.0)
 

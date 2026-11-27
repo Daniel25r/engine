@@ -87,7 +87,8 @@ endif()
 
 # ------------------------------------------------------------------ titan_scripting (Lua)
 
-add_library(titan_scripting STATIC engine/src/scripting/ScriptSystem.cpp engine/src/scripting/ScriptApiWorld.cpp)
+add_library(titan_scripting STATIC engine/src/scripting/ScriptSystem.cpp engine/src/scripting/ScriptApiWorld.cpp
+    engine/src/scripting/ScriptApiVoxel.cpp)
 target_link_libraries(titan_scripting PUBLIC titan_core titan_lua titan_audio)
 target_compile_options(titan_scripting PRIVATE ${TITAN_WARNINGS} $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fexceptions>)
 
@@ -138,6 +139,7 @@ target_link_libraries(titan_render PUBLIC ${TITAN_GLES_LIBS})
 # ------------------------------------------------------------------ titan_runtime (bucle + sistemas)
 
 add_library(titan_runtime STATIC engine/src/runtime/Runtime.cpp engine/src/runtime/SceneRenderer.cpp
+    engine/src/runtime/VoxelSystem.cpp
     engine/src/runtime/UIRenderer.cpp engine/src/runtime/ResourceCache.cpp)
 target_link_libraries(titan_runtime PUBLIC titan_core titan_render titan_scripting titan_physics titan_audio)
 target_compile_options(titan_runtime PRIVATE ${TITAN_WARNINGS})
@@ -170,7 +172,19 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${TITAN_SAMPLE_LU
 file(WRITE ${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc.tmp "${_sample_inc}")
 configure_file(${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc.tmp
                ${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc COPYONLY)
-add_library(titan_samples STATIC engine/src/samples/PlatformerSample.cpp engine/src/samples/SampleSounds.cpp)
+file(GLOB TITAN_SANDBOX_LUA CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/engine/samples/sandbox/*.lua)
+set(_sandbox_inc "")
+foreach(_lua ${TITAN_SANDBOX_LUA})
+    get_filename_component(_name ${_lua} NAME)
+    file(READ ${_lua} _code)
+    string(APPEND _sandbox_inc "{\"${_name}\", R\"TITANLUA(${_code})TITANLUA\"},\n")
+endforeach()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${TITAN_SANDBOX_LUA})
+file(WRITE ${CMAKE_BINARY_DIR}/generated/DemoSandboxScripts.inc.tmp "${_sandbox_inc}")
+configure_file(${CMAKE_BINARY_DIR}/generated/DemoSandboxScripts.inc.tmp
+               ${CMAKE_BINARY_DIR}/generated/DemoSandboxScripts.inc COPYONLY)
+add_library(titan_samples STATIC engine/src/samples/PlatformerSample.cpp engine/src/samples/SampleSounds.cpp
+    engine/src/samples/SandboxSample.cpp)
 target_include_directories(titan_samples PRIVATE ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(titan_samples PUBLIC titan_core titan_audio)
 target_compile_options(titan_samples PRIVATE ${TITAN_WARNINGS})

@@ -26,6 +26,7 @@
 #include "titan/core/CameraSystem.h"
 #include "titan/runtime/ResourceCache.h"
 #include "titan/runtime/SceneRenderer.h"
+#include "titan/runtime/VoxelSystem.h"
 #include "titan/scripting/ScriptSystem.h"
 #include "titan/core/JobSystem.h"
 #include "titan/ui/UISystem.h"
@@ -109,6 +110,10 @@ public:
     bool scriptCameraBasis(Vec3& forward, Vec3& right) const override;
     NavGrid* scriptNavGrid() override { return &navGrid_; }
     int scriptBakeNav(const NavSettings* settings) override; // nulo = zona automática según la escena
+    VoxelWorld* scriptVoxelWorld() override { return voxel_.world(); }
+    void scriptVoxelChanged(int x, int y, int z) override { voxel_.blockChanged(x, y, z); }
+    int scriptVoxelSave() override;
+    VoxelSystem& voxel() { return voxel_; }
     // Dónde se guarda la partida (Save.* en Lua). Lo fija la plataforma antes de start().
     void setSavePath(const std::string& path) { savePath_ = path; }
     InputActions& actions() { return actions_; }
@@ -123,6 +128,8 @@ private:
     bool activateScene(const std::string& text, const std::string& name);
     void applyPendingSceneLoad();
     void render(const Viewport& viewport);
+    void startVoxel(); // si la escena tiene un VoxelTerrain
+    bool cameraPosition(Vec3& out);
 
 
     using Clock = std::chrono::steady_clock;
@@ -145,6 +152,7 @@ private:
     InputActions actions_;
     CameraSystem cameras_;
     NavGrid navGrid_;
+    VoxelSystem voxel_;
     std::string savePath_;
     std::vector<Entity> clicked_;
     std::string projectName_;

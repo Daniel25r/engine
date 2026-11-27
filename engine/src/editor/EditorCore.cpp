@@ -18,6 +18,7 @@
 #include "titan/core/FileIO.h"
 #include "titan/core/ModelImport.h"
 #include "titan/core/Templates.h"
+#include "titan/samples/Samples.h"
 #include "titan/core/Version.h"
 
 namespace fs = std::filesystem;
@@ -659,6 +660,9 @@ Entity Editor::Impl::createEntityOfKind(const std::string& kind) {
         generateTerrain(t, 7, 0.25f); // colinas suaves para empezar; se esculpe con las herramientas de Detalles
         scene.transform(e).setPosition({0, 0, 0});
         scene.world().add<Terrain>(e, t);
+    } else if (kind == "Mundo de bloques") {
+        scene.transform(e).setPosition({0, 0, 0});
+        scene.world().add<VoxelTerrain>(e);
     } else if (kind == "Personaje") {
         // Controlador de personaje con una cápsula visible de hijo (el origen de la entidad son los pies).
         scene.transform(e).setPosition({spawnPoint().x, 0, spawnPoint().z});
@@ -1143,6 +1147,16 @@ bool Editor::onBack() {
 }
 
 bool Editor::openProject(const std::string& path) { return impl_->openProject(path); }
+
+bool Editor::createSandboxProject(const std::string& name) {
+    std::string err;
+    const std::string dir = impl_->projectsDir() + "/" + name;
+    if (!createSandboxSample(dir, name, &err)) {
+        TITAN_ERROR("editor", "No se pudo crear el proyecto: %s", err.c_str());
+        return false;
+    }
+    return impl_->openProject(dir);
+}
 
 bool Editor::createProject(const std::string& name, bool threeD, bool) {
     std::string err;

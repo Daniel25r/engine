@@ -9,4 +9,8 @@ namespace titan {
 // sonidos sintetizados (sin recursos de terceros). Crea la carpeta dir; false y error si algo falla.
 bool createPlatformerSample(const std::string& dir, const std::string& name, std::string* error = nullptr);
 
+// "Mundo de bloques": sandbox con mundo infinito por chunks (biomas, cuevas, árboles), romper y colocar bloques
+// con guardado automático. Todo con VoxelTerrain y un script Lua (Voxel.*).
+bool createSandboxSample(const std::string& dir, const std::string& name, std::string* error = nullptr);
+
 } // namespace titan

@@ -1,3 +1,4 @@
+#include <cctype>
 #include "titan/runtime/Runtime.h"
 #include "titan/runtime/UIRenderer.h"
 #include "titan/core/AnimationGraph.h"
@@ -151,10 +152,12 @@ bool Runtime::activateScene(const std::string& text, const std::string& name) {
         events_.emit(SceneUnloadedEvent{scene_.get()});
         scene_.reset();
     }
+    voxel_.stop(); // guarda el mundo de la escena anterior antes de que la física se vacíe
     scene_ = std::move(next);
     warnedNoCamera_ = false;
     TransformSystem::update(*scene_);
     physics_.build(*scene_);
+    startVoxel();
     physicsDestroySub_ = events_.subscribe<EntityDestroyedEvent>([this](const EntityDestroyedEvent& ev) {
         if (ev.scene != scene_.get()) return;
         physics_.removeEntity(ev.entity);
@@ -327,6 +330,10 @@ void Runtime::frame(const Viewport& viewport) {
         updateParticles(*scene_, dt, parallel ? &jobs_ : nullptr);
         profile_.particlesMs = msSince(tp);
         cameras_.update(*scene_, input_, &actions_, &physics_, dt); // cámaras que siguen al jugador
+        if (voxel_.active()) {
+            Vec3 c;
+            if (cameraPosition(c)) voxel_.update(c);
+        }
         // Sombras de gota: un rayo hacia abajo desde cada una (sin chocar con su propia entidad).
         scene_->world().each<BlobShadow>([&](Entity e, BlobShadow& b) {
             const Vec3 from = scene_->computeWorldMatrix(e).translation() + Vec3{0, 0.1f, 0};
@@ -393,6 +400,7 @@ void Runtime::render(const Viewport& viewport) {
     viewProj_ = view.projection * view.view;
     perspective_ = view.perspective;
     cache_->pump(4.0); // texturas ya decodificadas en otros hilos: a la GPU, como mucho ~4 ms por fotograma
+    sceneRenderer_.extraModels = voxel_.drawables(); // chunks del mundo de bloques (vacío si no hay)
     sceneRenderer_.render(*scene_, *renderer_, viewport, view, [this](AssetRef r) { return cache_->texture(r); },
                           [this](AssetRef r) { return cache_->model(r); },
                           [this](AssetRef r) { return cache_->material(r); });
@@ -532,12 +540,49 @@ void Runtime::resume() {
     events_.emit(AppResumedEvent{});
 }
 
+bool Runtime::cameraPosition(Vec3& out) {
+    Entity cam;
+    SceneView v;
+    if (!SceneRenderer::cameraView(*scene_, 1, v, &cam)) return false;
+    out = scene_->computeWorldMatrix(cam).translation();
+    return true;
+}
+
+void Runtime::startVoxel() {
+    const VoxelTerrain* vt = nullptr;
+    scene_->world().each<VoxelTerrain>([&](Entity e, VoxelTerrain& v) {
+        if (!vt && scene_->isActiveInHierarchy(e)) vt = &v;
+    });
+    if (!vt) return;
+    // Carpeta del mundo junto a la partida: <carpeta de la partida>/mundos/<nombre>. Sin ruta de guardado no se guarda.
+    std::string folder;
+    if (!savePath_.empty()) {
+        std::string name;
+        for (char ch : vt->worldName)
+            if (std::isalnum(static_cast<unsigned char>(ch)) || ch == '_' || ch == '-') name += ch;
+        if (name.empty()) name = "mundo";
+        const size_t slash = savePath_.find_last_of("/\\");
+        folder = (slash == std::string::npos ? std::string(".") : savePath_.substr(0, slash)) + "/mundos/" + name;
+    }
+    voxel_.start(*vt, folder, parallel ? &jobs_ : nullptr, renderer_, &physics_);
+    Vec3 c;
+    if (!cameraPosition(c)) c = {0, 0, 0};
+    voxel_.preload(c, 2); // el suelo cercano ya está al empezar (el jugador no cae al vacío)
+    TITAN_INFO("voxel", "Mundo de bloques iniciado: %zu chunks cerca de la cámara", voxel_.world()->loadedChunks());
+}
+
+int Runtime::scriptVoxelSave() {
+    VoxelWorld* w = voxel_.world();
+    return w ? w->saveModified() : 0;
+}
+
 void Runtime::shutdown() {
     if (!started_) return;
     started_ = false;
     if (scripts_ && scripts_->saveDirty()) scripts_->writeSave();
     if (scripts_) scripts_->detach();
     physicsDestroySub_.reset();
+    voxel_.stop(); // guarda los chunks modificados
     physics_.clear();
     audio_.shutdown();
     if (scene_) {

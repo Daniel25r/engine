@@ -118,6 +118,16 @@ solo hace falta lo que cambia respecto al valor por defecto. `AudioSource` guard
 en el almacenamiento privado de la app (Android), junto al paquete (reproductor de escritorio) o en `.titan/` del
 proyecto (Jugar en el editor; no se empaqueta).
 
+## Mundo de bloques — `mundos/<nombre>/`
+
+Junto a la partida guardada (en el editor, `<proyecto>/.titan/mundos/<nombre>/`).
+
+- `world.json`: `{"format": "titan-voxel-world", "version": 1, "seed", "seaLevel", "terrainScale", "caves", "trees"}`.
+  Si existe, manda sobre los ajustes del componente (el mundo sigue siendo el mismo).
+- `chunks/<cx>_<cz>.chunk`: solo los chunks que el jugador cambió. Binario: `"TVC1"` y los
+  16 384 bloques (orden y, z, x) en series `(longitud 1-255, id)`. Un archivo dañado o incompleto se rechaza y el
+  chunk se vuelve a generar. Se escribe de forma atómica.
+
 ## Metadatos de recurso — `<archivo>.meta`
 
 ```json

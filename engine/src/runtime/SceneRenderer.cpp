@@ -176,6 +176,15 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
                                transformAABB(local, t.worldMatrix()), skinned, e});
         anyCaster = anyCaster || (m.castShadows && !m.unlit && (m.color.a >= 0.999f || m.alphaClip));
     });
+    for (ExtraModel& x : extraModels) {
+        if (x.model < 0) continue;
+        AABB local;
+        if (!renderer.modelBounds(x.model, local.min, local.max)) continue;
+        const AABB world = transformAABB(local, x.world);
+        const Vec3 d = (world.min + world.max) * 0.5f - camPos;
+        candidates_.push_back({{&x.material, &x.world, MaterialTextures{}, dot(d, d), x.model, -1}, world, false, Entity{}});
+        anyCaster = true;
+    }
     stats_.meshes = static_cast<int>(candidates_.size());
 
     // ---- Terrenos: malla en la GPU (rehecha solo si se editó) y caja para el culling.

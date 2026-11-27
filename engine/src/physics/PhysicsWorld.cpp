@@ -128,6 +128,8 @@ struct CharacterData {
 };
 
 struct PhysicsWorld::Impl {
+    std::unordered_map<uint32_t, JPH::BodyID> staticMeshes; // mallas sin entidad (mundo voxel)
+    uint32_t nextStaticMesh = 0;
     uint16_t layerMatrix[Layers::kUserLayers];
     BroadPhaseLayers bpLayers;
     ObjectVsBroadPhase objVsBp;
@@ -181,6 +183,11 @@ void PhysicsWorld::clear() {
         impl_->bi().DestroyBody(id);
     }
     impl_->bodies.clear();
+    for (auto& [h, id] : impl_->staticMeshes) {
+        impl_->bi().RemoveBody(id);
+        impl_->bi().DestroyBody(id);
+    }
+    impl_->staticMeshes.clear();
     impl_->owners.clear();
     impl_->pairCount.clear();
     impl_->events.clear();
@@ -363,6 +370,36 @@ void PhysicsWorld::createTerrainBody(Scene& scene, Entity e, const Terrain& t) {
     if (id.IsInvalid()) return;
     impl_->bodies[pack(e)] = id;
     impl_->owners[id.GetIndexAndSequenceNumber()] = e;
+}
+
+uint32_t PhysicsWorld::addStaticMesh(const std::vector<Vec3>& v, const std::vector<uint32_t>& idx) {
+    if (!impl_->system || idx.size() < 3) return 0;
+    JPH::VertexList verts;
+    verts.reserve(v.size());
+    for (const Vec3& p : v) verts.push_back(JPH::Float3(p.x, p.y, p.z));
+    JPH::IndexedTriangleList tris;
+    tris.reserve(idx.size() / 3);
+    for (size_t i = 0; i + 2 < idx.size(); i += 3) tris.push_back(JPH::IndexedTriangle(idx[i], idx[i + 1], idx[i + 2], 0));
+    JPH::MeshShapeSettings settings(std::move(verts), std::move(tris));
+    JPH::ShapeSettings::ShapeResult result = settings.Create();
+    if (result.HasError()) {
+        TITAN_ERROR("physics", "Malla estática: %s", result.GetError().c_str());
+        return 0;
+    }
+    JPH::BodyCreationSettings bs(result.Get(), JPH::RVec3(0, 0, 0), JPH::Quat::sIdentity(), JPH::EMotionType::Static, Layers::kStatic);
+    const JPH::BodyID id = impl_->bi().CreateAndAddBody(bs, JPH::EActivation::DontActivate);
+    if (id.IsInvalid()) return 0;
+    const uint32_t handle = ++impl_->nextStaticMesh;
+    impl_->staticMeshes[handle] = id;
+    return handle;
+}
+
+void PhysicsWorld::removeStaticMesh(uint32_t handle) {
+    auto it = impl_->staticMeshes.find(handle);
+    if (it == impl_->staticMeshes.end()) return;
+    impl_->bi().RemoveBody(it->second);
+    impl_->bi().DestroyBody(it->second);
+    impl_->staticMeshes.erase(it);
 }
 
 void PhysicsWorld::createJoints(Scene& scene) {

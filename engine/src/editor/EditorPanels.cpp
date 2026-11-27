@@ -17,6 +17,7 @@
 
 #include "EditorImpl.h"
 #include "titan/core/Particles.h"
+#include "titan/core/Voxel.h"
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include "lauxlib.h"
@@ -339,6 +340,9 @@ void Editor::Impl::drawCreateMenu() {
         ImGui::EndMenu();
     }
     if (ImGui::MenuItem("Terreno")) createEntityOfKind("Terreno");
+    if (ImGui::MenuItem("Mundo de bloques")) createEntityOfKind("Mundo de bloques");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Mundo infinito de bloques con biomas, cuevas y árboles; se genera al pulsar Jugar alrededor de la cámara");
     if (ImGui::MenuItem("Cielo y niebla")) createEntityOfKind("Cielo y niebla");
 }
 
@@ -628,6 +632,7 @@ const char* Editor::Impl::typeLabel(Entity e) {
     if (w.has<Camera>(e)) return "Cámara";
     if (w.has<ParticleSystem>(e)) return "Partículas";
     if (w.has<Terrain>(e)) return "Terreno";
+    if (w.has<VoxelTerrain>(e)) return "Mundo de bloques";
     if (w.has<NavAgent>(e)) return "Agente IA";
     if (w.has<CharacterController>(e)) return "Personaje";
     if (w.has<UIJoystick>(e)) return "Joystick";
@@ -1355,6 +1360,27 @@ void Editor::Impl::drawComponentFields(const std::string& name, Entity e) {
         dragF("Recalcular cada", a.repathInterval, 0.01f, 0.05f, 10, "%.2f s");
         propLabel("");
         ImGui::TextDisabled("e:setDestination(x, y, z) o e:setDestination(jugador); AI.canSee(e, jugador)");
+    } else if (name == "VoxelTerrain") {
+        VoxelTerrain& v = *w.get<VoxelTerrain>(e);
+        propLabel("Semilla");
+        ImGui::InputInt("##vseed", &v.seed);
+        track();
+        propLabel("Distancia de vista");
+        ImGui::SliderInt("##vview", &v.viewDistance, 1, 24, "%d chunks");
+        track();
+        propLabel("Nombre del mundo");
+        ImGui::InputText("##vname", &v.worldName);
+        track();
+        propLabel("Nivel del mar");
+        ImGui::SliderInt("##vsea", &v.seaLevel, 2, kChunkHeight - 10);
+        track();
+        dragF("Escala del relieve", v.terrainScale, 0.01f, 0.2f, 3, "%.2f");
+        check("Cuevas", v.caves);
+        check("Árboles", v.trees);
+        propLabel("");
+        ImGui::TextDisabled("Se genera al jugar. Los cambios se guardan en .titan/mundos/<nombre>.\n"
+                            "La semilla y los ajustes de un mundo ya guardado mandan sobre estos.\n"
+                            "Lua: Voxel.get/set/raycast/surface/biome/save");
     } else if (name == "BlobShadow") {
         BlobShadow& b = *w.get<BlobShadow>(e);
         dragF("Radio", b.radius, 0.01f, 0.05f, 20, "%.2f m");

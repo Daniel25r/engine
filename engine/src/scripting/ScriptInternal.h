@@ -76,5 +76,7 @@ inline void setGlobalTable(lua_State* L, const char* name, const luaL_Reg* fns) 
 // Añade métodos a la tabla de métodos de Entity (en la cima de la pila) y crea sus tablas globales.
 void registerWorldEntityMethods(lua_State* L);
 void registerWorldGlobals(lua_State* L);
+// ScriptApiVoxel.cpp: Voxel.* (mundo de bloques).
+void registerVoxelGlobals(lua_State* L);
 
 } // namespace titan::script_detail

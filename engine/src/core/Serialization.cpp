@@ -489,6 +489,22 @@ ComponentRegistry ComponentRegistry::createDefault() {
             ++t.revision;
         });
 
+    r.addSimple<VoxelTerrain>(
+        "VoxelTerrain",
+        [](const VoxelTerrain& v) {
+            return Json{{"seed", v.seed}, {"viewDistance", v.viewDistance}, {"worldName", v.worldName}, {"seaLevel", v.seaLevel},
+                        {"terrainScale", toJson(v.terrainScale)}, {"caves", v.caves}, {"trees", v.trees}};
+        },
+        [](VoxelTerrain& v, FieldReader& rd) {
+            rd.read("seed", v.seed);
+            rd.read("viewDistance", v.viewDistance);
+            rd.read("worldName", v.worldName);
+            rd.read("seaLevel", v.seaLevel);
+            rd.read("terrainScale", v.terrainScale);
+            rd.read("caves", v.caves);
+            rd.read("trees", v.trees);
+        });
+
     r.addSimple<NavAgent>(
         "NavAgent",
         [](const NavAgent& a) {

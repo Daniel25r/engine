@@ -147,6 +147,8 @@ public:
     // Sustituye (o crea) el modelo de esa ruta con un GLB en memoria: el modelado del editor lo usa para ver cada
     // cambio al momento sin escribir en disco. Libera los búferes de la GPU de la versión anterior.
     int setModelData(const std::string& path, std::vector<uint8_t> glb);
+    // Libera la GPU y la memoria de un modelo (chunks que se descargan); su ranura se reutiliza con la misma ruta.
+    void unloadModel(const std::string& path);
     bool modelBounds(int model, Vec3& min, Vec3& max) const;
     // Triángulos del modelo en la CPU (espacio del modelo), para la colisión de malla.
     bool modelTriangles(int model, std::vector<Vec3>& verts, std::vector<uint32_t>& indices) const;

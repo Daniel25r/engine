@@ -33,6 +33,7 @@ struct lua_State;
 namespace titan {
 
 // Lo que el sistema de scripts necesita del runtime que lo aloja.
+class VoxelWorld;
 class ScriptHost {
 public:
     virtual ~ScriptHost() = default;
@@ -76,6 +77,10 @@ public:
     // Navegación: la rejilla de la escena (nula si no hay) y hornearla de nuevo (devuelve las celdas caminables).
     virtual NavGrid* scriptNavGrid() { return nullptr; }
     virtual int scriptBakeNav(const NavSettings*) { return 0; }
+    // Mundo de bloques de la escena (nulo si no tiene VoxelTerrain) y aviso tras cambiar un bloque (rehace la malla).
+    virtual VoxelWorld* scriptVoxelWorld() { return nullptr; }
+    virtual void scriptVoxelChanged(int x, int y, int z) {}
+    virtual int scriptVoxelSave() { return 0; }
 };
 
 struct ScriptError {

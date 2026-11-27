@@ -51,4 +51,7 @@ ya trabajan con glTF, así que cada formato nuevo funciona en todo el motor sin 
 | **Modo Esculpir**: pinceles Dibujar, Inflar, Suavizar, Aplanar, Pellizcar y Agarrar; radio y fuerza; Ctrl hunde; círculo del pincel sobre la superficie | ✅ probado en el editor con trazos simulados sobre una esfera de 6144 caras |
 | Crear › Modelo editable: cubo, esfera, cilindro, cono, plano y "Cabeza (esfera densa)" para esculpir | ✅ |
 | Convertir un modelo importado en malla editable (se crea una copia en models/; el original no se toca) | ✅ forma; ⚠️ todavía pierde texturas, UV y huesos |
-| Retopología, rigging (huesos y pesos), línea de tiempo de animación, FBX | ▶ siguientes bloques, en este orden: rigging + animación, FBX, retopología |
+| **Modo Esqueleto** (rigging): esqueleto humano automático (19 huesos ajustados a la caja de la malla) o un hueso raíz; añadir hijo, renombrar, mover cabeza/cola, borrar hueso (sus hijos pasan al padre), pesos automáticos por distancia a los huesos (4 por vértice) | ✅ probado en el editor (19 huesos, todos los vértices con peso) y con prueba de pesos y deformación |
+| **Modo Animar**: clips con nombre, duración y bucle; línea de tiempo con marcas de claves; rotación (y traslación del hueso raíz) con clave automática; insertar/borrar clave; reproducir; vista previa deformada en el visor | ✅ probado en el editor (clip nuevo, hueso elegido con clic) |
+| Exportación del rig: el GLB lleva JOINTS_0/WEIGHTS_0, nodos de huesos, skin con matrices inversas y animaciones; el motor lo reproduce con `Animator` | ✅ prueba de ida y vuelta con cgltf |
+| FBX (Mixamo, Prisma 3D), SMD/DMX (Source Filmmaker), retopología, IK | ▶ siguientes bloques, en este orden: FBX (ufbx, MIT), SMD, retopología |

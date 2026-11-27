@@ -81,7 +81,8 @@ struct PaddedChunk {
     }
 };
 // Malla del chunk en coordenadas del mundo: una parte por tipo de bloque (su color como material).
-MeshBuild meshChunk(const PaddedChunk& p, const BlockRegistry& reg);
+// solidOnly: solo los bloques sólidos (malla de colisión: el agua y la lava no frenan).
+MeshBuild meshChunk(const PaddedChunk& p, const BlockRegistry& reg, bool solidOnly = false);
 
 // Datos del mundo cargado: chunks en memoria, acceso por coordenadas de bloque del mundo.
 class VoxelWorld {

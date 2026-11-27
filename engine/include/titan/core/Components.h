@@ -481,6 +481,17 @@ struct BlobShadow {
     float height = 0;
 };
 
+// Mundo de bloques (voxels): se genera y se carga por chunks alrededor de la cámara activa mientras se juega, y
+// guarda los cambios del jugador en <carpeta de la partida>/mundos/<nombre>. Uno por escena.
+struct VoxelTerrain {
+    int seed = 1337;
+    int viewDistance = 6;      // chunks de 16 m alrededor de la cámara
+    std::string worldName = "mundo";
+    int seaLevel = 20;
+    float terrainScale = 1.0f;
+    bool caves = true, trees = true;
+};
+
 // Agente de navegación (enemigos, NPC): va a su destino por el camino de la rejilla de navegación, rodeando
 // obstáculos. Con CharacterController camina con física (pendientes, escalones); sin él, desliza su Transform.
 struct NavAgent {

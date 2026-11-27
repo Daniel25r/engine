@@ -35,6 +35,10 @@ public:
     // Crea los cuerpos de todas las entidades con Collider (activas). Borra los anteriores.
     void build(Scene& scene);
     void clear();
+    // Cuerpos estáticos de triángulos que no son entidades de la escena (chunks del mundo voxel). Devuelve un
+    // identificador (0 = error). Los personajes chocan con ellos y los rayos los ven (entidad nula).
+    uint32_t addStaticMesh(const std::vector<Vec3>& verts, const std::vector<uint32_t>& indices);
+    void removeStaticMesh(uint32_t id);
     void step(Scene& scene, float dt);
     void removeEntity(Entity e);
     // Crea los cuerpos de una entidad nueva y de sus hijos (prefabs instanciados durante el juego).
