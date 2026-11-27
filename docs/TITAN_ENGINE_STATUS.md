@@ -12,7 +12,8 @@ Fecha: 2026-11-27 · Versión del código: 0.13.0 + mezclador de audio (0.14 en 
 | 🔨 Compilado | Escrito y compilado, sin prueba que lo ejerza |
 | ❌ No existe | No hay código. Ninguna clase vacía ni botón que lo aparente |
 
-**Nada se ha probado en un teléfono Android real** (en este entorno no hay dispositivo ni emulador con KVM). Todo
+**Plataforma principal: PC (Windows y Linux).** Desde 2026-11-27 el editor se orienta a ratón y teclado; Android
+queda como objetivo secundario (el código se conserva y compila). **Nada se ha probado en un teléfono Android real** (en este entorno no hay dispositivo ni emulador con KVM). Todo
 lo marcado ✅ se probó en Linux x86_64 (GCC, llvmpipe para OpenGL ES). Plan de validación: `docs/VALIDACION_ANDROID.md`.
 
 ## Resumen honesto frente a la especificación de 33 secciones
@@ -249,6 +250,7 @@ Multihilo propio, pools, streaming, carga asíncrona, LOD, oclusión: ❌.
 
 | Fecha | Bloque | Resultado |
 |---|---|---|
+| 2026-11-27 | Interfaz del editor para PC: escala de Windows, tamaño elegible (100–200 %, Ctrl + / Ctrl −, 125 % por defecto, se recuerda), calidad alta por defecto en PC, editor sin consola | 111/111 pruebas; capturas a 1920×1080 |
 | 2026-11-27 | Compilación para Windows en GitHub Actions; el editor abre en un PC con Windows | 3 intentos: errores de MSVC (include, cabeceras GLES) y cuota de Artifacts → Releases |
 | 2026-11-27 | Carga asíncrona de texturas con precarga de escena | 111/111 pruebas; arranque 3,4 s → 0,22 s (medido) |
 | 2026-11-27 | Job System + partículas en paralelo + tiempos de física y partículas en el perfilador | 110/110 pruebas; TSan limpio; 1,10 → 0,38 ms en partículas |

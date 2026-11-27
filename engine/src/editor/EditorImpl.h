@@ -45,7 +45,14 @@ struct Editor::Impl {
 
     EditorPlatform& platform;
     bool initialized = false;
-    float scale = 1.0f;
+    float scale = 1.0f;     // densidad de la pantalla × uiZoom
+    // Tamaño de la interfaz elegido por el usuario (Ventana › Tamaño de la interfaz, Ctrl+ / Ctrl-), guardado en
+    // <carpeta de proyectos>/.preferencias.json. En PC empieza en 125 %.
+    float uiZoom = 1.0f;
+    bool fontsDirty = false;
+    void setUiZoom(float zoom);
+    void loadPreferences();
+    void savePreferences();
     ImFont* monoFont = nullptr;
     int fbWidth = 1, fbHeight = 1;
 

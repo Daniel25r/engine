@@ -48,7 +48,9 @@ bool Editor::Impl::init() {
     io.IniFilename = nullptr; // la distribución la decide el editor según el tamaño de pantalla
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     if (platform.isTouchScreen()) io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;
-    scale = std::max(1.0f, platform.uiScale());
+    uiZoom = platform.isTouchScreen() ? 1.0f : 1.25f; // PC: la interfaz por defecto un poco más grande
+    loadPreferences();
+    scale = std::max(1.0f, platform.uiScale()) * uiZoom;
     loadFonts();
     applyStyle();
     if (!ImGui_ImplOpenGL3_Init("#version 300 es")) return false;
@@ -81,6 +83,29 @@ bool Editor::Impl::init() {
     initialized = true;
     TITAN_INFO("editor", "%s %s — editor listo", kEngineName, kEngineVersion);
     return true;
+}
+
+void Editor::Impl::loadPreferences() {
+    std::string text;
+    if (!fileio::readText(projectsDir() + "/.preferencias.json", text)) return;
+    const Json j = Json::parse(text, nullptr, false);
+    if (j.is_object() && j.contains("tamano_interfaz") && j["tamano_interfaz"].is_number())
+        uiZoom = std::clamp(j["tamano_interfaz"].get<float>(), 0.75f, 2.5f);
+}
+
+void Editor::Impl::savePreferences() {
+    Json j;
+    j["tamano_interfaz"] = uiZoom;
+    fileio::writeAtomic(projectsDir() + "/.preferencias.json", j.dump(2), false);
+}
+
+void Editor::Impl::setUiZoom(float zoom) {
+    zoom = std::clamp(std::round(zoom * 20.0f) / 20.0f, 0.75f, 2.5f);
+    if (zoom == uiZoom) return;
+    uiZoom = zoom;
+    fontsDirty = true;
+    savePreferences();
+    setStatus("Tamaño de la interfaz: " + std::to_string(int(std::lround(zoom * 100))) + " %");
 }
 
 void Editor::Impl::loadFonts() {
@@ -187,6 +212,14 @@ void Editor::Impl::frame(int w, int h, float dt) {
     io.DeltaTime = std::max(dt, 1e-4f);
     if (statusTime > 0) statusTime -= dt;
 
+    if (fontsDirty) { // tamaño de la interfaz cambiado: fuentes y estilo de nuevo, antes de empezar el fotograma
+        fontsDirty = false;
+        scale = std::max(1.0f, platform.uiScale()) * uiZoom;
+        loadFonts();
+        applyStyle();
+        ImGui_ImplOpenGL3_DestroyFontsTexture();
+        ImGui_ImplOpenGL3_CreateFontsTexture();
+    }
     ImGui_ImplOpenGL3_NewFrame();
     ImGui::NewFrame();
     touchScroll();
@@ -898,6 +931,10 @@ void Editor::Impl::stop() {
 
 void Editor::Impl::handleShortcuts() {
     ImGuiIO& io = ImGui::GetIO();
+    // Tamaño de la interfaz: en cualquier pantalla (también el navegador de proyectos y escribiendo).
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Equal, false)) setUiZoom(uiZoom + 0.125f);
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Minus, false)) setUiZoom(uiZoom - 0.125f);
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_0, false)) setUiZoom(1.25f);
     if (io.WantTextInput) {
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) save();
         return;
@@ -1020,7 +1057,7 @@ void Editor::onKey(EditorKey key, bool down) {
         ImGuiKey_PageDown, ImGuiKey_Home, ImGuiKey_End, ImGuiKey_Delete, ImGuiKey_Backspace, ImGuiKey_Enter,
         ImGuiKey_Escape, ImGuiKey_LeftCtrl, ImGuiKey_LeftShift, ImGuiKey_LeftAlt, ImGuiKey_A, ImGuiKey_C, ImGuiKey_V,
         ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z, ImGuiKey_S, ImGuiKey_D, ImGuiKey_F, ImGuiKey_P, ImGuiKey_N, ImGuiKey_Q,
-        ImGuiKey_W, ImGuiKey_E, ImGuiKey_R};
+        ImGuiKey_W, ImGuiKey_E, ImGuiKey_R, ImGuiKey_Equal, ImGuiKey_Minus, ImGuiKey_0};
     ImGuiIO& io = ImGui::GetIO();
     const ImGuiKey k = map[static_cast<int>(key)];
     if (key == EditorKey::Ctrl) io.AddKeyEvent(ImGuiMod_Ctrl, down);

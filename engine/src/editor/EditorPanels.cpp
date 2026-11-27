@@ -368,6 +368,15 @@ void Editor::Impl::drawMenuBar() {
         ImGui::MenuItem("Gizmos", nullptr, &showGizmos);
         ImGui::MenuItem("Interfaz del juego", nullptr, &showUI);
         ImGui::MenuItem("Mezclador de audio", nullptr, &showMixer);
+        if (ImGui::BeginMenu("Tamaño de la interfaz")) {
+            for (float z : {1.0f, 1.25f, 1.5f, 1.75f, 2.0f}) {
+                const std::string label = std::to_string(int(z * 100)) + " %";
+                if (ImGui::MenuItem(label.c_str(), z == 1.25f ? "Ctrl+0" : nullptr, std::fabs(uiZoom - z) < 0.01f)) setUiZoom(z);
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("Ctrl + y Ctrl - para ajustar");
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("Calidad gráfica")) {
             const QualityLevel rec = recommendedQuality(renderer.caps());
             for (QualityLevel l : {QualityLevel::VeryLow, QualityLevel::Low, QualityLevel::Medium, QualityLevel::High,
@@ -708,6 +717,16 @@ void Editor::Impl::drawBrowser() {
     }
     ImGui::Dummy(ImVec2(0, 8 * scale));
     ImGui::TextDisabled("Carpeta: %s", projectsDir().c_str());
+    ImGui::Spacing();
+    ImGui::TextDisabled("Tamaño de la interfaz");
+    ImGui::SameLine();
+    if (ImGui::SmallButton(" - ")) setUiZoom(uiZoom - 0.125f);
+    ImGui::SameLine();
+    ImGui::Text("%d %%", int(std::lround(uiZoom * 100)));
+    ImGui::SameLine();
+    if (ImGui::SmallButton(" + ")) setUiZoom(uiZoom + 0.125f);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(también Ctrl + y Ctrl -)");
     ImGui::EndChild();
     ImGui::End();
 }

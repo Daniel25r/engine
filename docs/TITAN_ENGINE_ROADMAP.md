@@ -6,6 +6,10 @@ Lo que no tiene prueba no se marca como hecho. Estado detallado: `docs/TITAN_ENG
 
 Leyenda: ✅ hecho y probado · ▶ siguiente · ○ pendiente
 
+**Decisión (2026-11-27): Titán es un motor para ordenador.** El editor se desarrolla para Windows (prioridad) y
+Linux, con ratón y teclado. El código de Android no se borra (sigue compilando y los juegos pueden exportarse a
+Android más adelante), pero deja de ser prioridad: el editor ya no se diseña para pantallas táctiles.
+
 ## Etapa 1 — Arquitectura central y audio
 
 | Bloque | Estado | Criterio de "terminado" |

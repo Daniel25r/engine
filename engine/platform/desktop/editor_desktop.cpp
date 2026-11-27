@@ -13,6 +13,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -107,6 +108,9 @@ titan::EditorKey mapKey(int key, bool& ok) {
     case GLFW_KEY_W: return K::W;
     case GLFW_KEY_E: return K::E;
     case GLFW_KEY_R: return K::R;
+    case GLFW_KEY_EQUAL: case GLFW_KEY_KP_ADD: case GLFW_KEY_RIGHT_BRACKET: return K::Plus; // "+" en teclados españoles
+    case GLFW_KEY_MINUS: case GLFW_KEY_KP_SUBTRACT: case GLFW_KEY_SLASH: return K::Minus;
+    case GLFW_KEY_0: case GLFW_KEY_KP_0: return K::Num0;
     default: ok = false; return K::Tab;
     }
 }
@@ -154,6 +158,7 @@ int main(int argc, char** argv) {
         return out;
     };
     int width = 1280, height = 800;
+    bool scaleGiven = false;
     std::vector<ScriptedTouch> scripted;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -171,7 +176,10 @@ int main(int argc, char** argv) {
         else if (a == "--frames") frames = std::atol(next().c_str());
         else if (a == "--screenshot") screenshot = next();
         else if (a == "--size") std::sscanf(next().c_str(), "%dx%d", &width, &height);
-        else if (a == "--scale") platform.scale = static_cast<float>(std::atof(next().c_str()));
+        else if (a == "--scale") {
+            platform.scale = static_cast<float>(std::atof(next().c_str()));
+            scaleGiven = true;
+        }
         else if (a == "--touch") platform.touch = true;
         else if (a == "--taps" || a == "--drag") {
             const std::string list = next();
@@ -199,6 +207,13 @@ int main(int argc, char** argv) {
         return 1;
     }
     platform.window = window;
+    // Escala de Windows/macOS (100 %, 125 %, 150 %...): la interfaz se ve del mismo tamaño físico en cualquier
+    // pantalla. --scale la sustituye (pruebas automáticas).
+    if (!scaleGiven) {
+        float sx = 1, sy = 1;
+        glfwGetWindowContentScale(window, &sx, &sy);
+        platform.scale = std::max(1.0f, sx);
+    }
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
