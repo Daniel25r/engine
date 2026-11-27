@@ -331,3 +331,104 @@ TEST("exportar: OBJ con MTL que se vuelve a importar igual") {
     CHECK_EQ(back.materials[0].name, std::string("Piedra"));
     CHECK_NEAR(back.materials[0].color.b, 0.45f, 1e-5f);
 }
+
+// ---- Rigging y animación
+#include "titan/core/Rig.h"
+
+TEST("rig: esqueleto humano ajustado a la caja, pesos automáticos y pose de reposo") {
+    const Rig r = Rig::humanoid({-0.9f, 0, -0.2f}, {0.9f, 1.8f, 0.2f});
+    CHECK_EQ(r.bones.size(), 19u);
+    for (size_t i = 0; i < r.bones.size(); ++i) CHECK(r.bones[i].parent < int(i)); // los padres van antes
+    CHECK_NEAR(r.bones[size_t(r.find("Cabeza"))].tail.y, 1.8f, 1e-5f);
+    CHECK(r.bones[size_t(r.find("Mano.I"))].tail.x > 0.8f); // los brazos llegan a los lados (pose T)
+    CHECK(r.find("Pie.D") >= 0 && r.find("Antebrazo.I") >= 0);
+
+    Rig w = r;
+    std::vector<Vec3> verts = {{0.85f, 1.44f, 0}, {0, 1.7f, 0}, {0.16f, 0.2f, 0}, {0, 1.0f, 0.1f}};
+    w.autoWeights(verts);
+    for (size_t v = 0; v < verts.size(); ++v) {
+        float sum = 0;
+        for (float x : w.weights[v]) sum += x;
+        CHECK_NEAR(sum, 1.0f, 1e-5f);
+    }
+    CHECK_EQ(w.joints[0][0], w.find("Mano.I"));   // el hueso dominante es el más cercano
+    CHECK_EQ(w.joints[1][0], w.find("Cabeza"));
+    CHECK_EQ(w.joints[2][0], w.find("Pierna.I"));
+    CHECK(w.weights[0][0] > 0.6f);
+    // En reposo la malla no se mueve.
+    const std::vector<Vec3> rest = w.deform(verts, w.skinMatrices(-1, 0));
+    for (size_t i = 0; i < verts.size(); ++i) CHECK((rest[i] - verts[i]).length() < 1e-5f);
+}
+
+TEST("rig: claves, interpolación y deformación al girar un hueso") {
+    Rig r;
+    r.bones.push_back({"Brazo", -1, {0, 0, 0}, {1, 0, 0}});
+    r.bones.push_back({"Antebrazo", 0, {1, 0, 0}, {2, 0, 0}});
+    RigClip clip;
+    clip.name = "Doblar";
+    RigKey a, b;
+    a.time = 0;
+    b.time = 1;
+    b.rotation = Quat::fromAxisAngle({0, 0, 1}, kPi / 2); // codo 90° hacia arriba
+    clip.setKey(1, a);
+    clip.setKey(1, b);
+    clip.setKey(1, b); // la misma clave dos veces la sustituye
+    CHECK_EQ(clip.tracks[0].keys.size(), 2u);
+    CHECK_EQ(clip.keyTimes().size(), 2u);
+    Quat q;
+    Vec3 t;
+    CHECK(clip.sample(1, 0.5f, q, t));
+    CHECK_NEAR(q.toEuler().z, kPi / 4, 1e-3f); // a mitad, la mitad del giro (interpolación esférica; radianes)
+    CHECK(!clip.sample(0, 0.5f, q, t));      // el brazo no tiene claves
+    r.clips.push_back(clip);
+    // Un punto en la punta del antebrazo, todo suyo: con el codo a 90°, pasa de (2,0,0) a (1,1,0).
+    r.joints = {{1, 0, 0, 0}};
+    r.weights = {{1, 0, 0, 0}};
+    const std::vector<Vec3> bent = r.deform({{2, 0, 0}}, r.skinMatrices(0, 1));
+    CHECK((bent[0] - Vec3{1, 1, 0}).length() < 1e-4f);
+    CHECK(clip.removeKey(1, 1.0f));
+    CHECK(!clip.removeKey(1, 0.5f));
+}
+
+TEST("rig: el GLB lleva skin, pesos y animación válidos, y el .tmesh los conserva") {
+    EditMesh m = EditMesh::cube(1);
+    m.subdivide(false);
+    m.rig = Rig::humanoid({-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f});
+    RigClip wave;
+    wave.name = "Saludar";
+    RigKey k0, k1;
+    k1.time = 0.5f;
+    k1.rotation = Quat::fromAxisAngle({0, 0, 1}, 1.0f);
+    wave.setKey(m.rig.find("Brazo.I"), k0);
+    wave.setKey(m.rig.find("Brazo.I"), k1);
+    m.rig.clips.push_back(wave);
+    const MeshBuild mb = m.build(); // los pesos faltan: se calculan solos
+    CHECK_EQ(mb.bones.size(), 19u);
+    CHECK_EQ(mb.clips.size(), 1u);
+    std::vector<uint8_t> glb;
+    std::string err;
+    CHECK(writeGlb(mb, glb, &err));
+    cgltf_options opt{};
+    cgltf_data* data = nullptr;
+    CHECK(cgltf_parse(&opt, glb.data(), glb.size(), &data) == cgltf_result_success);
+    CHECK(cgltf_load_buffers(&opt, data, nullptr) == cgltf_result_success);
+    CHECK(cgltf_validate(data) == cgltf_result_success);
+    CHECK_EQ(data->skins_count, size_t(1));
+    CHECK_EQ(data->skins[0].joints_count, size_t(19));
+    CHECK_EQ(data->animations_count, size_t(1));
+    CHECK_EQ(std::string(data->animations[0].name), std::string("Saludar"));
+    CHECK_EQ(data->animations[0].channels_count, size_t(2)); // traslación y rotación del brazo
+    bool hasJoints = false;
+    for (size_t a = 0; a < data->meshes[0].primitives[0].attributes_count; ++a)
+        hasJoints |= data->meshes[0].primitives[0].attributes[a].type == cgltf_attribute_type_joints;
+    CHECK(hasJoints);
+    CHECK(data->nodes[0].skin == &data->skins[0]);
+    cgltf_free(data);
+
+    EditMesh back;
+    CHECK(EditMesh::fromJson(m.toJson(), back, &err));
+    CHECK_EQ(back.rig.bones.size(), 19u);
+    CHECK_EQ(back.rig.clips.size(), 1u);
+    CHECK_EQ(back.rig.clips[0].tracks[0].keys.size(), 2u);
+    CHECK_NEAR(back.rig.clips[0].tracks[0].keys[1].rotation.z, k1.rotation.z, 1e-6f);
+}

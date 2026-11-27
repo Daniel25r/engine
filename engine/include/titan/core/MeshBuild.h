@@ -20,6 +20,25 @@ struct MeshBuildMaterial {
 struct MeshBuildVertex {
     Vec3 position, normal;
     Vec2 uv;
+    uint16_t joints[4] = {0, 0, 0, 0}; // solo con esqueleto (MeshBuild::bones)
+    float weights[4] = {0, 0, 0, 0};
+};
+
+// Esqueleto y animación (opcionales): se escriben como skin y animaciones glTF.
+struct MeshBuildBone {
+    std::string name;
+    int parent = -1;
+    Vec3 restLocal; // posición de reposo respecto al padre (o a la malla si es raíz)
+    Vec3 restWorld; // cabeza del hueso en el espacio de la malla (para la matriz inversa de reposo)
+};
+struct MeshBuildChannel {
+    int bone = 0;
+    int path = 0; // 0 traslación (vec3), 1 rotación (quat x, y, z, w)
+    std::vector<float> times, values;
+};
+struct MeshBuildClip {
+    std::string name;
+    std::vector<MeshBuildChannel> channels;
 };
 
 struct MeshBuildPart {
@@ -31,6 +50,8 @@ struct MeshBuildPart {
 struct MeshBuild {
     std::vector<MeshBuildMaterial> materials;
     std::vector<MeshBuildPart> parts;
+    std::vector<MeshBuildBone> bones; // vacío = malla sin esqueleto
+    std::vector<MeshBuildClip> clips;
     size_t triangleCount() const;
     // Normales por cara (plano) a partir de las posiciones, para formatos que no traen normales.
     void computeFlatNormals();

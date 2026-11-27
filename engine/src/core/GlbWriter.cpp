@@ -1,5 +1,6 @@
 // Escritor de glTF 2.0 binario (GLB): cabecera, fragmento JSON y fragmento binario con posiciones, normales, UV,
 // índices de 32 bits e imágenes incrustadas. Especificación: registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
+#include <algorithm>
 #include <cstring>
 
 #include "titan/core/MeshBuild.h"
@@ -95,20 +96,73 @@ bool writeGlb(const MeshBuild& mesh, std::vector<uint8_t>& out, std::string* err
         const int aIdx = accessor(view(append(bin, p.indices.data(), p.indices.size()), p.indices.size() * 4, 34963), 5125,
                                   p.indices.size(), "SCALAR");
         const int mat = p.material >= 0 && size_t(p.material) < materials.size() ? p.material : 0;
-        primitives.push_back(Json{{"attributes", {{"POSITION", aPos}, {"NORMAL", aNrm}, {"TEXCOORD_0", aUv}}},
-                                  {"indices", aIdx}, {"material", mat}, {"mode", 4}});
+        Json attributes{{"POSITION", aPos}, {"NORMAL", aNrm}, {"TEXCOORD_0", aUv}};
+        if (!mesh.bones.empty()) { // huesos (uint16) y pesos (float) de cada vértice
+            std::vector<uint16_t> jn;
+            std::vector<float> wt;
+            for (const MeshBuildVertex& v : p.vertices) {
+                jn.insert(jn.end(), v.joints, v.joints + 4);
+                wt.insert(wt.end(), v.weights, v.weights + 4);
+            }
+            attributes["JOINTS_0"] = accessor(view(append(bin, jn.data(), jn.size()), jn.size() * 2, 34962), 5123, n, "VEC4");
+            attributes["WEIGHTS_0"] = accessor(view(append(bin, wt.data(), wt.size()), wt.size() * 4, 34962), 5126, n, "VEC4");
+        }
+        primitives.push_back(Json{{"attributes", attributes}, {"indices", aIdx}, {"material", mat}, {"mode", 4}});
+    }
+    // Esqueleto: un nodo por hueso (después del nodo de la malla), skin con las matrices inversas de reposo.
+    Json nodes = Json::array({Json{{"mesh", 0}, {"name", "Malla"}}});
+    Json sceneNodes = Json::array({0});
+    Json skins = Json::array(), animations = Json::array();
+    if (!mesh.bones.empty()) {
+        std::vector<float> ibm;
+        Json jointList = Json::array();
+        for (size_t b = 0; b < mesh.bones.size(); ++b) {
+            const MeshBuildBone& bone = mesh.bones[b];
+            nodes.push_back(Json{{"name", bone.name}, {"translation", {bone.restLocal.x, bone.restLocal.y, bone.restLocal.z}}});
+            jointList.push_back(int(b + 1));
+            if (bone.parent < 0) sceneNodes.push_back(int(b + 1));
+            const float m[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -bone.restWorld.x, -bone.restWorld.y, -bone.restWorld.z, 1};
+            ibm.insert(ibm.end(), m, m + 16);
+        }
+        for (size_t b = 0; b < mesh.bones.size(); ++b)
+            if (mesh.bones[b].parent >= 0) {
+                Json& parent = nodes[size_t(mesh.bones[b].parent) + 1];
+                if (!parent.contains("children")) parent["children"] = Json::array();
+                parent["children"].push_back(int(b + 1));
+            }
+        const int aIbm = accessor(view(append(bin, ibm.data(), ibm.size()), ibm.size() * 4, 0), 5126, mesh.bones.size(), "MAT4");
+        skins.push_back(Json{{"joints", jointList}, {"inverseBindMatrices", aIbm}, {"skeleton", jointList[0]}});
+        nodes[0]["skin"] = 0;
+        for (const MeshBuildClip& clip : mesh.clips) {
+            Json samplers = Json::array(), channels = Json::array();
+            for (const MeshBuildChannel& ch : clip.channels) {
+                if (ch.times.empty()) continue;
+                const int aIn = accessor(view(append(bin, ch.times.data(), ch.times.size()), ch.times.size() * 4, 0), 5126,
+                                         ch.times.size(), "SCALAR");
+                accessors[aIn]["min"] = {*std::min_element(ch.times.begin(), ch.times.end())}; // obligatorios en la entrada
+                accessors[aIn]["max"] = {*std::max_element(ch.times.begin(), ch.times.end())};
+                const int aOut = accessor(view(append(bin, ch.values.data(), ch.values.size()), ch.values.size() * 4, 0), 5126,
+                                          ch.times.size(), ch.path == 1 ? "VEC4" : "VEC3");
+                samplers.push_back(Json{{"input", aIn}, {"output", aOut}, {"interpolation", "LINEAR"}});
+                channels.push_back(Json{{"sampler", samplers.size() - 1},
+                                        {"target", {{"node", ch.bone + 1}, {"path", ch.path == 1 ? "rotation" : "translation"}}}});
+            }
+            if (!channels.empty()) animations.push_back(Json{{"name", clip.name}, {"samplers", samplers}, {"channels", channels}});
+        }
     }
     align4(bin);
 
     Json gltf{{"asset", {{"version", "2.0"}, {"generator", "Titán Engine"}}},
               {"scene", 0},
-              {"scenes", Json::array({Json{{"nodes", {0}}}})},
-              {"nodes", Json::array({Json{{"mesh", 0}, {"name", "Malla"}}})},
+              {"scenes", Json::array({Json{{"nodes", sceneNodes}}})},
+              {"nodes", nodes},
               {"meshes", Json::array({Json{{"primitives", primitives}}})},
               {"materials", materials},
               {"buffers", Json::array({Json{{"byteLength", bin.size()}}})},
               {"bufferViews", bufferViews},
               {"accessors", accessors}};
+    if (!skins.empty()) gltf["skins"] = skins;
+    if (!animations.empty()) gltf["animations"] = animations;
     if (!images.empty()) {
         gltf["images"] = images;
         gltf["textures"] = textures;

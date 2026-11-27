@@ -465,6 +465,36 @@ MeshBuild EditMesh::build() const {
         }
         for (Vec3& n : vertexNormal) n = n.length() > 1e-8f ? n.normalized() : Vec3{0, 1, 0};
     }
+    // Esqueleto: pesos por vértice de la malla (automáticos si faltan o la malla cambió) y clips.
+    Rig rig = this->rig;
+    const bool skinned = !rig.empty();
+    if (skinned) {
+        if (rig.joints.size() != verts.size()) rig.autoWeights(verts);
+        for (const RigBone& b : rig.bones)
+            out.bones.push_back({b.name, b.parent, b.parent >= 0 ? b.head - rig.bones[size_t(b.parent)].head : b.head, b.head});
+        for (const RigClip& clip : rig.clips) {
+            MeshBuildClip mc;
+            mc.name = clip.name;
+            for (const RigTrack& t : clip.tracks) {
+                if (t.bone < 0 || size_t(t.bone) >= rig.bones.size() || t.keys.empty()) continue;
+                MeshBuildChannel pos, rot;
+                pos.bone = rot.bone = t.bone;
+                pos.path = 0;
+                rot.path = 1;
+                for (const RigKey& k : t.keys) {
+                    pos.times.push_back(k.time);
+                    rot.times.push_back(k.time);
+                    const Vec3 p = out.bones[size_t(t.bone)].restLocal + k.translation;
+                    pos.values.insert(pos.values.end(), {p.x, p.y, p.z});
+                    const Quat q = k.rotation.normalized();
+                    rot.values.insert(rot.values.end(), {q.x, q.y, q.z, q.w});
+                }
+                mc.channels.push_back(pos);
+                mc.channels.push_back(rot);
+            }
+            out.clips.push_back(mc);
+        }
+    }
     std::map<int, size_t> partOf;
     for (size_t f = 0; f < faces.size(); ++f) {
         const EditFace& face = faces[f];
@@ -484,6 +514,11 @@ MeshBuild EditMesh::build() const {
             MeshBuildVertex mv;
             mv.position = p;
             mv.normal = smooth ? vertexNormal[size_t(face.v[i])] : fn;
+            if (skinned)
+                for (int k = 0; k < 4; ++k) {
+                    mv.joints[k] = uint16_t(rig.joints[size_t(face.v[i])][size_t(k)]);
+                    mv.weights[k] = rig.weights[size_t(face.v[i])][size_t(k)];
+                }
             if (!face.uv.empty()) mv.uv = face.uv[i];
             else if (an.x >= an.y && an.x >= an.z) mv.uv = {p.z, p.y}; // proyección por caja
             else if (an.y >= an.z) mv.uv = {p.x, p.z};
@@ -521,6 +556,35 @@ std::string EditMesh::toJson() const {
         ms.push_back(Json{{"name", m.name}, {"color", {m.color.r, m.color.g, m.color.b, m.color.a}}, {"metallic", m.metallic},
                           {"roughness", m.roughness}});
     j["materials"] = ms;
+    if (!rig.empty()) {
+        Json bones = Json::array();
+        for (const RigBone& b : rig.bones)
+            bones.push_back(Json{{"name", b.name}, {"parent", b.parent}, {"head", {b.head.x, b.head.y, b.head.z}}, {"tail", {b.tail.x, b.tail.y, b.tail.z}}});
+        Json clips = Json::array();
+        for (const RigClip& c : rig.clips) {
+            Json tracks = Json::array();
+            for (const RigTrack& t : c.tracks) {
+                Json keys = Json::array();
+                for (const RigKey& k : t.keys)
+                    keys.push_back(Json{{"t", k.time}, {"r", {k.rotation.x, k.rotation.y, k.rotation.z, k.rotation.w}},
+                                        {"p", {k.translation.x, k.translation.y, k.translation.z}}});
+                tracks.push_back(Json{{"bone", t.bone}, {"keys", keys}});
+            }
+            clips.push_back(Json{{"name", c.name}, {"duration", c.duration}, {"loop", c.loop}, {"tracks", tracks}});
+        }
+        Json jr{{"bones", bones}, {"clips", clips}};
+        if (rig.joints.size() == verts.size()) { // pesos guardados (si se pintan a mano no deben perderse)
+            Json jj = Json::array(), ww = Json::array();
+            for (size_t i = 0; i < verts.size(); ++i)
+                for (int k = 0; k < 4; ++k) {
+                    jj.push_back(rig.joints[i][size_t(k)]);
+                    ww.push_back(rig.weights[i][size_t(k)]);
+                }
+            jr["joints"] = jj;
+            jr["weights"] = ww;
+        }
+        j["rig"] = jr;
+    }
     return j.dump();
 }
 
@@ -556,6 +620,45 @@ bool EditMesh::fromJson(const std::string& text, EditMesh& out, std::string* err
         m.materials.push_back(mat);
     }
     if (m.materials.empty()) m.materials.push_back({});
+    if (j.contains("rig") && j["rig"].is_object()) {
+        const Json& jr = j["rig"];
+        auto v3 = [](const Json& a) { return a.is_array() && a.size() == 3 ? Vec3{a[0].get<float>(), a[1].get<float>(), a[2].get<float>()} : Vec3{}; };
+        for (const Json& b : jr.value("bones", Json::array()))
+            m.rig.bones.push_back({b.value("name", std::string("Hueso")), b.value("parent", -1), v3(b.value("head", Json())), v3(b.value("tail", Json()))});
+        for (const RigBone& b : m.rig.bones)
+            if (b.parent >= int(m.rig.bones.size())) return fail("hueso con un padre inexistente");
+        for (const Json& jc : jr.value("clips", Json::array())) {
+            RigClip c;
+            c.name = jc.value("name", std::string("Animación"));
+            c.duration = jc.value("duration", 1.0f);
+            c.loop = jc.value("loop", true);
+            for (const Json& jt : jc.value("tracks", Json::array())) {
+                RigTrack t;
+                t.bone = jt.value("bone", -1);
+                for (const Json& jk : jt.value("keys", Json::array())) {
+                    RigKey k;
+                    k.time = jk.value("t", 0.0f);
+                    const std::vector<float> r = jk.value("r", std::vector<float>{0, 0, 0, 1});
+                    if (r.size() == 4) k.rotation = {r[0], r[1], r[2], r[3]};
+                    k.translation = v3(jk.value("p", Json()));
+                    t.keys.push_back(k);
+                }
+                c.tracks.push_back(t);
+            }
+            m.rig.clips.push_back(c);
+        }
+        const std::vector<int> jj = jr.value("joints", std::vector<int>{});
+        const std::vector<float> ww = jr.value("weights", std::vector<float>{});
+        if (jj.size() == m.verts.size() * 4 && ww.size() == jj.size()) {
+            m.rig.joints.resize(m.verts.size());
+            m.rig.weights.resize(m.verts.size());
+            for (size_t i = 0; i < m.verts.size(); ++i)
+                for (size_t k = 0; k < 4; ++k) {
+                    m.rig.joints[i][k] = std::clamp(jj[i * 4 + k], 0, std::max(0, int(m.rig.bones.size()) - 1));
+                    m.rig.weights[i][k] = ww[i * 4 + k];
+                }
+        }
+    }
     std::string why;
     if (!m.valid(&why)) {
         if (error) *error = "malla no válida: " + why;

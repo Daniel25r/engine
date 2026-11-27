@@ -68,6 +68,7 @@ add_library(titan_core STATIC
     engine/src/core/EditMesh.cpp
     engine/src/core/ModelImport.cpp
     engine/src/core/MeshSculpt.cpp
+    engine/src/core/Rig.cpp
     engine/src/core/Log.cpp
     engine/src/core/Uuid.cpp
     engine/src/core/FileIO.cpp

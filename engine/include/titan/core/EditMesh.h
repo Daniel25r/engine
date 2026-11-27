@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "titan/core/MeshBuild.h"
+#include "titan/core/Rig.h"
 
 namespace titan {
 
@@ -24,6 +25,8 @@ public:
     std::vector<EditFace> faces;
     std::vector<MeshBuildMaterial> materials{MeshBuildMaterial{}};
     bool smooth = false; // sombreado suave (normales promediadas) o plano
+    Rig rig;             // esqueleto, pesos y animaciones (opcional). Si la malla cambia de vértices, los pesos se
+                         // recalculan solos al construir.
 
     // ---- Primitivas (centradas en el origen)
     static EditMesh cube(float size = 1);
