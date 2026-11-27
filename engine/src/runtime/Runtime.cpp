@@ -275,6 +275,8 @@ void Runtime::frame(const Viewport& viewport) {
         ++steps;
     }
     if (steps == kMaxFixedStepsPerFrame) accumulator_ = 0;
+    profile_.physicsMs = msSince(t);
+    t = Clock::now();
 
     // 2-3. Lógica variable.
     time_ += dt;
@@ -301,7 +303,9 @@ void Runtime::frame(const Viewport& viewport) {
         });
         for (const auto& [e, ev] : animEvents) scripts_->dispatchEvent(e, "onAnimationEvent", ev.c_str());
         TransformSystem::update(*scene_); // los emisores necesitan su posición actual
-        updateParticles(*scene_, dt);
+        const auto tp = Clock::now();
+        updateParticles(*scene_, dt, parallel ? &jobs_ : nullptr);
+        profile_.particlesMs = msSince(tp);
         cameras_.update(*scene_, input_, &actions_, &physics_, dt); // cámaras que siguen al jugador
         // Sombras de gota: un rayo hacia abajo desde cada una (sin chocar con su propia entidad).
         scene_->world().each<BlobShadow>([&](Entity e, BlobShadow& b) {
@@ -383,11 +387,12 @@ void Runtime::render(const Viewport& viewport) {
         const CullStats& cs = sceneRenderer_.cullStats();
         char text[640];
         std::snprintf(text, sizeof(text),
-                      "%.0f FPS  %.2f ms (scripts %.2f, transform %.2f, render %.2f)\n"
+                      "%.0f FPS  %.2f ms (scripts %.2f, fisica %.2f, particulas %.2f, transform %.2f, render %.2f)\n"
                       "%zu entidades  %d draw calls  %d mallas  %d sprites  %d triangulos\n"
                       "%zu scripts  Lua %.0f KB  %zu errores  %zu cuerpos\n"
                       "visibles: %d/%d mallas  %d/%d sombras  %d/%d sprites  %d esqueletos",
-                      fps_, profile_.frameMs, profile_.scriptMs, profile_.transformMs, profile_.renderMs,
+                      fps_, profile_.frameMs, profile_.scriptMs, profile_.physicsMs, profile_.particlesMs,
+                      profile_.transformMs, profile_.renderMs,
                       scene_->entityCount(), rs.drawCalls, rs.meshes, rs.sprites, rs.triangles,
                       scripts_->instanceCount(), scripts_->memoryUsed() / 1024.0, scripts_->errors().size(), physics_.bodyCount(),
                       cs.meshesVisible, cs.meshes, cs.shadowCastersVisible, cs.shadowCasters, cs.spritesVisible, cs.sprites,

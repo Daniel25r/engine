@@ -136,7 +136,8 @@ int main(int argc, char** argv) {
         const bool bench = std::getenv("TITAN_BENCH") != nullptr;
         if (const char* c = std::getenv("TITAN_CULLING")) runtime.sceneRenderer().culling = std::atoi(c) != 0;
         if (const char* c = std::getenv("TITAN_INSTANCING")) runtime.sceneRenderer().instancing = std::atoi(c) != 0;
-        double sumFrame = 0, sumRender = 0;
+        if (const char* c = std::getenv("TITAN_PARALLEL")) runtime.parallel = std::atoi(c) != 0;
+        double sumFrame = 0, sumRender = 0, sumParticles = 0, sumPhysics = 0;
         long measured = 0;
         runtime.setSavePath(std::getenv("TITAN_SAVE") ? std::getenv("TITAN_SAVE") : std::string(argv[1]) + "/partida.json");
         if (!runtime.start(files)) {
@@ -161,6 +162,8 @@ int main(int argc, char** argv) {
                 if (bench && frames >= 30) { // se descartan los primeros fotogramas (carga)
                     sumFrame += runtime.profile().frameMs;
                     sumRender += runtime.profile().renderMs;
+                    sumParticles += runtime.profile().particlesMs;
+                    sumPhysics += runtime.profile().physicsMs;
                     ++measured;
                 }
                 if (maxFrames && ++frames >= maxFrames) {
@@ -180,6 +183,8 @@ int main(int argc, char** argv) {
                             rs.drawCalls, rs.shadowDrawCalls, cs.meshesVisible, cs.meshes, cs.shadowCastersVisible, cs.shadowCasters, rs.triangles,
                             rs.postPasses, rs.sceneWidth, rs.sceneHeight, runtime.scriptQuality().c_str(), cs.instanced,
                             cs.instanceBatches);
+                std::printf("BENCH paralelo=%d hilos=%d particulas=%.3f ms fisica=%.3f ms\n", runtime.parallel ? 1 : 0,
+                            runtime.jobs().workerCount(), sumParticles / measured, sumPhysics / measured);
             }
         }
         runtime.shutdown();

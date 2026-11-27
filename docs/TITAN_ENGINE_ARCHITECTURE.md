@@ -142,6 +142,22 @@ Detalles y API en `docs/TITAN_ENGINE_API.md`. Aislamiento:
 - Límite de tiempo por llamada (0,25 s por defecto) mediante un *hook* cada 10 000 instrucciones.
 - Una instancia que falla se desactiva y su error queda registrado con archivo, línea, función y traza.
 
+## 10a. Sistema de trabajos (multihilo)
+
+`core/JobSystem` crea `núcleos − 1` hilos (máx. 16; 0 en un solo núcleo, y entonces todo se ejecuta en el hilo que
+llama con el mismo resultado). Tres colas (alta, normal, baja) protegidas por un mutex; `wait()` y `parallelFor()`
+ejecutan trabajos pendientes mientras esperan, así que se pueden anidar sin bloqueos. El `Runtime` tiene uno
+(`Runtime::jobs()`); `Runtime::parallel = false` lo desactiva para comparar.
+
+Regla de uso: **el ECS y la jerarquía solo se leen y escriben desde el hilo principal.** Un sistema que quiera ir en
+paralelo recoge primero, en el hilo principal, lo que necesita (punteros a componentes y matrices de mundo) y reparte
+el cálculo; cada trabajo toca datos que no comparte con otros. Así lo hacen las partículas
+(`updateParticles(scene, dt, jobs)`): cada emisor tiene su estado y su generador aleatorio, por lo que el resultado
+es idéntico en serie y en paralelo (lo comprueba una prueba).
+
+Jolt mantiene su propio grupo de hilos durante el paso de física; no coincide en el tiempo con los trabajos de
+partículas, pero integrar Jolt en este Job System (su interfaz `JobSystemWithBarrier`) queda pendiente.
+
 ## 10b. Audio y mezclador
 
 ```

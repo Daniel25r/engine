@@ -57,6 +57,7 @@ add_library(titan_core STATIC
     engine/src/core/TerrainTools.cpp
     engine/src/core/CameraSystem.cpp
     engine/src/core/Navigation.cpp
+    engine/src/core/JobSystem.cpp
     engine/src/core/Log.cpp
     engine/src/core/Uuid.cpp
     engine/src/core/FileIO.cpp
@@ -86,6 +87,7 @@ target_include_directories(titan_jolt PUBLIC third_party/jolt)
 target_compile_options(titan_jolt PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>)
 find_package(Threads REQUIRED)
 target_link_libraries(titan_jolt PUBLIC Threads::Threads)
+target_link_libraries(titan_core PUBLIC Threads::Threads) # JobSystem
 
 add_library(titan_physics STATIC engine/src/physics/PhysicsWorld.cpp)
 target_link_libraries(titan_physics PUBLIC titan_core PRIVATE titan_jolt)
@@ -227,6 +229,7 @@ else()
             tests/test_physics.cpp
             tests/test_audio.cpp
             tests/test_audio_mixer.cpp
+            tests/test_jobs.cpp
             tests/test_ui.cpp
             tests/test_bounds.cpp
             tests/test_quality.cpp

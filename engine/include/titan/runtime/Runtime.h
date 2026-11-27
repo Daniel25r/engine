@@ -27,12 +27,15 @@
 #include "titan/runtime/ResourceCache.h"
 #include "titan/runtime/SceneRenderer.h"
 #include "titan/scripting/ScriptSystem.h"
+#include "titan/core/JobSystem.h"
 #include "titan/ui/UISystem.h"
 
 namespace titan {
 
 struct FrameProfile {
     double frameMs = 0, scriptMs = 0, transformMs = 0, renderMs = 0;
+    double physicsMs = 0;   // paso fijo: física + onFixedUpdate + contactos
+    double particlesMs = 0; // simulación de partículas (en paralelo con el Job System)
     size_t transformsUpdated = 0;
 };
 
@@ -68,6 +71,8 @@ public:
     Scene* scene() { return scene_.get(); }
     ScriptSystem& scripts() { return *scripts_; }
     const FrameProfile& profile() const { return profile_; }
+    JobSystem& jobs() { return jobs_; }
+    bool parallel = true; // false: todo en el hilo principal (para comparar y depurar)
 
     bool showStats = true;
     // En pausa no se ejecuta la lógica, pero se sigue dibujando.
@@ -159,6 +164,7 @@ private:
     bool warnedNoCamera_ = false;
 
     FrameProfile profile_;
+    JobSystem jobs_; // hilos de trabajo del motor (núcleos - 1)
     float fps_ = 0, fpsTimer_ = 0;
     int fpsFrames_ = 0;
 };

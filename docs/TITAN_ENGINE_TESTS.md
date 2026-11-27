@@ -191,6 +191,24 @@ representan a un teléfono**; los draw calls sí.
 | Muy alto | 1280×720 | 4096 | 951 | 48,7 ms |
 | Alto sin culling | 1280×720 | 2048 | 3206 | 37,6 ms |
 
+## Sistema de trabajos (2026-11-27, PC de 4 núcleos, Linux, GCC Release)
+
+`tests/test_jobs.cpp`, 6 pruebas: cada índice de `parallelFor` visitado una sola vez con 0, 1, 3 y 8 hilos (200 000
+elementos); 20 000 tareas sueltas con contador; tareas anidadas que lanzan y esperan otras; orden por prioridad;
+destrucción con tareas en cola; partículas en paralelo = en serie. Las 6 pasan también compiladas con
+`-fsanitize=thread` (3 ejecuciones, ningún aviso de carrera).
+
+Medición (reproductor de escritorio, `TITAN_BENCH=1`, 300 fotogramas tras 30 de calentamiento, escena con 32
+emisores de 1500 partículas/s y máximo 3000, ~48 000 vivas, creada con la herramienta `titan`):
+
+| Modo | Partículas (ms/fotograma) | Fotograma completo |
+|---|---|---|
+| `TITAN_PARALLEL=0` (un hilo) | 1,102 · 1,102 | 70,1 · 69,8 ms |
+| Job System (3 hilos + principal) | 0,380 · 0,387 | 64,9 · 68,7 ms |
+
+La simulación es 2,9× más rápida. El fotograma apenas cambia porque aquí lo domina el dibujo por software
+(llvmpipe, ~68 ms); en un teléfono con GPU la proporción será otra (sin medir).
+
 ## Mezclador de audio (2026-11-27, Linux x86_64, GCC, sin dispositivo de audio: mezcla en memoria a 48 kHz)
 
 `tests/test_audio_mixer.cpp`, 9 pruebas, todas pasan. Lo que miden:

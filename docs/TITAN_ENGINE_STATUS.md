@@ -40,7 +40,8 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 | Configuración del proyecto | 🟡 | `project.titan` (nombre, escena inicial, dimensión); sin ajustes por plataforma |
 | Versionado | 🟡 | `core/Version.h`, versión de formato en cada archivo; sin gestor de versiones de proyecto |
 | Gestión de errores | 🟡 | Errores con mensaje en registro; scripts aislados (un error no tumba el juego); sin informe de fallos nativos (crash reporter) |
-| **Sistema de trabajos (Job System) / multihilo propio** | ❌ | Solo Jolt usa hilos internamente. Siguiente bloque de trabajo (ROADMAP, etapa 1) |
+| Sistema de trabajos (Job System): hilos de trabajo, 3 prioridades, contadores, `parallelFor`, espera que ayuda, tareas anidadas | ✅ | `core/JobSystem.*`; 6 pruebas (también con ThreadSanitizer, sin carreras); partículas en paralelo 2,9× más rápidas (medido) |
+| Uso del Job System en el motor | 🟡 | Hoy solo partículas. Pendiente: carga asíncrona, animación, culling, compartir hilos con Jolt (hoy Jolt tiene su propio grupo de hilos) |
 | Gestión de memoria (pools, asignadores por fotograma) | ❌ | Se usa el asignador estándar; el ECS reutiliza índices |
 | Plugins / registro de módulos dinámico | ❌ | |
 | Arranque/cierre ordenado de módulos | 🟡 | `Runtime::start/shutdown` en orden fijo; no hay registro genérico de módulos |
@@ -207,6 +208,7 @@ orden de `docs/TITAN_ENGINE_ROADMAP.md`. Lo que sigue es el detalle.
 | Estadísticas en juego (FPS, ms, draw calls, triángulos, visibles, scripts, memoria Lua, cuerpos) y `Debug.stats()` | ✅ |
 | Benchmark reproducible (`titan benchmark`: 100–1600 objetos, luces, partículas, física, materiales) | ✅ en PC |
 | Informe de diagnóstico copiable; registro en archivo | ✅ |
+| Tiempos por sistema en las estadísticas: scripts, física (paso fijo), partículas, transformaciones, render | ✅ |
 | Tiempo de GPU, VRAM, perfilador de memoria, depurador de render, captura de fotogramas | ❌ |
 
 ## 20. Optimización
@@ -245,5 +247,6 @@ Multihilo propio, pools, streaming, carga asíncrona, LOD, oclusión: ❌.
 
 | Fecha | Bloque | Resultado |
 |---|---|---|
+| 2026-11-27 | Job System + partículas en paralelo + tiempos de física y partículas en el perfilador | 110/110 pruebas; TSan limpio; 1,10 → 0,38 ms en partículas |
 | 2026-11-27 | Mezclador de audio (efectos de Godot), editor del mezclador, API Lua, demo de plataformas 3D | 104/104 pruebas; demo ejecutada; commit `37d14ca` |
 | 2026-11-26 | Instancing GPU, navegación, cámara 3.ª persona, personaje v2, colisión de malla, sombra de gota, benchmark | Ver `docs/CHANGELOG.md` |

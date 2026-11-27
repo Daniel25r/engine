@@ -12,8 +12,8 @@ Leyenda: ✅ hecho y probado · ▶ siguiente · ○ pendiente
 |---|---|---|
 | Módulos, ECS, escenas, eventos, serialización, recursos con UUID | ✅ | Pruebas existentes |
 | Mezclador de audio con buses y efectos (portados de Godot) + editor + Lua | ✅ | 9 pruebas de señal |
-| **Sistema de trabajos (Job System)**: hilos de trabajo, colas por prioridad, `parallelFor`, contadores de espera; usado de verdad por partículas, transformaciones o carga | ▶ | Pruebas de corrección con muchos hilos + mejora medida en el benchmark |
-| Carga asíncrona de recursos (texturas, modelos, sonidos) sobre el Job System | ○ | Escena grande carga sin bloquear el hilo principal; medido |
+| Sistema de trabajos (Job System) usado por las partículas | ✅ | 6 pruebas + ThreadSanitizer; 2,9× en partículas |
+| **Carga asíncrona de recursos (texturas, modelos, sonidos) sobre el Job System** | ▶ | Escena grande carga sin bloquear el hilo principal; medido |
 | Asignadores (por fotograma, pools) donde el perfilado lo justifique | ○ | Menos asignaciones por fotograma, medido |
 | Informe de fallos nativos (señales en Android/Linux) al registro | ○ | Fallo provocado queda registrado |
 | Medir el coste de CPU de los efectos de audio | ○ | Tabla en TESTS |

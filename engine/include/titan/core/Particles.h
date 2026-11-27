@@ -33,7 +33,8 @@ struct ParticleState {
 // Avanza un emisor: nace, mueve y retira partículas. "world" es la matriz de mundo de su entidad.
 void updateParticleSystem(ParticleSystem& ps, const Mat4& world, float dt);
 // Todos los emisores activos de la escena.
-void updateParticles(Scene& scene, float dt);
+// Con jobs, los emisores se simulan en paralelo (cada uno tiene su propio estado y su propio generador aleatorio).
+void updateParticles(Scene& scene, float dt, class JobSystem* jobs = nullptr);
 
 void playParticles(ParticleSystem& ps);   // empieza un ciclo nuevo
 void stopParticles(ParticleSystem& ps);   // deja de emitir (las vivas terminan su vida)

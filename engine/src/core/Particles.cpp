@@ -1,5 +1,7 @@
 #include "titan/core/Particles.h"
 
+#include "titan/core/JobSystem.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -131,10 +133,21 @@ void updateParticleSystem(ParticleSystem& ps, const Mat4& world, float dt) {
     }
 }
 
-void updateParticles(Scene& scene, float dt) {
+void updateParticles(Scene& scene, float dt, JobSystem* jobs) {
+    struct Item {
+        ParticleSystem* ps;
+        Mat4 world;
+    };
+    std::vector<Item> items; // se recogen en el hilo principal: el ECS y la jerarquía no se tocan desde otros hilos
     scene.world().each<ParticleSystem>([&](Entity e, ParticleSystem& ps) {
-        if (!scene.isActiveInHierarchy(e)) return;
-        updateParticleSystem(ps, scene.transform(e).worldMatrix(), dt);
+        if (scene.isActiveInHierarchy(e)) items.push_back({&ps, scene.transform(e).worldMatrix()});
+    });
+    if (!jobs || items.size() < 2) {
+        for (Item& it : items) updateParticleSystem(*it.ps, it.world, dt);
+        return;
+    }
+    jobs->parallelFor(items.size(), 1, [&](size_t a, size_t b) {
+        for (size_t i = a; i < b; ++i) updateParticleSystem(*items[i].ps, items[i].world, dt);
     });
 }
 
