@@ -26,7 +26,13 @@ endif()
 # usan Chrome y Godot). Se instala con vcpkg (vcpkg.json); ver .github/workflows/build_windows.yml.
 if(WIN32 AND NOT ANDROID)
     find_package(unofficial-angle CONFIG REQUIRED)
-    set(TITAN_GLES_LIBS unofficial::angle::libGLESv2 unofficial::angle::libEGL)
+    # Las cabeceras GLES3/ y KHR/ las instalan los puertos opengl-registry y egl-registry (dependencias de angle);
+    # los objetivos de ANGLE no las exportan, así que se buscan aparte.
+    find_path(TITAN_GLES_INCLUDE_DIR GLES3/gl3.h REQUIRED)
+    add_library(titan_gles INTERFACE)
+    target_include_directories(titan_gles INTERFACE ${TITAN_GLES_INCLUDE_DIR})
+    target_link_libraries(titan_gles INTERFACE unofficial::angle::libGLESv2 unofficial::angle::libEGL)
+    set(TITAN_GLES_LIBS titan_gles)
 elseif(ANDROID)
     set(TITAN_GLES_LIBS GLESv3)
 else()

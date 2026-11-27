@@ -5,6 +5,7 @@
 
 #include "titan/audio/AudioEngine.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstring>
