@@ -116,6 +116,7 @@ void Editor::Impl::renderViewport() {
     // Fondo: el de la cámara del juego, para ver la escena como se verá al jugar.
     SceneView gameView;
     view.clearColor = SceneRenderer::cameraView(scene, 1.0f, gameView) ? gameView.clearColor : Color::hex(0x1B2230);
+    sceneRenderer.temporalAA = false; // la rejilla y los gizmos son líneas finas (ver SceneRenderer::temporalAA)
     sceneRenderer.render(scene, renderer, vp, view, [this](AssetRef r) { return editorTexture(r); },
                          [this](AssetRef r) { return editorModel(r); },
                          [this](AssetRef r) { return resources.material(r); });

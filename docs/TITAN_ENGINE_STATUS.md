@@ -1,7 +1,7 @@
 # TITÁN ENGINE — Estado real del desarrollo
 
-Fecha: 2026-11-27 · Versión del código: 0.13.0 + mezclador de audio (0.14 en desarrollo) · ~20 000 líneas propias
-(`engine/`, sin `third_party/`) · 129 pruebas automáticas, todas pasan.
+Fecha: 2026-11-27 · Versión del código: 0.15.0
+(`engine/`, sin `third_party/`) · 144 pruebas automáticas, todas pasan.
 
 **Cómo leer este documento.** Cada fila dice qué existe *de verdad en el código*, con la prueba que lo respalda.
 

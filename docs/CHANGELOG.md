@@ -1,5 +1,37 @@
 # Registro de cambios
 
+## 0.15.0 — 2026-11-27 · Render de nivel AAA, mundos de bloques, nodos, FBX y multijugador
+
+Todo probado en PC (Linux, render por software, y compilación y pruebas en Windows); nada en un teléfono real.
+
+Render
+- Luz ambiental del cielo con el modelo "split-sum" de UE4/UE5 (Karis), compensación de energía y oclusión especular.
+- SSAO, reflejos en pantalla (SSR), barniz (clear coat), sombras del sol en 4 cascadas, antialiasing temporal (TAA).
+- Escena en HDR (RGBA16F) con ACES al componer y exposición automática; con HDR la imagen es la misma que sin él
+  (diferencia media medida 0,14/255) salvo los brillos, que ahora hacen bloom de verdad.
+- Sonda de reflexión (cubemap capturado de la escena) para reflejos fuera de pantalla.
+- Niveles de detalle automáticos (meshoptimizer): 40 personajes, 65 090 → 45 842 triángulos con la misma imagen.
+- Saneado de NaN/Inf en HDR (SSR, SSAO, TAA, bloom y composición).
+
+Materiales
+- Editor de materiales por nodos (20 tipos de nodo), compilado a instrucciones que ejecuta la GPU; se ve al momento.
+
+Mundos
+- Mundo de bloques infinito: chunks con biomas, cuevas y árboles; generación y mallas en varios hilos; colisión;
+  guardado incremental; API `Voxel.*`.
+
+Importación y animación
+- FBX con esqueleto, pesos, materiales, texturas y animaciones (ufbx); arrastrar archivos al editor.
+- Animaciones de otros archivos por nombre de hueso (flujo de Mixamo: personaje + animaciones "Without Skin").
+- Rigging y animación por claves en el editor de modelado.
+
+Multijugador
+- Módulo `titan_net` (ENet) y API `Net.*` de Lua; plantilla "Plaza multijugador".
+
+Plantillas nuevas: Mundo de bloques, Ciudad de neón (escaparate del render), Plaza multijugador.
+Proyectos anteriores: se cargan igual y se ven igual (las opciones nuevas están desactivadas en sus escenas).
+Licencia MIT. 144 pruebas automáticas.
+
 ## 0.13.0 — 2026-11-22 · Gran actualización: render, materiales, partículas, controles, física, animación y terreno
 
 Entregada de una vez (a petición del usuario), con nueve sistemas. Todo probado en PC; nada en un teléfono real.

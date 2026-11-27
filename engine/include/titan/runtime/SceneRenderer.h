@@ -44,6 +44,9 @@ public:
     // Agrupar las primitivas iguales con el mismo material (sin texturas) y dibujarlas con GPU instancing.
     bool instancing = true;
     bool cascadedShadows = true; // sombras del sol en 4 cascadas (false: un solo mapa, como antes)
+    // TAA permitido. El visor del editor lo desactiva: su rejilla y sus gizmos son líneas de 1 píxel que el
+    // desplazamiento de subpíxel del TAA rompería en puntos (con la cámara quieta tampoco aporta).
+    bool temporalAA = true;
     const CullStats& cullStats() const { return stats_; }
 
     using TextureResolver = std::function<TextureHandle(AssetRef)>;

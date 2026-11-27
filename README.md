@@ -5,7 +5,7 @@ Jolt, render PBR moderno y herramientas de modelado, escultura y animación inte
 
 ![Ciudad de neón, el escaparate incluido: HDR, reflejos en el asfalto mojado, materiales por nodos y barniz](docs/img/ciudad-neon.png)
 
-**Versión 0.14.** Lo que se lista aquí existe en el código y tiene pruebas automáticas (131) o se ha comprobado
+**Versión 0.15.** Lo que se lista aquí existe en el código y tiene pruebas automáticas (144) o se ha comprobado
 con capturas. Detalle función por función, con lo que falta, en
 [docs/TITAN_ENGINE_STATUS.md](docs/TITAN_ENGINE_STATUS.md).
 

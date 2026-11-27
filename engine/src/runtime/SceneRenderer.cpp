@@ -340,7 +340,7 @@ void SceneRenderer::render(Scene& scene, Renderer& renderer, const Viewport& vie
     // ---- Pasada principal.
     renderer.setHdr(L.env.hdr);
     renderer.beginFrame(viewport, L.drawSky ? L.env.skyHorizon : view.clearColor);
-    renderer.setTemporalAA(L.env.taa && view.perspective);
+    renderer.setTemporalAA(temporalAA && L.env.taa && view.perspective);
     renderer.setCamera(view.view, view.projection);
     renderer.setLighting(L);
     renderer.drawSky();
