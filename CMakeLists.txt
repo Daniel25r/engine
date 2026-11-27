@@ -109,6 +109,8 @@ set_source_files_properties(third_party/enet/callbacks.c third_party/enet/compre
     third_party/enet/unix.c third_party/enet/win32.c PROPERTIES COMPILE_OPTIONS "$<IF:$<C_COMPILER_ID:MSVC>,/w,-w>")
 if(WIN32)
     target_link_libraries(titan_net PRIVATE ws2_32 winmm)
+    # <windows.h> (lo incluye ENet) define min/max como macros: rompería std::min/std::max.
+    target_compile_definitions(titan_net PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _WINSOCK_DEPRECATED_NO_WARNINGS)
 else()
     target_compile_definitions(titan_net PRIVATE HAS_SOCKLEN_T=1 HAS_FCNTL=1 HAS_POLL=1 HAS_GETADDRINFO=1
         HAS_GETNAMEINFO=1 HAS_INET_PTON=1 HAS_INET_NTOP=1 HAS_MSGHDR_FLAGS=1)

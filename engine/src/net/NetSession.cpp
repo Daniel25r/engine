@@ -1,9 +1,14 @@
 #include "titan/net/NetSession.h"
 
+#include <algorithm>
+#include <cstdlib>
 #include <map>
 #include <mutex>
 
 #include "titan/core/Log.h"
+#if defined(_WIN32) && !defined(NOMINMAX)
+#define NOMINMAX // <windows.h> (vía ENet) no debe definir min/max
+#endif
 #include "enet/enet.h"
 
 namespace titan {
