@@ -3,9 +3,6 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"
 
-#if defined(_WIN32)
-#include <windows.h>
-#endif
 #include <cmath>
 #include <filesystem>
 #include <cstdio>
@@ -21,6 +18,8 @@
 #include "titan/core/Version.h"
 
 using namespace titan;
+
+bool openedByDoubleClick(); // WinConsole.cpp
 
 namespace {
 
@@ -44,11 +43,7 @@ int usage() {
         "  titan audiotest <archivo.wav>              grabar la prueba de sonido del motor en un WAV\n\n"
         "Opción: --scene <ruta dentro de assets/> para trabajar en otra escena.\n",
         kEngineName, kEngineVersion);
-#if defined(_WIN32)
-    // Abierta con doble clic desde el Explorador: la consola es solo de este proceso y se cerraría al instante.
-    // Se explica qué abrir y se espera a que lo lean.
-    DWORD ids[2];
-    if (GetConsoleProcessList(ids, 2) <= 1) {
+    if (openedByDoubleClick()) { // Windows: la consola se cerraría al instante; se explica qué abrir y se espera
         std::printf("\n------------------------------------------------------------------\n"
                     "Esta es la herramienta de línea de órdenes (se usa escribiendo en una terminal).\n"
                     "Para abrir el EDITOR haz doble clic en titan_editor.exe, en esta misma carpeta.\n"
@@ -57,7 +52,6 @@ int usage() {
         std::fflush(stdout);
         std::getchar();
     }
-#endif
     return 2;
 }
 

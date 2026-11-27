@@ -214,7 +214,7 @@ else()
         configure_file(${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc.tmp
                        ${CMAKE_BINARY_DIR}/generated/DemoPlataformasScripts.inc COPYONLY)
         add_executable(titan tools/titan/main.cpp tools/titan/Benchmark.cpp tools/titan/DemoPlatformer.cpp
-                             tools/titan/DemoSounds.cpp)
+                             tools/titan/DemoSounds.cpp tools/titan/WinConsole.cpp)
         target_include_directories(titan PRIVATE ${CMAKE_BINARY_DIR}/generated tools/titan)
         target_link_libraries(titan PRIVATE titan_core titan_scripting titan_audio)
         target_compile_options(titan PRIVATE ${TITAN_WARNINGS})
